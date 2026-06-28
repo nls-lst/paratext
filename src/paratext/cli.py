@@ -98,7 +98,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if skipped:
         breakdown = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
         print(f"Skipped {sum(skipped.values())} item(s): {breakdown}")
-    print(f"\nReview them:  paratext review {review_out}")
+    if args.review:
+        from .review import serve
+
+        print()
+        serve(review_out, open_browser=True)  # blocks until Ctrl-C
+    else:
+        print(f"\nReview them:  paratext review {review_out}")
     return 0
 
 
@@ -224,6 +230,8 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     r = sub.add_parser("run", help="Extract then package in one go")
     _add_extract_args(r)
     r.add_argument("--review-out", type=Path, default=None, help="Review dataset dir")
+    r.add_argument("--review", action="store_true",
+                   help="Launch the review UI when the run finishes (blocks)")
     r.set_defaults(func=_cmd_run)
 
     e = sub.add_parser("extract", help="Run VLM extraction over a directory")
