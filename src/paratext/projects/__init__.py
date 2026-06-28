@@ -84,8 +84,8 @@ class Project:
     # Optional review/display contract spec; drives view.json. Defaults to one
     # panel showing every schema field (see default_view / build_view).
     view: "View | None" = None
-    # Image encoding for the VLM call. Faint index cards benefit from higher
-    # resolution than the default; monograph page renders are fine at 1024.
+    # Image encoding for the VLM call. Raise image_max_size when faint or small
+    # detail matters (e.g. dense handwriting); 1024 suits most inputs.
     image_max_size: int = 1024
     image_quality: int = 85
     # ── Packaging hooks (all optional; the framework supplies generic defaults).
