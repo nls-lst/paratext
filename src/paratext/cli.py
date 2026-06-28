@@ -98,6 +98,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if skipped:
         breakdown = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
         print(f"Skipped {sum(skipped.values())} item(s): {breakdown}")
+    print(f"\nReview them:  paratext review {review_out}")
     return 0
 
 
