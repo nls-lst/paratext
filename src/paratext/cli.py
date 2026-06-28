@@ -235,7 +235,7 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     rv = sub.add_parser("review", help="Launch the local web UI to review a dataset")
     rv.add_argument("data_dir", type=Path, nargs="?", default=Path.cwd(),
                     help="A packaged dataset dir (or a parent holding several)")
-    rv.add_argument("--port", type=int, default=4000)
+    rv.add_argument("--port", type=int, default=5050)
     rv.add_argument("--no-open", action="store_true", help="Don't open a browser")
     rv.set_defaults(func=_cmd_review)
 

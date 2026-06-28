@@ -551,7 +551,7 @@ class Handler(BaseHTTPRequestHandler):
         )
 
 
-def serve(data_dir: Path, port: int = 4000, open_browser: bool = True) -> None:
+def serve(data_dir: Path, port: int = 5050, open_browser: bool = True) -> None:
     data_dir = Path(data_dir).resolve()
     if not data_dir.is_dir():
         raise SystemExit(f"not a directory: {data_dir}")
