@@ -222,12 +222,13 @@ def _add_extract_args(p: argparse.ArgumentParser) -> None:
     """Shared --source/--model/… overrides for `extract` and `run`. Defaults
     flow in from the config/env layer; missing values are reported at runtime."""
     choices = project_names() or None
-    p.add_argument("-p", "--project", choices=choices, default=None)
-    p.add_argument("--source", type=Path, default=None, help="Input directory")
-    p.add_argument("--output", type=Path, default=None, help="Output JSONL path")
+    p.add_argument("-p", "--project", choices=choices, default=None, help="Project plug-in to run")
+    p.add_argument("--source", type=Path, default=None, help="Input directory (images or PDFs)")
+    p.add_argument("--output", type=Path, default=None,
+                   help="Output JSONL path (default: output/<project>.jsonl)")
     p.add_argument("--model", default=None, help="Model id served by the VLM endpoint")
-    p.add_argument("--base-url", default=None)
-    p.add_argument("--api-key", default=None)
+    p.add_argument("--base-url", default=None, help="VLM endpoint base URL (OpenAI-compatible)")
+    p.add_argument("--api-key", default=None, help="API key for the endpoint (often unused)")
     p.add_argument("--limit", type=int, default=None, help="Process at most N inputs")
     p.add_argument(
         "--no-structured",
@@ -235,12 +236,16 @@ def _add_extract_args(p: argparse.ArgumentParser) -> None:
         default=None,
         help="Disable Pydantic response_format (for models that don't support it)",
     )
-    p.add_argument("--skip-preflight", action="store_true", default=None)
+    p.add_argument("--skip-preflight", action="store_true", default=None,
+                   help="Skip the endpoint reachability/model check")
 
 
 def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentParser]]:
-    p = argparse.ArgumentParser(prog="paratext")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    p = argparse.ArgumentParser(
+        prog="paratext",
+        description="VLM metadata-extraction pipeline for digitised collections.",
+    )
+    sub = p.add_subparsers(dest="cmd", metavar="<command>")
     choices = project_names() or None
 
     r = sub.add_parser("run", help="Extract then package in one go")
@@ -255,34 +260,38 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     e.set_defaults(func=_cmd_extract)
 
     pk = sub.add_parser("package", help="Convert extraction JSONL to a review dataset")
-    pk.add_argument("jsonl", type=Path)
-    pk.add_argument("-p", "--project", choices=choices, default=None)
-    pk.add_argument("--out", type=Path, required=True)
-    pk.add_argument("--fresh", action="store_true")
+    pk.add_argument("jsonl", type=Path, help="Extraction JSONL produced by `extract`")
+    pk.add_argument("-p", "--project", choices=choices, default=None, help="Project plug-in")
+    pk.add_argument("--out", type=Path, required=True, help="Output review dataset directory")
+    pk.add_argument("--fresh", action="store_true", help="Delete the output directory first")
     pk.set_defaults(func=_cmd_package)
 
     rv = sub.add_parser("review", help="Launch the local web UI to review datasets")
     rv.add_argument("data_dir", type=Path, nargs="?", default=REVIEW_ROOT,
                     help="A review root (default: ./review) or a single dataset dir")
-    rv.add_argument("--port", type=int, default=DEFAULT_PORT)
+    rv.add_argument("--port", type=int, default=DEFAULT_PORT,
+                    help=f"Port to serve on (config review-port, else {DEFAULT_PORT})")
     rv.add_argument("--no-open", action="store_true", help="Don't open a browser")
     rv.set_defaults(func=_cmd_review)
 
     s = sub.add_parser("sample", help="Symlink a random subset of a nested image tree")
-    s.add_argument("--source", type=Path, required=True)
-    s.add_argument("--out", type=Path, required=True)
-    s.add_argument("-n", type=int, default=500)
-    s.add_argument("--seed", type=int, default=20260506)
+    s.add_argument("--source", type=Path, required=True, help="Root of the nested image tree")
+    s.add_argument("--out", type=Path, required=True, help="Output dir for the symlinked subset")
+    s.add_argument("-n", type=int, default=500, help="Number of images to pick (default: 500)")
+    s.add_argument("--seed", type=int, default=20260506, help="Random seed (reproducible pick)")
     s.set_defaults(func=_cmd_sample)
 
     cfg = sub.add_parser("config", help="Open the config file (--show prints resolved defaults)")
-    cfg.add_argument("-p", "--project", choices=choices, default=None)
+    cfg.add_argument("-p", "--project", choices=choices, default=None,
+                     help="Project to resolve defaults for (with --show)")
     cfg.add_argument("--show", action="store_true", help="Print resolved defaults instead")
     cfg.set_defaults(func=_cmd_config)
 
     nw = sub.add_parser("new", aliases=["init"], help="Scaffold a new project package")
     nw.add_argument("name", nargs="?", default=None, help="Project name")
     nw.set_defaults(func=_cmd_new)
+
+    sub.add_parser("help", help="Show this help message")
 
     # run/extract take the full layered config; review only needs the port.
     return p, [r, e], rv
@@ -302,6 +311,10 @@ def main(argv: list[str] | None = None) -> int:
     review_subparser.set_defaults(port=merged["review_port"])
 
     args = parser.parse_args(argv)
+    # Bare `paratext` or `paratext help` → show usage instead of erroring.
+    if getattr(args, "func", None) is None:
+        parser.print_help()
+        return 0
     return args.func(args)
 
 

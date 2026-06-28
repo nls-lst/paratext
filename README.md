@@ -60,6 +60,29 @@ launch the UI automatically when the run finishes.
 | `paratext config [--show]` | Open `paratext.toml`; `--show` prints the resolved defaults. |
 | `paratext new [name]` | Scaffold a new project package (asks fields, prompt, source). |
 
+Run `paratext`, `paratext help`, or `paratext <command> -h` for usage.
+
+### Flags
+
+Most `run`/`extract` values resolve from `paratext.toml` (see Configure), so you
+rarely pass them — but every default can be overridden on the CLI.
+
+- **`run -p <project>`** — `--source DIR`, `--output FILE` (default
+  `output/<project>.jsonl`), `--model ID`, `--base-url URL`, `--api-key KEY`,
+  `--limit N`, `--no-structured`, `--skip-preflight`, `--review-out DIR`,
+  `--review` (open the UI when finished).
+- **`extract -p <project>`** — same as `run` minus the two review flags
+  (writes JSONL only).
+- **`package <jsonl> -p <project>`** — `--out DIR` (required), `--fresh`
+  (delete the output dir first).
+- **`review [data_dir]`** — `data_dir` defaults to `./review`; `--port N`
+  (config `review-port`, else 5050), `--no-open`.
+- **`sample`** — `--source DIR` (required), `--out DIR` (required), `-n N`
+  (default 500), `--seed N`.
+- **`config`** — `--show` (print resolved defaults instead of editing),
+  `-p <project>` (which project's defaults to resolve).
+- **`new [name]`** (alias `init`) — interactive; no flags.
+
 ## Review
 
 `paratext review` serves a dependency-free local web app (stdlib only) for human
