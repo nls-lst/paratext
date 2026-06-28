@@ -31,6 +31,7 @@ from .config import (
     local_config_path,
 )
 from .extract import run as run_extract
+from .io import read_provenance
 from .packaging import package
 from .projects import get_project, project_names
 from .review.server import DEFAULT_PORT
@@ -126,8 +127,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 # ── Package ───────────────────────────────────────────────────────────────
 def _cmd_package(args: argparse.Namespace) -> int:
-    kept, skipped = package(args.jsonl, args.out, args.project, fresh=args.fresh)
-    print(f"Wrote {kept} records to {args.out / 'samples.json'}")
+    # Like `run`: infer the project from the JSONL's provenance and default the
+    # output to review/<project> when not given.
+    project = args.project or read_provenance(args.jsonl).get("project")
+    if not project:
+        raise SystemExit(
+            "could not infer the project from the JSONL provenance; pass -p/--project"
+        )
+    out = args.out or REVIEW_ROOT / project
+    kept, skipped = package(args.jsonl, out, project, fresh=args.fresh)
+    print(f"Wrote {kept} records to {out / 'samples.json'}")
     if skipped:
         breakdown = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
         print(f"Skipped {sum(skipped.values())} item(s): {breakdown}")
@@ -261,8 +270,10 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
 
     pk = sub.add_parser("package", help="Convert extraction JSONL to a review dataset")
     pk.add_argument("jsonl", type=Path, help="Extraction JSONL produced by `extract`")
-    pk.add_argument("-p", "--project", choices=choices, default=None, help="Project plug-in")
-    pk.add_argument("--out", type=Path, required=True, help="Output review dataset directory")
+    pk.add_argument("-p", "--project", choices=choices, default=None,
+                    help="Project plug-in (inferred from the JSONL if omitted)")
+    pk.add_argument("--out", type=Path, default=None,
+                    help="Output review dataset dir (default: review/<project>)")
     pk.add_argument("--fresh", action="store_true", help="Delete the output directory first")
     pk.set_defaults(func=_cmd_package)
 

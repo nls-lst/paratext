@@ -54,7 +54,7 @@ launch the UI automatically when the run finishes.
 | --- | --- |
 | `paratext run -p <project>` | Extract **and** package in one step (the common path). |
 | `paratext extract -p <project>` | Run the VLM, write JSONL only. |
-| `paratext package <jsonl> -p <project> --out <dir>` | Package an existing JSONL for review. |
+| `paratext package <jsonl>` | Re-package an existing JSONL for review (no VLM calls). |
 | `paratext review <dataset-dir>` | Launch the inbuilt web UI to review a packaged dataset. |
 | `paratext sample --source <tree> --out <dir> -n 500` | Symlink a random image subset out of a nested tree. |
 | `paratext config [--show]` | Open `paratext.toml`; `--show` prints the resolved defaults. |
@@ -73,8 +73,9 @@ rarely pass them — but every default can be overridden on the CLI.
   `--review` (open the UI when finished).
 - **`extract -p <project>`** — same as `run` minus the two review flags
   (writes JSONL only).
-- **`package <jsonl> -p <project>`** — `--out DIR` (required), `--fresh`
-  (delete the output dir first).
+- **`package <jsonl>`** — `-p/--project` (inferred from the JSONL's provenance
+  if omitted), `--out DIR` (default `review/<project>`), `--fresh` (delete the
+  output dir first).
 - **`review [data_dir]`** — `data_dir` defaults to `./review`; `--port N`
   (config `review-port`, else 5050), `--no-open`.
 - **`sample`** — `--source DIR` (required), `--out DIR` (required), `-n N`
