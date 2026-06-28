@@ -17,21 +17,19 @@ def test_module_name_slug():
         {"kind": "images"},
         {"kind": "images", "verso": True},
         {"kind": "images", "verso": True, "crop": True},
-        {"kind": "images", "crop": True},
         {"kind": "pdf"},
     ],
 )
 def test_render_project_is_valid_python(kwargs):
     files = render_project("Demo Project", **kwargs)
-    init = files["demo_project/project.py"]
-    ast.parse(init)  # raises SyntaxError if the template is malformed
+    project = files["demo_project/project.py"]
+    ast.parse(project)  # raises SyntaxError if the template is malformed
+    ast.parse(files["demo_project/schema.py"])
+    assert 'name="demo-project"' in project
+    assert "from .schema import Record" in project
     assert "from .project import PROJECT" in files["demo_project/__init__.py"]
-    assert 'name="demo-project"' in init
-    assert "PROJECT = Project(" in init
     assert files["demo_project/prompt.md"].strip()
-    if kwargs.get("verso"):
-        assert "is_verso" in init
-    if kwargs.get("crop"):
-        assert "load_card_detector" in init
     if kwargs["kind"] == "pdf":
-        assert "pypdfium2" in init
+        assert "pdf_source(" in project
+    else:
+        assert f"image_source(verso_filter={bool(kwargs.get('verso'))}" in project

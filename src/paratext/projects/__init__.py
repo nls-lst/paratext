@@ -63,16 +63,26 @@ KEEP = Curation("keep")
 
 @dataclass
 class Project:
-    """A project bundles its prompt, schema, and source-iteration logic."""
+    """A project bundles its prompt, schema, and how to read its source.
+
+    The common case is just ``name``, ``schema_version``, ``prompt``, ``schema``
+    and a ``source`` (see ``paratext.sources``). Everything else is optional:
+    ``view`` defaults to showing all schema fields, and the packaging hooks have
+    generic defaults — override only what your project genuinely needs.
+    """
 
     name: str
     schema_version: str
     prompt: str
     schema: type[BaseModel]
-    iter_samples: Callable[[Path, int | None], Iterator[Sample]]
+    # A `paratext.sources.Source` supplies both iter_samples and an image
+    # materialiser. Or pass `iter_samples` directly for a bespoke reader.
+    source: "object | None" = None
+    iter_samples: "Callable[[Path, int | None], Iterator[Sample]] | None" = None
     # Per-project hint for whether `enable_thinking` should be passed to chat APIs.
     disable_thinking: bool = True
-    # Optional review/display contract spec; drives view.json (see View below).
+    # Optional review/display contract spec; drives view.json. Defaults to one
+    # panel showing every schema field (see default_view / build_view).
     view: "View | None" = None
     # Image encoding for the VLM call. Faint index cards benefit from higher
     # resolution than the default; monograph page renders are fine at 1024.
@@ -89,6 +99,16 @@ class Project:
     materialise_images: "Callable[[dict, Path, int], list[str]] | None" = None
     build_record: "Callable[[dict, list[str]], dict] | None" = None
     ground_truth: "Callable[[dict], dict | None] | None" = None
+
+    def __post_init__(self):
+        # A Source fills in iteration + image materialisation unless overridden.
+        if self.source is not None:
+            if self.iter_samples is None:
+                self.iter_samples = self.source.iter_samples
+            if self.materialise_images is None:
+                self.materialise_images = self.source.materialise
+        if self.iter_samples is None:
+            raise ValueError(f"project {self.name}: pass source= or iter_samples=")
 
 
 # ── Plugin discovery ───────────────────────────────────────────────────────
@@ -218,11 +238,27 @@ def _field_spec(
     return spec
 
 
+def default_view(project: Project) -> View:
+    """A no-frills View: one panel listing every schema field. Used when a
+    project doesn't define its own `view` (curation: order/hide/labels/GT)."""
+    return View(
+        layout="split",
+        title=_humanize(project.name),
+        id_label="ID",
+        panels=[
+            Panel(
+                source="model_output",
+                title="Model output",
+                fields=list(project.schema.model_fields),
+            )
+        ],
+    )
+
+
 def build_view(project: Project) -> dict:
-    """Build the view.json contract dict from a project's View spec + schema."""
-    v = project.view
-    if v is None:
-        raise ValueError(f"project {project.name} has no view spec")
+    """Build the view.json contract dict from a project's View spec + schema.
+    Falls back to `default_view` (all fields) when the project sets no view."""
+    v = project.view or default_view(project)
     panels: list[dict] = []
     for p in v.panels:
         fields = [_field_spec(k, project.schema, v.labels) for k in p.fields]

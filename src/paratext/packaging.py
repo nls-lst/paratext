@@ -118,10 +118,10 @@ def package(
             json.dumps(quarantined, indent=2, ensure_ascii=False)
         )
 
-    # Emit the per-dataset display/review contract for the review app.
-    if proj.view is not None:
-        (out / "view.json").write_text(
-            json.dumps(build_view(proj), indent=2, ensure_ascii=False)
-        )
+    # Emit the per-dataset display/review contract (defaults to all schema
+    # fields when the project defines no view).
+    (out / "view.json").write_text(
+        json.dumps(build_view(proj), indent=2, ensure_ascii=False)
+    )
 
     return len(records), skipped

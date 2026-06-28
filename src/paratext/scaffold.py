@@ -1,10 +1,15 @@
 """`paratext init` — scaffold a new project package.
 
-Generates a ready-to-edit project directory (``__init__.py`` + ``prompt.md``)
-in the current working directory, wired to the answers from a short
-questionnaire, and prints the entry-point line to register it. The generated
-``__init__.py`` is a working starting point; the user then edits the schema and
-prompt for their own metadata fields.
+Generates a project directory in the current working directory:
+
+    <name>/
+        prompt.md     # the prompt (prose, for the model)
+        schema.py     # the Pydantic output schema (your metadata fields)
+        project.py    # thin wiring: schema + prompt + a source adapter
+        __init__.py   # re-exports PROJECT
+
+The schema and prompt are the two things you actually edit; the rest is a small
+declaration. Answers from a short questionnaire pick the source adapter.
 """
 
 from __future__ import annotations
@@ -21,150 +26,66 @@ TODO: describe each field of the schema and how to handle edge cases. The
 quality of extraction depends almost entirely on this prompt.
 """
 
-# Image-source iter_samples, optionally with the verso filter and/or crop.
-_IMAGE_ITER = '''\
-def _iter_samples(source: Path, limit: int | None) -> Iterator[Sample]:
-    if not source.is_dir():
-        raise FileNotFoundError(f"images dir not found: {{source}}")
-    images = sorted(
-        p for p in source.iterdir() if p.suffix.lower() in {{".jpg", ".jpeg", ".png"}}
-    )
-    if limit is not None:
-        images = images[:limit]
-{detector_setup}
-    for img_path in images:
-        img = Image.open(img_path).convert("RGB"){verso_block}{crop_block}
-        yield Sample(
-            id=img_path.stem,
-            images=[img],
-            metadata={{"image_path": str(img_path.resolve())}},
-        )
+SCHEMA_STUB = '''\
+"""Output schema for {name}. Edit these fields (keep prompt.md in step)."""
+
+from __future__ import annotations
+
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
+
+class Record(BaseModel):
+    # TODO: replace with your metadata fields (and describe them in prompt.md).
+    title: Optional[str] = Field(None, description="Example field")
 '''
 
-_VERSO_BLOCK = """
-        if is_verso(img):
-            yield Sample(
-                id=img_path.stem,
-                images=[],
-                metadata={
-                    "image_path": str(img_path.resolve()),
-                    "preclassified": {"_skipped": "verso"},
-                },
-            )
-            continue"""
-
-_CROP_BLOCK = """
-        bbox = detector.detect(img) if detector is not None else None
-        if bbox is not None:
-            img = detector.crop(img, bbox=bbox, padding_pct=0.10)"""
-
-_PDF_ITER = '''\
-def _iter_samples(source: Path, limit: int | None) -> Iterator[Sample]:
-    if not source.is_dir():
-        raise FileNotFoundError(f"PDF dir not found: {source}")
-    pdfs = sorted(source.rglob("*.pdf"))
-    if limit is not None:
-        pdfs = pdfs[:limit]
-    for pdf_path in pdfs:
-        pdf = pdfium.PdfDocument(pdf_path)
-        try:
-            n = len(pdf)
-            indices = list(range(min(3, n)))  # first 3 pages; edit as needed
-            images = [pdf[i].render(scale=2.0).to_pil().convert("RGB") for i in indices]
-        finally:
-            pdf.close()
-        yield Sample(
-            id=pdf_path.stem,
-            images=images,
-            metadata={"pdf_path": str(pdf_path.resolve()), "pages_rendered": indices},
-        )
-'''
+INIT_STUB = 'from .project import PROJECT\n\n__all__ = ["PROJECT"]\n'
 
 
 def to_module_name(name: str) -> str:
     return re.sub(r"[^0-9a-zA-Z]+", "_", name.strip().lower()).strip("_")
 
 
+def _source_expr(kind: str, verso: bool, crop: bool) -> tuple[str, str]:
+    """Return (import_name, call_expr) for the chosen source adapter."""
+    if kind == "pdf":
+        return "pdf_source", "pdf_source()"
+    return "image_source", f"image_source(verso_filter={verso}, crop={crop})"
+
+
 def render_project(name: str, *, kind: str = "images", verso: bool = False, crop: bool = False):
     """Return ``{filename: content}`` for a new project. ``kind`` is
     ``"images"`` or ``"pdf"``; ``verso``/``crop`` apply to image projects."""
     mod = to_module_name(name)
+    ep_name = mod.replace("_", "-")
+    src_import, src_call = _source_expr(kind, verso, crop)
+    extra = "" if kind == "images" else "# `pip install paratext[pdf]` for PDF rendering.\n"
 
-    if kind == "pdf":
-        imports = (
-            "import pypdfium2 as pdfium\n"
-            "from pydantic import BaseModel, Field\n\n"
-            "from paratext.projects import Panel, Project, Sample, View, load_prompt"
-        )
-        iter_src = _PDF_ITER
-        extra = "    # `pip install paratext[pdf]` for pypdfium2.\n"
-    else:
-        card_imports = ""
-        detector_setup = ""
-        if crop:
-            card_imports = "from paratext.cards import load_card_detector\n"
-            detector_setup = "\n    detector = load_card_detector()  # None → no crop\n"
-        if verso:
-            card_imports = "from paratext.cards import is_verso" + (
-                ", load_card_detector\n" if crop else "\n"
-            )
-        imports = (
-            "from PIL import Image\n"
-            "from pydantic import BaseModel, Field\n\n"
-            + card_imports
-            + "from paratext.projects import Panel, Project, Sample, View, load_prompt"
-        )
-        iter_src = _IMAGE_ITER.format(
-            detector_setup=detector_setup,
-            verso_block=_VERSO_BLOCK if verso else "",
-            crop_block=_CROP_BLOCK if crop else "",
-        )
-        extra = ""
-
-    init_py = f'''\
-"""{name} project — generated by `paratext init`. Edit the schema and prompt."""
+    project_py = f'''\
+"""{name} project — generated by `paratext init`. Edit schema.py and prompt.md."""
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Iterator, Optional
+from paratext.projects import Project, load_prompt
+from paratext.sources import {src_import}
 
-{imports}
+from .schema import Record
 
-SCHEMA_VERSION = "v1"
-
-
-class Record(BaseModel):
-    # TODO: replace with your metadata fields (keep names in sync with prompt.md).
-    title: Optional[str] = Field(None, description="Example field")
-
-
-PROMPT = load_prompt(__file__)  # see prompt.md beside this module
-
-
-{extra}{iter_src}
-
-VIEW = View(
-    layout="split",
-    title="{name}",
-    id_label="ID",
-    panels=[Panel(source="model_output", title="Model output", fields=["title"])],
-)
-
-PROJECT = Project(
-    name="{mod.replace("_", "-")}",
-    schema_version=SCHEMA_VERSION,
-    prompt=PROMPT,
+{extra}PROJECT = Project(
+    name="{ep_name}",
+    schema_version="v1",
+    prompt=load_prompt(__file__),
     schema=Record,
-    iter_samples=_iter_samples,
-    view=VIEW,
+    source={src_call},
 )
 '''
-    # Thin __init__.py re-exporting PROJECT; logic lives in project.py.
     return {
-        f"{mod}/project.py": init_py,
-        f"{mod}/__init__.py": 'from .project import PROJECT\n\n__all__ = ["PROJECT"]\n',
+        f"{mod}/schema.py": SCHEMA_STUB.format(name=name),
         f"{mod}/prompt.md": PROMPT_STUB,
+        f"{mod}/project.py": project_py,
+        f"{mod}/__init__.py": INIT_STUB,
     }
 
 
@@ -201,10 +122,10 @@ def init(name: str | None = None) -> int:
         path.write_text(content)
 
     ep_name = mod.replace("_", "-")
-    print(f"\nCreated ./{mod}/ (__init__.py + prompt.md).")
+    print(f"\nCreated ./{mod}/ (schema.py + prompt.md + project.py).")
     print("\nRegister it by adding this to your pyproject.toml, then reinstall:\n")
     print('  [project.entry-points."paratext.projects"]')
     print(f'  {ep_name} = "{mod}:PROJECT"\n')
-    print(f"Then edit {mod}/prompt.md and the Record schema, and run "
+    print(f"Then edit {mod}/schema.py and {mod}/prompt.md, and run "
           f"`paratext run -p {ep_name}`.")
     return 0
