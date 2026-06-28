@@ -99,6 +99,29 @@ verso-filter = true
 card-crop    = true
 ```
 
+### Remote / hosted endpoints (incl. Hugging Face)
+
+The VLM endpoint is just an OpenAI-compatible URL, so a hosted API works exactly
+like a local server — only `base-url`, `api-key`, and `model` change. For example,
+Hugging Face Inference Providers (or a dedicated Inference Endpoint's URL + `/v1`):
+
+```toml
+base-url = "https://router.huggingface.co/v1"
+api-key  = "hf_…"                          # or set PARATEXT_API_KEY
+model    = "Qwen/Qwen2.5-VL-7B-Instruct"   # a vision model repo id
+```
+
+Two things to know for hosted endpoints:
+
+- **Auth:** set `api-key` to your provider token (local servers ignore it; the
+  default is `EMPTY`).
+- **Structured output:** extraction uses OpenAI json-schema structured outputs by
+  default. If a provider/model doesn't support that, set `no-structured = true`
+  (or pass `--no-structured`) to fall back to a plain completion + JSON parsing.
+
+paratext is a *client*, not a model runner — to use a model that isn't hosted,
+self-host it behind vLLM/TGI/llama.cpp and point `base-url` at that.
+
 ## Scanned-card toolkit (`paratext.cards`)
 
 For index-card collections, two reusable, opt-in tools:
