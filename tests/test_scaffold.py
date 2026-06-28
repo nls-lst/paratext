@@ -21,15 +21,18 @@ def test_module_name_slug():
     ],
 )
 def test_render_project_is_valid_python(kwargs):
-    files = render_project("Demo Project", **kwargs)
+    files = render_project("Demo Project", fields=["title", "author name"], **kwargs)
     init = files["demo_project/__init__.py"]
     ast.parse(init)  # raises SyntaxError if the template is malformed
-    ast.parse(files["demo_project/schema.py"])
+    schema = files["demo_project/schema.py"]
+    ast.parse(schema)
     assert "demo_project/project.py" not in files  # collapsed into __init__.py
     assert 'name="demo-project"' in init
     assert "from .schema import Record" in init
     assert "PROJECT = Project(" in init
     assert files["demo_project/prompt.md"].strip()
+    # seeded fields become schema attributes (slugified)
+    assert "title: Optional[str]" in schema and "author_name: Optional[str]" in schema
     if kwargs["kind"] == "pdf":
         assert "pdf_source(" in init
     else:

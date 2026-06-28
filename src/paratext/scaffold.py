@@ -25,7 +25,7 @@ TODO: describe each field of the schema and how to handle edge cases. The
 quality of extraction depends almost entirely on this prompt.
 """
 
-SCHEMA_STUB = '''\
+SCHEMA_HEADER = '''\
 """Output schema for {name}. Edit these fields (keep prompt.md in step)."""
 
 from __future__ import annotations
@@ -36,12 +36,20 @@ from pydantic import BaseModel, Field
 
 
 class Record(BaseModel):
-    # TODO: replace with your metadata fields (and describe them in prompt.md).
-    title: Optional[str] = Field(None, description="Example field")
+    # TODO: set types and describe each field for the prompt.
 '''
 
 def to_module_name(name: str) -> str:
     return re.sub(r"[^0-9a-zA-Z]+", "_", name.strip().lower()).strip("_")
+
+
+def _render_schema(name: str, fields: list[str]) -> str:
+    names = [to_module_name(f) for f in fields if to_module_name(f)] or ["title"]
+    lines = [
+        f'    {f}: Optional[str] = Field(None, description="TODO: describe {f}")'
+        for f in names
+    ]
+    return SCHEMA_HEADER.format(name=name) + "\n".join(lines) + "\n"
 
 
 def _source_expr(kind: str, verso: bool, crop: bool) -> tuple[str, str]:
@@ -51,9 +59,17 @@ def _source_expr(kind: str, verso: bool, crop: bool) -> tuple[str, str]:
     return "image_source", f"image_source(verso_filter={verso}, crop={crop})"
 
 
-def render_project(name: str, *, kind: str = "images", verso: bool = False, crop: bool = False):
+def render_project(
+    name: str,
+    *,
+    kind: str = "images",
+    verso: bool = False,
+    crop: bool = False,
+    fields: list[str] | None = None,
+):
     """Return ``{filename: content}`` for a new project. ``kind`` is
-    ``"images"`` or ``"pdf"``; ``verso``/``crop`` apply to image projects."""
+    ``"images"`` or ``"pdf"``; ``verso``/``crop`` apply to image projects;
+    ``fields`` seeds the schema (defaults to a single ``title``)."""
     mod = to_module_name(name)
     ep_name = mod.replace("_", "-")
     src_import, src_call = _source_expr(kind, verso, crop)
@@ -78,7 +94,7 @@ from .schema import Record
 )
 '''
     return {
-        f"{mod}/schema.py": SCHEMA_STUB.format(name=name),
+        f"{mod}/schema.py": _render_schema(name, fields or ["title"]),
         f"{mod}/prompt.md": PROMPT_STUB,
         f"{mod}/__init__.py": init_py,
     }
@@ -106,7 +122,10 @@ def init(name: str | None = None) -> int:
         verso = _ask("Filter blank versos (backs of cards) before the VLM?", default=True)
         crop = _ask("Crop each scan to the card region (RetinaNet from HF)?", default=False)
 
-    files = render_project(name, kind=kind, verso=verso, crop=crop)
+    raw = input("Metadata fields, comma-separated (e.g. title, author, date) [title]: ")
+    fields = [f.strip() for f in raw.split(",") if f.strip()] or ["title"]
+
+    files = render_project(name, kind=kind, verso=verso, crop=crop, fields=fields)
     mod = to_module_name(name)
     dest = Path.cwd() / mod
     if dest.exists():

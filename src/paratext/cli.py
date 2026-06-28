@@ -7,7 +7,7 @@ Subcommands:
     review      Launch the local web UI to review a packaged dataset.
     sample      Build a random N-image subset of a source directory (helper).
     config      Open the config file (``--show`` prints the resolved defaults).
-    init        Scaffold a new project package (interactive).
+    new         Scaffold a new project package (interactive).
 
 Most values resolve from ``paratext.toml`` or the environment, so once a project
 is configured ``paratext run -p <project>`` is all you need. See paratext.config.
@@ -195,8 +195,8 @@ def _cmd_config(args: argparse.Namespace) -> int:
     return 0
 
 
-# ── Init ───────────────────────────────────────────────────────────────────
-def _cmd_init(args: argparse.Namespace) -> int:
+# ── New (scaffold a project) ────────────────────────────────────────────────
+def _cmd_new(args: argparse.Namespace) -> int:
     from .scaffold import init
 
     return init(args.name)
@@ -280,9 +280,9 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     cfg.add_argument("--show", action="store_true", help="Print resolved defaults instead")
     cfg.set_defaults(func=_cmd_config)
 
-    ini = sub.add_parser("init", help="Scaffold a new project package")
-    ini.add_argument("name", nargs="?", default=None, help="Project name")
-    ini.set_defaults(func=_cmd_init)
+    nw = sub.add_parser("new", aliases=["init"], help="Scaffold a new project package")
+    nw.add_argument("name", nargs="?", default=None, help="Project name")
+    nw.set_defaults(func=_cmd_new)
 
     # run/extract take the full layered config; review only needs the port.
     return p, [r, e], rv

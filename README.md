@@ -31,7 +31,7 @@ servers.
 
 ```bash
 # 1. Scaffold a project (asks about input type, verso filter, card cropping).
-paratext init my-cards
+paratext new my-cards
 
 # 2. Register it (add the printed entry-point line to your pyproject.toml, then
 #    reinstall) and point the config at your data.
@@ -58,7 +58,7 @@ launch the UI automatically when the run finishes.
 | `paratext review <dataset-dir>` | Launch the inbuilt web UI to review a packaged dataset. |
 | `paratext sample --source <tree> --out <dir> -n 500` | Symlink a random image subset out of a nested tree. |
 | `paratext config [--show]` | Open `paratext.toml`; `--show` prints the resolved defaults. |
-| `paratext init [name]` | Scaffold a new project package. |
+| `paratext new [name]` | Scaffold a new project package (asks fields, prompt, source). |
 
 ## Review
 
@@ -139,32 +139,36 @@ prompt and a minimal schema as a working starting point.
 
 ## Writing a project
 
-A project is a Python package exporting a `Project` from its `project.py`, with
-a `prompt.md` beside it:
+`paratext new` scaffolds a project package for you — the three files you then
+edit are the prompt, the schema, and a short wiring file:
+
+```
+my_cards/
+    prompt.md     # the prompt (prose, for the model)
+    schema.py     # the Pydantic output schema (your metadata fields)
+    __init__.py   # wires schema + prompt + a source adapter into PROJECT
+```
+
+`__init__.py` is small because the input handling comes from a **source
+adapter** (`paratext.sources`):
 
 ```python
-# my_cards/project.py
-from pydantic import BaseModel
-from paratext.projects import Project, Sample, View, Panel, load_prompt
+# my_cards/__init__.py
+from paratext.projects import Project, load_prompt
+from paratext.sources import image_source   # or pdf_source
 
-class Record(BaseModel):
-    heading: str | None = None
-
-def iter_samples(source, limit):
-    ...  # yield Sample(id, images, metadata)
+from .schema import Record
 
 PROJECT = Project(
     name="my-cards",
     schema_version="v1",
     prompt=load_prompt(__file__),
     schema=Record,
-    iter_samples=iter_samples,
-    view=View(layout="split", title="Card", id_label="ID",
-              panels=[Panel(source="model_output", title="Model output", fields=["heading"])]),
+    source=image_source(verso_filter=True, crop=True),
 )
 ```
 
-Register it via the `paratext.projects` entry-point group so it is discovered at
+Register it via the `paratext.projects` entry-point group so it's discovered at
 runtime:
 
 ```toml
@@ -172,10 +176,10 @@ runtime:
 my-cards = "my_cards:PROJECT"
 ```
 
-Optional packaging hooks on `Project` (`curate`, `materialise_images`,
-`build_record`, `ground_truth`) let a project drop/quarantine records, render
-its own review images (e.g. PDF pages), and attach ground truth. `paratext init`
-generates all of this for you.
+The View defaults to showing every schema field. Override only what you need:
+pass a `view=View(...)` to curate the display, and the optional hooks `curate`,
+`build_record`, `ground_truth` (and a custom `materialise_images` or
+`iter_samples`) for drop/quarantine rules, ground truth, etc.
 
 ## License
 

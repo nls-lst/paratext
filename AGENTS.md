@@ -7,14 +7,15 @@ collections. This orients AI coding agents; `README.md` is the human guide.
 
 - One CLI (`paratext`) runs the loop: `extract` (VLM → JSONL), `package`
   (JSONL → review dataset), or `run` (both); `review` launches the inbuilt web
-  UI over a packaged dataset. Plus `sample`, `config`, `init`.
+  UI over a packaged dataset. Plus `sample`, `config`, `new`.
 - The inbuilt review (`paratext.review`) is a dependency-free stdlib
   `http.server` + `sqlite3` app serving a generic vanilla-JS frontend in
   `review/static/`, driven entirely by each dataset's `view.json`.
-- A **project** is a plug-in discovered via the `paratext.projects`
-  entry-point group: its own prompt (`prompt.md`), Pydantic schema, and
-  `iter_samples` generator. Logic lives in `project.py`; `__init__.py` is a thin
-  re-export of `PROJECT`. The bundled generic starter is `cards`.
+- A **project** is a plug-in package discovered via the `paratext.projects`
+  entry-point group: `prompt.md` (prompt), `schema.py` (Pydantic schema), and
+  `__init__.py` which wires them to a `paratext.sources` adapter
+  (`image_source`/`pdf_source`) into a `PROJECT`. The bundled generic starter is
+  `cards`; `paratext new` scaffolds this layout.
 - Output is JSONL with a `_provenance` header (git commit, prompt hash, model,
   schema version, timestamp). Resumable: re-running with the same `--output`
   skips ids already present.
