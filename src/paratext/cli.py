@@ -33,6 +33,11 @@ from .config import (
 from .extract import run as run_extract
 from .packaging import package
 from .projects import get_project, project_names
+from .review.server import DEFAULT_PORT
+
+# Default root holding each project's review dataset (review/<project>/), so
+# `paratext review` with no args lists every project on its homepage.
+REVIEW_ROOT = Path("review")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -91,20 +96,29 @@ def _cmd_extract(args: argparse.Namespace) -> int:
 # ── Run (extract + package) ────────────────────────────────────────────────
 def _cmd_run(args: argparse.Namespace) -> int:
     _do_extract(args)
-    review_out = args.review_out or Path(args.output).with_name(f"{args.project}-review")
+    # Each project's dataset lives under the review/ root, so `paratext review`
+    # (no args) lists them all.
+    review_out = args.review_out or REVIEW_ROOT / args.project
     kept, skipped = package(Path(args.output), Path(review_out), args.project, fresh=True)
     print(f"Wrote extractions to {args.output}")
     print(f"Packaged {kept} record(s) to {review_out / 'samples.json'}")
     if skipped:
         breakdown = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
         print(f"Skipped {sum(skipped.values())} item(s): {breakdown}")
-    if args.review:
+
+    from .review.server import DEFAULT_PORT, is_running
+
+    root = Path(review_out).parent  # the review/ root holding every project
+    if is_running(DEFAULT_PORT):
+        print(f"\nReview server already running — reload "
+              f"http://127.0.0.1:{DEFAULT_PORT} to see '{args.project}'.")
+    elif args.review:
         from .review import serve
 
         print()
-        serve(review_out, open_browser=True)  # blocks until Ctrl-C
+        serve(root, open_browser=True)  # blocks until Ctrl-C
     else:
-        print(f"\nReview them:  paratext review {review_out}")
+        print("\nReview them:  paratext review")
     return 0
 
 
@@ -245,10 +259,10 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     pk.add_argument("--fresh", action="store_true")
     pk.set_defaults(func=_cmd_package)
 
-    rv = sub.add_parser("review", help="Launch the local web UI to review a dataset")
-    rv.add_argument("data_dir", type=Path, nargs="?", default=Path.cwd(),
-                    help="A packaged dataset dir (or a parent holding several)")
-    rv.add_argument("--port", type=int, default=5050)
+    rv = sub.add_parser("review", help="Launch the local web UI to review datasets")
+    rv.add_argument("data_dir", type=Path, nargs="?", default=REVIEW_ROOT,
+                    help="A review root (default: ./review) or a single dataset dir")
+    rv.add_argument("--port", type=int, default=DEFAULT_PORT)
     rv.add_argument("--no-open", action="store_true", help="Don't open a browser")
     rv.set_defaults(func=_cmd_review)
 

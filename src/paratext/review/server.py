@@ -28,6 +28,21 @@ from urllib.parse import parse_qs, unquote, urlparse
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
+DEFAULT_PORT = 5050
+
+
+def is_running(port: int = DEFAULT_PORT) -> bool:
+    """True if a review server already answers on this port (so callers can
+    avoid launching a second one — datasets are re-read per request, so a new
+    one appears in the running server on reload)."""
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/datasets", timeout=0.5) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
 VERDICTS_FALLBACK = [
     {
         "value": "good_enough",
@@ -551,10 +566,13 @@ class Handler(BaseHTTPRequestHandler):
         )
 
 
-def serve(data_dir: Path, port: int = 5050, open_browser: bool = True) -> None:
+def serve(data_dir: Path, port: int = DEFAULT_PORT, open_browser: bool = True) -> None:
     data_dir = Path(data_dir).resolve()
     if not data_dir.is_dir():
-        raise SystemExit(f"not a directory: {data_dir}")
+        raise SystemExit(
+            f"No review datasets at {data_dir}. Run `paratext run` first, "
+            f"or pass a dataset directory: paratext review <dir>"
+        )
     Handler.data_dir = data_dir
     Handler.store = Store(data_dir / "annotations.db")
     datasets = discover_datasets(data_dir)

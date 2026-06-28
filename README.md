@@ -39,11 +39,14 @@ paratext config                       # opens paratext.toml in $EDITOR
 
 # 3. Run extraction + packaging in one go, then review in the browser.
 paratext run -p my-cards --limit 50
-paratext review my-cards-review
+paratext review                       # serves ./review — all projects
 ```
 
-`run` writes the extraction JSONL and a `<project>-review/` dataset
-(`samples.json` + `images/` + `view.json`); `review` opens a local web UI over it.
+`run` writes the extraction JSONL and a `review/<project>/` dataset
+(`samples.json` + `images/` + `view.json`); `paratext review` opens a local web
+UI over the `review/` root. If a review server is already running, a fresh `run`
+shows up there on reload — no restart needed. Add `paratext run … --review` to
+launch the UI automatically when the run finishes.
 
 ## Commands
 
@@ -59,11 +62,13 @@ paratext review my-cards-review
 
 ## Review
 
-`paratext review <dir>` serves a dependency-free local web app (stdlib only) for
-human review: it reads `samples.json` + `view.json` + `images/`, renders the
-fields and verdict hotkeys from the view contract, and saves annotations to
-`<dir>/annotations.db`. Point it at one dataset directory, or at a parent
-holding several (each in its own subdir, with optional `-r<N>` round suffixes).
+`paratext review` serves a dependency-free local web app (stdlib only) for human
+review: it reads `samples.json` + `view.json` + `images/`, renders the fields and
+verdict hotkeys from the view contract, and saves annotations to
+`annotations.db`. With no argument it serves the `./review` root and lists every
+project on its homepage; pass a directory to review a single dataset (datasets in
+subdirs may use `-r<N>` round suffixes). Datasets are re-read per request, so a
+new `run` appears on reload without restarting the server.
 
 Once a project is configured, `run`/`extract` need only `-p <project>` —
 everything else resolves from config.
