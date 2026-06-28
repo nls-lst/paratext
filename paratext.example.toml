@@ -8,6 +8,7 @@
 
 base-url = "http://localhost:8000/v1"   # any OpenAI-compatible VLM server
 # model  = "Qwen3-VL-30B"               # a model id your server serves (required)
+# review-port = 5050                    # port for `paratext review`
 
 # The bundled starter project. `source` is a flat directory of card images.
 [project.cards]

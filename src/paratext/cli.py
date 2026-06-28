@@ -50,6 +50,7 @@ HARDCODED_DEFAULTS: dict = {
     "base_url": "http://localhost:8000/v1",
     "api_key": "EMPTY",  # most local OpenAI-compatible servers ignore the key
     "limit": None,
+    "review_port": DEFAULT_PORT,
     "no_structured": False,
     "skip_preflight": False,
 }
@@ -106,17 +107,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
         breakdown = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
         print(f"Skipped {sum(skipped.values())} item(s): {breakdown}")
 
-    from .review.server import DEFAULT_PORT, is_running
+    from .review.server import is_running
 
+    port = args.review_port
     root = Path(review_out).parent  # the review/ root holding every project
-    if is_running(DEFAULT_PORT):
+    if is_running(port):
         print(f"\nReview server already running — reload "
-              f"http://127.0.0.1:{DEFAULT_PORT} to see '{args.project}'.")
+              f"http://127.0.0.1:{port} to see '{args.project}'.")
     elif args.review:
         from .review import serve
 
         print()
-        serve(root, open_browser=True)  # blocks until Ctrl-C
+        serve(root, port=port, open_browser=True)  # blocks until Ctrl-C
     else:
         print("\nReview them:  paratext review")
     return 0
@@ -282,11 +284,12 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     ini.add_argument("name", nargs="?", default=None, help="Project name")
     ini.set_defaults(func=_cmd_init)
 
-    return p, [r, e]  # the subparsers that take layered config defaults
+    # run/extract take the full layered config; review only needs the port.
+    return p, [r, e], rv
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser, config_subparsers = _build_parser()
+    parser, config_subparsers, review_subparser = _build_parser()
 
     project = _peek_project(argv)
     layered = coerce_paths(load_defaults(project))
@@ -295,6 +298,8 @@ def main(argv: list[str] | None = None) -> int:
         merged.setdefault("project", project)
     for sp in config_subparsers:
         sp.set_defaults(**merged)
+    # `paratext review --port` still overrides; otherwise use the configured port.
+    review_subparser.set_defaults(port=merged["review_port"])
 
     args = parser.parse_args(argv)
     return args.func(args)

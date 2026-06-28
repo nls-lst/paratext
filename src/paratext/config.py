@@ -44,6 +44,7 @@ CONFIG_TEMPLATE = """\
 
 base-url = "http://localhost:8000/v1"   # any OpenAI-compatible VLM server
 # model  = "Qwen3-VL-30B"               # a model id your server serves (required)
+# review-port = 5050                    # port for `paratext review`
 
 # The bundled starter project. `source` is a flat directory of card images.
 [project.cards]
@@ -59,6 +60,7 @@ RECOGNISED = (
     "source",
     "output",
     "review_out",
+    "review_port",
     "model",
     "base_url",
     "api_key",
@@ -124,8 +126,9 @@ def coerce_paths(d: dict) -> dict:
     for key in ("source", "output", "review_out"):
         if key in d and isinstance(d[key], str):
             d[key] = Path(d[key])
-    if "limit" in d and isinstance(d["limit"], str):
-        d["limit"] = int(d["limit"])
+    for key in ("limit", "review_port"):
+        if key in d and isinstance(d[key], str):
+            d[key] = int(d[key])
     for key in ("no_structured", "skip_preflight"):
         if key in d and isinstance(d[key], str):
             d[key] = d[key].lower() in ("1", "true", "yes", "on")
