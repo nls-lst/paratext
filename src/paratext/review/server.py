@@ -29,9 +29,27 @@ logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 VERDICTS_FALLBACK = [
-    {"value": "good_enough", "label": "Good enough", "hotkey": "1", "notes": False, "negative": False},
-    {"value": "needs_tweaks", "label": "Needs tweaks", "hotkey": "2", "notes": True, "negative": False},
-    {"value": "not_accurate", "label": "Not accurate", "hotkey": "3", "notes": True, "negative": True},
+    {
+        "value": "good_enough",
+        "label": "Good enough",
+        "hotkey": "1",
+        "notes": False,
+        "negative": False,
+    },
+    {
+        "value": "needs_tweaks",
+        "label": "Needs tweaks",
+        "hotkey": "2",
+        "notes": True,
+        "negative": False,
+    },
+    {
+        "value": "not_accurate",
+        "label": "Not accurate",
+        "hotkey": "3",
+        "notes": True,
+        "negative": True,
+    },
 ]
 
 
@@ -144,8 +162,16 @@ def discover_datasets(data_dir: Path) -> list[dict]:
         records = json.loads((d / "samples.json").read_text())
         base, rnd = _parse_name(name)
         schema = (records[0].get("schema") if records else None) or name
-        out.append({"name": name, "schema": schema, "count": len(records),
-                    "dir": d, "base": base, "round": rnd})
+        out.append(
+            {
+                "name": name,
+                "schema": schema,
+                "count": len(records),
+                "dir": d,
+                "base": base,
+                "round": rnd,
+            }
+        )
 
     if (data_dir / "samples.json").is_file():
         _add(data_dir.name, data_dir)
@@ -220,10 +246,22 @@ def synthesise_view(dataset: dict, samples: list[dict]) -> dict:
         return specs
 
     panels = (
-        [{"source": "ground_truth", "title": "Catalogue ground truth", "fields": fields_of("ground_truth")},
-         {"source": "model_output", "title": "Model output", "fields": fields_of("model_output")}]
+        [
+            {
+                "source": "ground_truth",
+                "title": "Catalogue ground truth",
+                "fields": fields_of("ground_truth"),
+            },
+            {
+                "source": "model_output",
+                "title": "Model output",
+                "fields": fields_of("model_output"),
+            },
+        ]
         if has_gt
-        else [{"source": "model_output", "title": "Model output", "fields": fields_of("model_output")}]
+        else [
+            {"source": "model_output", "title": "Model output", "fields": fields_of("model_output")}
+        ]
     )
     return {
         "contract_version": 0,
@@ -235,7 +273,10 @@ def synthesise_view(dataset: dict, samples: list[dict]) -> dict:
         "panels": panels,
         "scoring": {
             "verdicts": VERDICTS_FALLBACK,
-            "notes": {"label": "Notes", "placeholder": "Describe what's wrong or what should change…"},
+            "notes": {
+                "label": "Notes",
+                "placeholder": "Describe what's wrong or what should change…",
+            },
         },
     }
 
@@ -248,8 +289,14 @@ def load_view(dataset: dict, samples: list[dict]) -> dict:
 
 
 # ── HTTP handler ────────────────────────────────────────────────────────────
-_MIME = {".html": "text/html", ".js": "text/javascript", ".css": "text/css",
-         ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+_MIME = {
+    ".html": "text/html",
+    ".js": "text/javascript",
+    ".css": "text/css",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -302,7 +349,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/samples":
                 return self._api_samples(self._dataset(qs))
             if path.startswith("/api/samples/"):
-                return self._api_sample(self._dataset(qs), unquote(path.split("/api/samples/", 1)[1]))
+                return self._api_sample(
+                    self._dataset(qs), unquote(path.split("/api/samples/", 1)[1])
+                )
             if path == "/api/stats":
                 return self._api_stats(self._dataset(qs))
             if path == "/api/table":
@@ -340,41 +389,70 @@ class Handler(BaseHTTPRequestHandler):
     def _api_datasets(self):
         datasets = discover_datasets(self.data_dir)
         active = _active_round(datasets)
-        self._json([
-            {"name": d["name"], "schema": d["schema"], "count": d["count"],
-             "base": d["base"], "round": d["round"], "active": d["round"] == active.get(d["base"])}
-            for d in datasets
-        ])
+        self._json(
+            [
+                {
+                    "name": d["name"],
+                    "schema": d["schema"],
+                    "count": d["count"],
+                    "base": d["base"],
+                    "round": d["round"],
+                    "active": d["round"] == active.get(d["base"]),
+                }
+                for d in datasets
+            ]
+        )
 
     def _api_samples(self, ds):
         ann = {a["sample_id"]: a for a in self.store.all(ds["name"])}
-        self._json([
-            {"id": s["id"], "document_id": s.get("document_id"),
-             "annotated": (ann.get(str(s["id"]), {}).get("model_correct")) is not None}
-            for s in load_samples(ds)
-        ])
+        self._json(
+            [
+                {
+                    "id": s["id"],
+                    "document_id": s.get("document_id"),
+                    "annotated": (ann.get(str(s["id"]), {}).get("model_correct")) is not None,
+                }
+                for s in load_samples(ds)
+            ]
+        )
 
     def _api_sample(self, ds, sid):
         sample = next((s for s in load_samples(ds) if str(s["id"]) == sid), None)
         if sample is None:
             return self._json({"error": "not found"}, 404)
-        sample = {**sample, "schema": sample.get("schema") or ds["schema"],
-                  "annotation": self.store.get(ds["name"], sid)}
+        sample = {
+            **sample,
+            "schema": sample.get("schema") or ds["schema"],
+            "annotation": self.store.get(ds["name"], sid),
+        }
         self._json(sample)
 
     def _api_stats(self, ds):
         all_s = load_samples(ds)
         ann = self.store.all(ds["name"])
         scored_for = lambda v: sum(1 for a in ann if a["model_correct"] == v)  # noqa: E731
-        good, tweaks, bad = scored_for("good_enough"), scored_for("needs_tweaks"), scored_for("not_accurate")
+        good, tweaks, bad = (
+            scored_for("good_enough"),
+            scored_for("needs_tweaks"),
+            scored_for("not_accurate"),
+        )
         scored = good + tweaks + bad
-        self._json({
-            "dataset": ds["name"], "schema": ds["schema"], "total": len(all_s),
-            "annotated": sum(1 for a in ann if a["model_correct"] is not None),
-            "flagged_marc": sum(1 for a in ann if a["catalogue_correct"] == "flagged"),
-            "model": {"good_enough": good, "needs_tweaks": tweaks, "not_accurate": bad,
-                      "scored": scored, "accuracy": ((good + tweaks * 0.5) / scored * 100) if scored else None},
-        })
+        self._json(
+            {
+                "dataset": ds["name"],
+                "schema": ds["schema"],
+                "total": len(all_s),
+                "annotated": sum(1 for a in ann if a["model_correct"] is not None),
+                "flagged_marc": sum(1 for a in ann if a["catalogue_correct"] == "flagged"),
+                "model": {
+                    "good_enough": good,
+                    "needs_tweaks": tweaks,
+                    "not_accurate": bad,
+                    "scored": scored,
+                    "accuracy": ((good + tweaks * 0.5) / scored * 100) if scored else None,
+                },
+            }
+        )
 
     def _api_table(self, ds):
         all_s = load_samples(ds)
@@ -385,9 +463,16 @@ class Handler(BaseHTTPRequestHandler):
         for s in all_s:
             a = ann.get(str(s["id"]), {})
             label = (s.get(tl["source"]) or {}).get(tl["key"]) if tl else None
-            rows.append({"sample_id": str(s["id"]), "document_id": s.get("document_id"),
-                         "title": label, "model_correct": a.get("model_correct"),
-                         "catalogue_correct": a.get("catalogue_correct"), "notes": a.get("notes")})
+            rows.append(
+                {
+                    "sample_id": str(s["id"]),
+                    "document_id": s.get("document_id"),
+                    "title": label,
+                    "model_correct": a.get("model_correct"),
+                    "catalogue_correct": a.get("catalogue_correct"),
+                    "notes": a.get("notes"),
+                }
+            )
         self._json(rows)
 
     def _api_prompts(self, ds):
@@ -399,7 +484,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not text:
                     continue
                 h = s.get("prompt_hash") or str(hash(text) & 0xFFFFFFFFFFFF)
-                g = groups.setdefault(h, {"hash": h, "text": text, "count": 0, "rounds": [], "datasets": []})
+                g = groups.setdefault(
+                    h, {"hash": h, "text": text, "count": 0, "rounds": [], "datasets": []}
+                )
                 g["count"] += 1
                 if sib["round"] not in g["rounds"]:
                     g["rounds"].append(sib["round"])
@@ -420,10 +507,20 @@ class Handler(BaseHTTPRequestHandler):
         for s in all_s:
             a = ann.get(str(s["id"]), {})
             if a.get("model_correct") or a.get("catalogue_correct"):
-                w.writerow([s["id"], s.get("document_id"), a.get("model_correct"),
-                            a.get("catalogue_correct"), a.get("notes")])
-        self._bytes(buf.getvalue().encode(), "text/csv",
-                    headers={"content-disposition": f'attachment; filename="{ds["name"]}-review.csv"'})
+                w.writerow(
+                    [
+                        s["id"],
+                        s.get("document_id"),
+                        a.get("model_correct"),
+                        a.get("catalogue_correct"),
+                        a.get("notes"),
+                    ]
+                )
+        self._bytes(
+            buf.getvalue().encode(),
+            "text/csv",
+            headers={"content-disposition": f'attachment; filename="{ds["name"]}-review.csv"'},
+        )
 
     def _serve_image(self, path):
         parts = [unquote(p) for p in path.split("/") if p][1:]  # drop "images"
@@ -436,8 +533,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "not found"}, 404)
         if not target.is_file():
             return self._json({"error": "not found"}, 404)
-        self._bytes(target.read_bytes(), _MIME.get(target.suffix.lower(), "application/octet-stream"),
-                    headers={"cache-control": "public, max-age=3600"})
+        self._bytes(
+            target.read_bytes(),
+            _MIME.get(target.suffix.lower(), "application/octet-stream"),
+            headers={"cache-control": "public, max-age=3600"},
+        )
 
     def _serve_static(self, path):
         rel = "index.html" if path in ("/", "") else path.lstrip("/")
@@ -446,7 +546,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "not found"}, 404)
         if not target.is_file():
             return self._json({"error": "not found"}, 404)
-        self._bytes(target.read_bytes(), _MIME.get(target.suffix.lower(), "application/octet-stream"))
+        self._bytes(
+            target.read_bytes(), _MIME.get(target.suffix.lower(), "application/octet-stream")
+        )
 
 
 def serve(data_dir: Path, port: int = 4000, open_browser: bool = True) -> None:
@@ -459,7 +561,10 @@ def serve(data_dir: Path, port: int = 4000, open_browser: bool = True) -> None:
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}"
     print(f"paratext review on {url}")
-    print(f"  data dir: {data_dir}  ({len(datasets)} dataset(s): {', '.join(d['name'] for d in datasets) or 'none'})")
+    names = ", ".join(d["name"] for d in datasets) or "none"
+    print(
+        f"  data dir: {data_dir}  ({len(datasets)} dataset(s): {names})"
+    )
     if open_browser:
         try:
             webbrowser.open(url)
