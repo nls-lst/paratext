@@ -1,20 +1,16 @@
-# paratext config — copy to `paratext.toml` and edit for your environment.
-# Open it any time with `paratext config`; see resolved values with
-# `paratext config --show -p <project>`.
+# paratext config — edit for your environment.
+# `paratext config` seeds a copy of this; `paratext config --show -p <project>`
+# resolves it.
 #
 # Resolution order (highest first):
-#   1. CLI flags          e.g. `paratext run -p cards --limit 5`
-#   2. PARATEXT_* env vars e.g. `PARATEXT_MODEL=...` (handy in containers)
-#   3. [project.<name>]    per-project overrides below
-#   4. top-level keys      shared across projects
+#   CLI flags  >  PARATEXT_* env vars  >  [project.<name>]  >  top-level keys
 # Keys may be kebab-case (base-url) or snake_case (base_url).
 
-base-url = "http://localhost:8000/v1"
-model    = "Qwen3-VL-30B"
+base-url = "http://localhost:8000/v1"   # any OpenAI-compatible VLM server
+# model  = "Qwen3-VL-30B"               # a model id your server serves (required)
 
-# The bundled generic starter project. `source` is a flat directory of card
-# images; `iter_samples` is non-recursive.
+# The bundled starter project. `source` is a flat directory of card images.
 [project.cards]
-source     = "/data/cards/images"
+source     = "data/cards"
 output     = "output/cards.jsonl"
 review-out = "review/cards"

@@ -25,6 +25,7 @@ import subprocess
 from pathlib import Path
 
 from .config import (
+    CONFIG_TEMPLATE,
     coerce_paths,
     load_defaults,
     local_config_path,
@@ -55,7 +56,6 @@ def _do_extract(args: argparse.Namespace) -> None:
         for flag, val in (
             ("--project", args.project),
             ("--source", args.source),
-            ("--output", args.output),
             ("--model", args.model),
         )
         if val is None
@@ -65,10 +65,13 @@ def _do_extract(args: argparse.Namespace) -> None:
             f"missing required value(s): {', '.join(missing)}\n"
             f"  pass on the CLI, set PARATEXT_<NAME>, or add to paratext.toml"
         )
+    # --output defaults to output/<project>.jsonl when unset.
+    output = args.output or Path("output") / f"{args.project}.jsonl"
+    args.output = output  # so callers (e.g. `run`) see the resolved path
     run_extract(
         get_project(args.project),
         source=Path(args.source),
-        output=Path(args.output),
+        output=Path(output),
         base_url=args.base_url,
         api_key=args.api_key,
         model=args.model,
@@ -162,7 +165,8 @@ def _cmd_config(args: argparse.Namespace) -> int:
 
     path = local_config_path()
     if not path.exists():
-        path.write_text("# paratext config — see `paratext config --show` for resolved values\n")
+        path.write_text(CONFIG_TEMPLATE)
+        print(f"Created {path} from the default template.")
     editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
     subprocess.call([*editor.split(), str(path)])
     return 0

@@ -32,6 +32,26 @@ from pathlib import Path
 
 ENV_PREFIX = "PARATEXT_"
 
+# Seeded into a fresh paratext.toml by `paratext config`. The package can't read
+# the repo's paratext.example.toml once installed, so the template lives here.
+CONFIG_TEMPLATE = """\
+# paratext config — edit for your environment.
+# `paratext config` opens this; `paratext config --show -p <project>` resolves it.
+#
+# Resolution order (highest first):
+#   CLI flags  >  PARATEXT_* env vars  >  [project.<name>]  >  top-level keys
+# Keys may be kebab-case (base-url) or snake_case (base_url).
+
+base-url = "http://localhost:8000/v1"   # any OpenAI-compatible VLM server
+# model  = "Qwen3-VL-30B"               # a model id your server serves (required)
+
+# The bundled starter project. `source` is a flat directory of card images.
+[project.cards]
+source     = "data/cards"
+output     = "output/cards.jsonl"
+review-out = "review/cards"
+"""
+
 # Keys the loader will recognise. Anything else in TOML/env is ignored so a
 # stray field doesn't accidentally crash the CLI.
 RECOGNISED = (
