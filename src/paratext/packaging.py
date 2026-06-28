@@ -1,4 +1,4 @@
-"""Convert an extraction JSONL into the directory layout ai-verify expects.
+"""Convert an extraction JSONL into the review dataset layout (samples.json + images/ + view.json).
 
 Output:
     <out-dir>/
@@ -69,7 +69,7 @@ def package(
     fresh: bool = False,
     image_max_size: int = 1024,
 ) -> tuple[int, dict[str, int]]:
-    """Write samples.json + images/ for ai-verify. Returns (kept, skipped_by_reason)."""
+    """Write samples.json + images/ for `paratext review`. Returns (kept, skipped_by_reason)."""
     proj = get_project(project)
     if fresh and out.exists():
         shutil.rmtree(out)

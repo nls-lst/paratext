@@ -3,7 +3,8 @@
 Subcommands:
     run         Extract then package in one go (the common path).
     extract     Run the VLM over a directory of inputs, write JSONL.
-    package     Convert JSONL into an ai-verify dataset (samples.json + images/).
+    package     Convert JSONL into a review dataset (samples.json + images/).
+    review      Launch the local web UI to review a packaged dataset.
     sample      Build a random N-image subset of a source directory (helper).
     config      Open the config file (``--show`` prints the resolved defaults).
     init        Scaffold a new project package (interactive).
@@ -104,6 +105,14 @@ def _cmd_package(args: argparse.Namespace) -> int:
     if skipped:
         breakdown = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
         print(f"Skipped {sum(skipped.values())} item(s): {breakdown}")
+    return 0
+
+
+# ── Review ────────────────────────────────────────────────────────────────
+def _cmd_review(args: argparse.Namespace) -> int:
+    from .review import serve
+
+    serve(args.data_dir, port=args.port, open_browser=not args.no_open)
     return 0
 
 
@@ -216,12 +225,19 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     _add_extract_args(e)
     e.set_defaults(func=_cmd_extract)
 
-    pk = sub.add_parser("package", help="Convert extraction JSONL to ai-verify dataset")
+    pk = sub.add_parser("package", help="Convert extraction JSONL to a review dataset")
     pk.add_argument("jsonl", type=Path)
     pk.add_argument("-p", "--project", choices=choices, default=None)
     pk.add_argument("--out", type=Path, required=True)
     pk.add_argument("--fresh", action="store_true")
     pk.set_defaults(func=_cmd_package)
+
+    rv = sub.add_parser("review", help="Launch the local web UI to review a dataset")
+    rv.add_argument("data_dir", type=Path, nargs="?", default=Path.cwd(),
+                    help="A packaged dataset dir (or a parent holding several)")
+    rv.add_argument("--port", type=int, default=4000)
+    rv.add_argument("--no-open", action="store_true", help="Don't open a browser")
+    rv.set_defaults(func=_cmd_review)
 
     s = sub.add_parser("sample", help="Symlink a random subset of a nested image tree")
     s.add_argument("--source", type=Path, required=True)

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>paratext review</title>
+    <link rel="stylesheet" href="oat.min.css" />
+    <style>
+      /* Layout-only — let Oat style everything else. */
+      .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      .thumbs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+      .thumbs a { display: inline-block; }
+      .thumbs img { max-width: 440px; max-height: 600px; object-fit: contain; border: 1px solid currentColor; }
+      /* Split layout: image pinned beside the model output (schemas with no
+         ground truth, e.g. index-cards). */
+      .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+      .split-content { min-width: 0; }
+      .split-media { position: sticky; top: 1rem; }
+      .split-media a { display: block; }
+      .split-media a + a { margin-top: .5rem; }
+      .split-media img { width: 100%; max-height: 85vh; object-fit: contain; border: 1px solid currentColor; }
+      @media (max-width: 820px) {
+        .split { grid-template-columns: 1fr; }
+        .split-media { position: static; }
+      }
+      .field-row { display: grid; grid-template-columns: 10rem 1fr; gap: .5rem; padding: .25rem 0; }
+      .field-row dt { font-weight: 600; }
+      .field-row dd { margin: 0; word-break: break-word; }
+      .controls { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; margin-bottom: 2rem; }
+      button.selected { outline: 3px solid #22c55e; outline-offset: 2px; }
+      button.selected.no { outline-color: #ef4444; }
+      button.selected::before { content: "✓ "; }
+      .kbd {
+        display: inline-block;
+        font-family: monospace;
+        font-size: .75em;
+        line-height: 1;
+        padding: .1em .35em;
+        border: 1px solid currentColor;
+        border-radius: 3px;
+        opacity: .65;
+        vertical-align: .1em;
+      }
+      /* Verdict / status colours (used in panes and the stats table). */
+      .ok { color: #22c55e; }
+      .warn { color: #f59e0b; }
+      .bad { color: #ef4444; }
+      .muted { color: var(--muted-foreground); }
+      .score-col { min-width: 9rem; }
+      .row-link { cursor: pointer; }
+      .note-cell { white-space: pre-wrap; font-size: .875rem; color: var(--muted-foreground); }
+      .readonly-banner {
+        display: block;
+        padding: .625rem .875rem;
+        margin-bottom: 1rem;
+        border: 1px solid var(--muted);
+        border-radius: .25rem;
+        background: var(--muted);
+        color: var(--muted-foreground);
+        font-size: .875rem;
+      }
+      .readonly-banner a { margin-left: .5rem; }
+    </style>
+  </head>
+  <body>
+    <nav data-topnav>
+      <a href="#/select"><strong>paratext</strong></a>
+      <a href="#/review" class="button outline small">Review</a>
+      <a href="#/stats" class="button outline small">Stats</a>
+      <span id="progress" style="margin-left:auto; font-size:.875rem;"></span>
+    </nav>
+    <main>
+      <div class="container">
+        <section id="view"></section>
+      </div>
+    </main>
+    <script src="oat.min.js"></script>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

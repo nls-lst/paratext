@@ -27,7 +27,7 @@ def load_prompt(module_file: str) -> str:
 
     Surrounding whitespace is stripped so trivial editor reformatting (a
     trailing newline, say) doesn't churn the prompt hash that drives the
-    round-to-round diff in ai-verify.
+    round-to-round diff in review.
     """
     return (Path(module_file).parent / "prompt.md").read_text(encoding="utf-8").strip()
 
@@ -79,7 +79,7 @@ class Project:
     image_max_size: int = 1024
     image_quality: int = 85
     # ── Packaging hooks (all optional; the framework supplies generic defaults).
-    # `package` calls these to turn an extraction JSONL into the ai-verify
+    # `package` calls these to turn an extraction JSONL into the review
     # dataset without knowing anything project-specific. See packaging.py.
     #   curate(record)               -> Curation (keep/drop/quarantine)
     #   materialise_images(rec, out, max_size) -> [rel_path]; saves files under out

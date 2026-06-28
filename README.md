@@ -37,12 +37,13 @@ paratext init my-cards
 #    reinstall) and point the config at your data.
 paratext config                       # opens paratext.toml in $EDITOR
 
-# 3. Run extraction + packaging in one go.
+# 3. Run extraction + packaging in one go, then review in the browser.
 paratext run -p my-cards --limit 50
+paratext review my-cards-review
 ```
 
 `run` writes the extraction JSONL and a `<project>-review/` dataset
-(`samples.json` + `images/` + `view.json`) for the review app.
+(`samples.json` + `images/` + `view.json`); `review` opens a local web UI over it.
 
 ## Commands
 
@@ -51,9 +52,18 @@ paratext run -p my-cards --limit 50
 | `paratext run -p <project>` | Extract **and** package in one step (the common path). |
 | `paratext extract -p <project>` | Run the VLM, write JSONL only. |
 | `paratext package <jsonl> -p <project> --out <dir>` | Package an existing JSONL for review. |
+| `paratext review <dataset-dir>` | Launch the inbuilt web UI to review a packaged dataset. |
 | `paratext sample --source <tree> --out <dir> -n 500` | Symlink a random image subset out of a nested tree. |
 | `paratext config [--show]` | Open `paratext.toml`; `--show` prints the resolved defaults. |
 | `paratext init [name]` | Scaffold a new project package. |
+
+## Review
+
+`paratext review <dir>` serves a dependency-free local web app (stdlib only) for
+human review: it reads `samples.json` + `view.json` + `images/`, renders the
+fields and verdict hotkeys from the view contract, and saves annotations to
+`<dir>/annotations.db`. Point it at one dataset directory, or at a parent
+holding several (each in its own subdir, with optional `-r<N>` round suffixes).
 
 Once a project is configured, `run`/`extract` need only `-p <project>` —
 everything else resolves from config.

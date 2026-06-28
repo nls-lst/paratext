@@ -13,8 +13,8 @@ build/
 # Environment
 .env
 
-# Outputs
-runs/
-output/
-review/
-logs/
+# Outputs (anchored to repo root so they don't shadow src/paratext/review/)
+/runs/
+/output/
+/review/
+/logs/
