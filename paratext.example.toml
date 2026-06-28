@@ -9,7 +9,7 @@
 #   4. top-level keys      shared across projects
 # Keys may be kebab-case (base-url) or snake_case (base_url).
 
-base-url = "http://localhost:1235/v1"
+base-url = "http://localhost:8000/v1"
 model    = "Qwen3-VL-30B"
 
 # The bundled generic starter project. `source` is a flat directory of card

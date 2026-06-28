@@ -16,7 +16,7 @@ configure the CLI inside a container. TOML keys may use either kebab-case
 
 Example ``paratext.toml``::
 
-    base-url = "http://localhost:1235/v1"
+    base-url = "http://localhost:8000/v1"
     model    = "user.Qwen3.6-35B-A3B-GGUF-Q8_0"
 
     [project.index-cards]

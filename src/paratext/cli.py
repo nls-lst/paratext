@@ -41,8 +41,8 @@ logging.basicConfig(
 
 # Hardcoded fallbacks when neither TOML, env, nor CLI provides a value.
 HARDCODED_DEFAULTS: dict = {
-    "base_url": "http://localhost:1235/v1",
-    "api_key": "lemonade",
+    "base_url": "http://localhost:8000/v1",
+    "api_key": "EMPTY",  # most local OpenAI-compatible servers ignore the key
     "limit": None,
     "no_structured": False,
     "skip_preflight": False,

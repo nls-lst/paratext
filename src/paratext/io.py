@@ -43,7 +43,7 @@ def preflight_check(base_url: str) -> list[str]:
     models = data.get("data") or []
     if not models:
         raise SystemExit(
-            f"No model loaded at {base_url}. Load one (e.g. `lms load <id> --yes`)."
+            f"No model loaded at {base_url}. Load a model on your OpenAI-compatible server first."
         )
     return [m.get("id", "?") for m in models]
 

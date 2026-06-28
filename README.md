@@ -23,7 +23,7 @@ For development from a checkout: `uv sync --extra dev` and run with
 `uv run paratext …`.
 
 The VLM endpoint is any OpenAI-compatible server (e.g. Lemonade, vLLM,
-llama.cpp). The base URL defaults to `http://localhost:1235/v1`; override it in
+llama.cpp). The base URL defaults to `http://localhost:8000/v1`; override it in
 `paratext.toml` or via `PARATEXT_BASE_URL`. No API key is required for local
 servers.
 
@@ -81,7 +81,7 @@ highest priority first:
 Keys may be kebab- or snake-case:
 
 ```toml
-base-url = "http://localhost:1235/v1"
+base-url = "http://localhost:8000/v1"
 model    = "Qwen3-VL-30B"
 
 [project.my-cards]
