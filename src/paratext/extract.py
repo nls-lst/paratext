@@ -1,0 +1,148 @@
+"""Run a Project end-to-end: iterate samples, call the VLM, write JSONL."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import time
+from pathlib import Path
+
+from openai import OpenAI
+from pydantic import BaseModel
+from tqdm import tqdm
+
+from .io import (
+    append_error,
+    append_jsonl,
+    preflight_check,
+    read_processed_ids,
+    write_provenance_header,
+)
+from .projects import Project
+from .runner import call_plain, call_structured
+
+logger = logging.getLogger(__name__)
+
+
+def _prompt_hash(prompt: str) -> str:
+    return hashlib.sha256(prompt.encode()).hexdigest()[:12]
+
+
+def _parse_loose_json(text: str) -> dict | None:
+    """Best-effort JSON parse for plain (non-structured) completions."""
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    if "```json" in text:
+        a = text.find("```json") + 7
+        b = text.find("```", a)
+        if b > a:
+            try:
+                return json.loads(text[a:b].strip())
+            except Exception:
+                pass
+    a, b = text.find("{"), text.rfind("}") + 1
+    if a >= 0 and b > a:
+        try:
+            return json.loads(text[a:b])
+        except Exception:
+            pass
+    return None
+
+
+def run(
+    project: Project,
+    source: Path,
+    output: Path,
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    limit: int | None = None,
+    use_structured: bool = True,
+    skip_preflight: bool = False,
+) -> None:
+    """Execute the extraction pipeline and write JSONL to `output`."""
+    if not skip_preflight:
+        preflight_check(base_url)
+
+    client = OpenAI(base_url=base_url, api_key=api_key)
+    extra_body: dict | None = None
+    if project.disable_thinking:
+        extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
+
+    write_provenance_header(
+        output,
+        {
+            "project": project.name,
+            "schema_version": project.schema_version,
+            "prompt_hash": _prompt_hash(project.prompt),
+            "prompt": project.prompt,
+            "model": model,
+            "base_url": base_url,
+        },
+    )
+    seen = read_processed_ids(output, id_field="id")
+    if seen:
+        logger.info("Resuming run — skipping %d already-processed sample(s)", len(seen))
+
+    for sample in tqdm(project.iter_samples(source, limit), unit="sample"):
+        if sample.id in seen:
+            continue
+        # A sample can be pre-classified by iter_samples (e.g. a deterministic
+        # verso filter) to skip the VLM call entirely.
+        pre = (sample.metadata or {}).get("preclassified")
+        if pre is not None:
+            append_jsonl(
+                output,
+                {
+                    "id": sample.id,
+                    "extraction": pre,
+                    "metadata": sample.metadata,
+                    "elapsed_s": 0.0,
+                },
+            )
+            continue
+        t0 = time.monotonic()
+        try:
+            if use_structured:
+                parsed: BaseModel = call_structured(
+                    client,
+                    model=model,
+                    prompt=project.prompt,
+                    images=sample.images,
+                    schema=project.schema,
+                    extra_body=extra_body,
+                    image_max_size=project.image_max_size,
+                    image_quality=project.image_quality,
+                )
+                extraction = parsed.model_dump()
+            else:
+                raw = call_plain(
+                    client,
+                    model=model,
+                    prompt=project.prompt,
+                    images=sample.images,
+                    extra_body=extra_body,
+                    image_max_size=project.image_max_size,
+                    image_quality=project.image_quality,
+                )
+                parsed_dict = _parse_loose_json(raw)
+                if parsed_dict is None:
+                    raise ValueError("Could not parse JSON from VLM response")
+                extraction = parsed_dict
+        except Exception as e:
+            append_error(output, sample.id, str(e))
+            logger.warning("[%s] failed: %s", sample.id, e)
+            continue
+        elapsed = time.monotonic() - t0
+        record = {
+            "id": sample.id,
+            "extraction": extraction,
+            "metadata": sample.metadata,
+            "elapsed_s": round(elapsed, 3),
+        }
+        append_jsonl(output, record)
