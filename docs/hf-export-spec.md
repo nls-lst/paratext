@@ -146,10 +146,11 @@ the reviewer's free-text comment. `_corrected_fields` (which fields a human
 changed) is reserved for the future structured-corrections upgrade and is absent
 in v1.
 
-**Multi-image records** (monographs: several pages per document; card runs that
-continue across cards): `file_name` = the primary/first image; any extras go in
-an `images: ["images/..","images/.."]` array column. Single-image projects
-(index-cards, the immediate target) use just `file_name`.
+**Multi-image records** — v1 targets single-image projects (index-cards) and
+uses just `file_name`. Multi-image projects (monographs: several pages per
+document) are **rejected in v1** with a clear message; in v2 they use
+`file_name` = primary image + an `images: ["images/..", ...]` array column (the
+format reserves it). See resolved decision 2.
 
 **Annotator privacy:** per `export.annotators` — `omit` (default, no annotator
 column), `pseudonym` (stable hash), or `name` (verbatim). Never publish names by
@@ -178,10 +179,11 @@ Body sections, all populated from data we already track:
 1. **Description** — one paragraph, from the project.
 2. **Schema** — field table (name, type, description) rendered from the Pydantic
    model (reuse the `view`/schema introspection that already builds `view.json`).
-3. **How it was labelled** — model id, prompt hash (+ the prompt text or a link),
-   the review process (staff verdict + free-text note; no per-field corrections
-   in v1), the inclusion policy (gold = `good_enough`), and headline **accuracy**
-   and verdict counts (reuse the review server's `_api_stats` computation).
+3. **How it was labelled** — model id, the full prompt inline in a collapsed
+   `<details>` block + its `prompt_hash`, the review process (staff verdict +
+   free-text note; no per-field corrections in v1), the inclusion policy (gold =
+   `good_enough`), and headline **accuracy** and verdict counts (reuse the review
+   server's `_api_stats` computation).
 4. **Provenance** — paratext version, git commit, schema version, round number,
    extraction date range.
 5. **Environmental provenance** *(if recorded — see below)* — grid zone, average
@@ -263,13 +265,23 @@ The exported artifact *is* a benchmark (image + gold + provenance). A later
 the same `_api_stats` scoring against the gold labels. Note only; out of scope
 here.
 
-## Open decisions
+## Resolved decisions
 
-1. **Prompt in the card**: inline the full prompt text, or link to it by hash?
-   (Leaning: inline, collapsed — it's the single most useful provenance item.)
-2. **Multi-image UX** on the Hub for monographs — accept the `images[]` array
-   column, or hold monographs back to a v2? (Leaning: index-cards single-image
-   for v1; monographs v2.)
-3. **Versioning**: one repo with a `_round`/date column and Hub revisions, or a
-   repo-per-round? (Leaning: one repo, rounds as revisions + a column.)
+1. **Prompt in the card — inline, collapsed.** The prompt *is* the labelling
+   methodology and the single most useful provenance item, so it travels with the
+   data: the full text goes in a collapsed `<details>` block in the card, with the
+   12-char `prompt_hash` as a short line for cross-referencing rounds. A
+   hash/link-only approach is useless to anyone who can't see the source repo.
+2. **Multi-image — index-cards (single-image) in v1; monographs in v2.** HF's
+   imagefolder is one-image-per-row, which fits index-cards exactly (one card =
+   one image = one label) and is the immediate target. Monographs (many page
+   images per document) need the `images[]` array column, which the Hub viewer
+   renders less cleanly; the format reserves that column so v2 is purely additive.
+   Multi-image projects are rejected by `export` in v1 with a clear message.
+3. **Versioning — one repo, rounds as Hub revisions + a `_round` column.** Each
+   export is a new git revision of the same repo; the `_round`/date columns keep
+   rows distinguishable and let a consumer pin an exact round, while "latest"
+   stays the default. This matches how HF datasets evolve and keeps one citable
+   artifact. Repo-per-round only if a round must be *simultaneously public and
+   frozen* (a benchmark) — better served by tagging a revision anyway.
 ```
