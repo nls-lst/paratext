@@ -227,7 +227,7 @@ declaring the region in config:
 
 ```toml
 [carbon]
-provider = "uk"            # uk (Carbon Intensity) | electricitymaps | watttime
+provider = "uk"            # uk (Carbon Intensity) | energy-charts | electricitymaps
 region   = "south-scotland"  # or a UK outcode like "EH"; sub-national for uk
 ```
 
@@ -244,7 +244,7 @@ run time, because:
 - It needs an external call + public IP; isolated networks break it.
 
 So: IP-geo is a first-run *suggestion* to make config easy; the committed
-`region` value is the source of truth. (Electricity Maps/WattTime zones are
+`region` value is the source of truth. (Electricity Maps/energy-charts zones are
 coarser than the UK regional API; for sub-national UK, prefer `provider = "uk"`.)
 
 ## Implementation notes

@@ -57,9 +57,9 @@ review-out = "review/cards"
 # ~85% wind vs ~35% GB-wide). `paratext carbon` shows the current reading.
 # `paratext config --suggest-region` proposes this block from your IP.
 # [carbon]
-# provider = "uk"   # uk / energy-charts (no token) | electricitymaps / watttime (need creds)
+# provider = "uk"              # uk / energy-charts (no token) | electricitymaps (needs token)
 # region   = "south-scotland"  # DNO region slug/id, or a UK outcode like "EH"
-# min-renewable = 80           # wait until renewables ≥ 80% (watttime: use max-percent)
+# min-renewable = 80           # wait until renewables ≥ 80% (or set max-carbon)
 # mode = "poll"                # poll | window (schedule to the greenest forecast)
 # max-wait = "12h"             # give up waiting and run anyway after this
 """

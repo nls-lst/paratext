@@ -51,8 +51,7 @@ collections. This orients AI coding agents; `README.md` is the human guide.
   provenance (`energy`) so the export card can report it. Providers: `uk` (Carbon
   Intensity API — no token, regional + 48h forecast), `energy-charts` (Fraunhofer,
   no token, EU country-level, forecast), `electricitymaps` (token, global, latest
-  only), `watttime` (US/global, creds→token, gates on MOER percentile via
-  `max-percent`). Grid region is declared in `[carbon]`, never auto-detected — `paratext
+  only). Grid region is declared in `[carbon]`, never auto-detected — `paratext
   config --suggest-region` (also offered once on fresh-config onboarding)
   IP-geolocates only to *propose* one. Stdlib `urllib` only.
 - `paratext export` (`hf_export.py`) publishes a reviewed round as a HF dataset

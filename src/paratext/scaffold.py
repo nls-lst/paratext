@@ -139,15 +139,85 @@ def init(name: str | None = None) -> int:
     print(f"\nCreated ./{mod}/ (schema.py + prompt.md + __init__.py).")
 
     _offer_config(ep_name)
+    registered = _offer_register(mod, ep_name)
 
     print("\nNext steps:")
-    print("  1. Register the project — add to your pyproject.toml:\n")
-    print('       [project.entry-points."paratext.projects"]')
-    print(f'       {ep_name} = "{mod}:PROJECT"\n')
-    print("  2. Reinstall so it's discovered:  uv sync   (or: pip install -e .)")
-    print(f"  3. Edit {mod}/prompt.md and {mod}/schema.py (keep them in step).")
-    print(f"  4. Run it:  paratext run -p {ep_name}")
+    n = 1
+    if not registered:
+        print(f"  {n}. Register the project — add to your pyproject.toml:")
+        print('       [project.entry-points."paratext.projects"]')
+        print(f'       {ep_name} = "{mod}:PROJECT"')
+        print("     then reinstall:  uv sync   (or: pip install -e .)")
+        n += 1
+    print(f"  {n}. Edit {mod}/prompt.md and {mod}/schema.py (keep them in step).")
+    print(f"  {n + 1}. Run it:  paratext run -p {ep_name}")
     return 0
+
+
+def _insert_entry_point(pyproject: Path, text: str, ep_name: str, mod: str) -> bool:
+    """Add `ep_name = "<mod>:PROJECT"` under the paratext.projects entry-point
+    table, creating the table if absent. Returns False if it can't do so safely."""
+    line = f'{ep_name} = "{mod}:PROJECT"'
+    header_re = re.compile(
+        r'^\[project\.entry-points\.["\']paratext\.projects["\']\]\s*$', re.M
+    )
+    m = header_re.search(text)
+    if m:
+        pyproject.write_text(text[: m.end()] + "\n" + line + text[m.end():])
+        return True
+    if "paratext.projects" in text:
+        return False  # a table exists but in a form we won't risk editing
+    sep = "" if text.endswith("\n") else "\n"
+    pyproject.write_text(text + f'{sep}\n[project.entry-points."paratext.projects"]\n{line}\n')
+    return True
+
+
+def _offer_register(mod: str, ep_name: str) -> bool:
+    """If a pyproject.toml is present, offer to register the entry point and run
+    `uv sync`. Returns True once the project is registered."""
+    import tomllib
+
+    pyproject = Path.cwd() / "pyproject.toml"
+    if not pyproject.exists():
+        return False  # no package to install into; fall back to printed steps
+    text = pyproject.read_text()
+    try:
+        parsed = tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return False
+    eps = (parsed.get("project", {}).get("entry-points", {}) or {}).get("paratext.projects", {})
+
+    if ep_name in (eps or {}):
+        print(f"  '{ep_name}' is already registered in pyproject.toml.")
+    else:
+        if not _ask(f"Register '{ep_name}' in pyproject.toml now?", default=True):
+            return False
+        if not _insert_entry_point(pyproject, text, ep_name, mod):
+            print("  Couldn't safely edit pyproject.toml — add the entry point by hand.")
+            return False
+        print(f"  Registered '{ep_name}' in {pyproject.name}.")
+
+    if _ask("Reinstall now so paratext can discover it (uv sync)?", default=True):
+        import shutil
+        import subprocess
+
+        if shutil.which("uv"):
+            subprocess.call(["uv", "sync"])
+            # Confirm it's actually importable/discovered (catches src-layout
+            # packages where a module in the repo root isn't installed).
+            check = subprocess.run(
+                ["uv", "run", "python", "-c",
+                 f"from paratext.projects import project_names as p; "
+                 f"import sys; sys.exit(0 if '{ep_name}' in p() else 1)"],
+            )
+            if check.returncode == 0:
+                print(f"  Verified: '{ep_name}' is discovered by paratext.")
+            else:
+                print(f"  Note: '{ep_name}' isn't discovered yet — make sure {mod}/ is "
+                      "part of your installed package (e.g. under the package root).")
+        else:
+            print("  uv not found — run `pip install -e .` to reinstall.")
+    return True
 
 
 def _offer_config(ep_name: str) -> None:

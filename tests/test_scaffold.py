@@ -82,3 +82,33 @@ def test_offer_config_skips_existing_project(tmp_path, monkeypatch):
 
     toml = (tmp_path / "paratext.toml").read_text()
     assert toml.count("[project.my-cards]") == 1 and 'source = "old"' in toml
+
+
+def test_insert_entry_point_appends_new_table(tmp_path):
+    import tomllib
+
+    from paratext import scaffold
+
+    pp = tmp_path / "pyproject.toml"
+    text = '[project]\nname = "demo"\n'
+    pp.write_text(text)
+    assert scaffold._insert_entry_point(pp, text, "my-cards", "my_cards") is True
+    parsed = tomllib.loads(pp.read_text())
+    assert parsed["project"]["entry-points"]["paratext.projects"]["my-cards"] == "my_cards:PROJECT"
+
+
+def test_insert_entry_point_into_existing_table(tmp_path):
+    import tomllib
+
+    from paratext import scaffold
+
+    pp = tmp_path / "pyproject.toml"
+    text = (
+        '[project]\nname = "demo"\n\n'
+        '[project.entry-points."paratext.projects"]\n'
+        'existing = "existing:PROJECT"\n'
+    )
+    pp.write_text(text)
+    assert scaffold._insert_entry_point(pp, text, "my-cards", "my_cards") is True
+    eps = tomllib.loads(pp.read_text())["project"]["entry-points"]["paratext.projects"]
+    assert eps == {"existing": "existing:PROJECT", "my-cards": "my_cards:PROJECT"}

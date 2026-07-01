@@ -28,21 +28,19 @@ requires one (see Configure).
 ## Quickstart
 
 ```bash
-# 1. Scaffold a project. Asks input type, fields, prompt — and offers to write
-#    the paratext.toml config entry (source dir + endpoint) for you.
+# 1. Scaffold a project. Asks input type, fields, prompt, then offers to write
+#    the paratext.toml config (source + endpoint), register the entry point in
+#    your pyproject.toml, and run `uv sync` — so it's ready to run.
 paratext new my-cards
 
-# 2. Register it: add the printed entry-point line to your pyproject.toml, then
-#    reinstall so it's discovered.
-uv sync                               # or: pip install -e .
-
-# 3. Run extraction + packaging in one go, then review in the browser.
+# 2. Run extraction + packaging in one go, then review in the browser.
 paratext run -p my-cards --limit 50
 paratext review                       # serves ./review — all projects
 ```
 
-`paratext config` opens `paratext.toml` in your editor if you need to tweak it
-later (endpoint, model, per-project source).
+If you skip the guided steps (or aren't in a package), `new` prints the manual
+entry-point line to add and the `uv sync` to run. `paratext config` opens
+`paratext.toml` later for tweaks (endpoint, model, per-project source).
 
 `run` writes the extraction JSONL and a `review/<project>-r<N>/` dataset
 (`samples.json` + `images/` + `view.json`) — the `-r<N>` is the review **round**
@@ -81,8 +79,7 @@ rarely pass them — but every default can be overridden on the CLI.
 - **`extract -p <project>`** — same as `run` minus the review flags
   (writes JSONL only); includes `--green`.
 - **`carbon`** — `--window` (show the greenest forecast window instead of the
-  current reading), `--renewables-above PCT`, `--max-carbon GCO2`,
-  `--max-percent PCT` (WattTime).
+  current reading), `--renewables-above PCT`, `--max-carbon GCO2`.
 - **`package <jsonl>`** — `-p/--project` (inferred from the JSONL's provenance
   if omitted), `--out DIR` (default: the `review/<project>-r<N>` round for this
   prompt), `--round N`, `--fresh` (rebuild, discarding annotations).
@@ -207,10 +204,6 @@ max-wait = "12h"             # give up waiting and run anyway after this
   (country-level).
 - **Electricity Maps** (`provider = "electricitymaps"`, `zone`, `token`) — global
   coverage; latest reading only on the free token.
-- **WattTime** (`provider = "watttime"`, `region`, `username`/`password`) — US +
-  global; gates on the marginal-emissions percentile (`max-percent`, "run in the
-  cleanest third") rather than renewables. A free watttime.org account only
-  covers `CAISO_NORTH` (the suggested default) — other regions need a paid plan.
 - The grid region is *declared, not detected* — a box can be reached both locally
   and remotely, so paratext can't infer where compute runs.
   `paratext config --suggest-region` IP-geolocates your box and *proposes* a

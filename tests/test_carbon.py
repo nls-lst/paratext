@@ -50,9 +50,7 @@ def test_thresholds_and_default():
     assert r.is_clean(min_renewable=80, max_carbon=None) is False
     assert r.is_clean(min_renewable=50, max_carbon=100) is False  # AND: carbon too high
     # default kicks in when nothing configured
-    assert CarbonConfig()._effective() == (carbon.DEFAULT_MIN_RENEWABLE, None, None)
-    # WattTime defaults to a percentile gate instead
-    assert CarbonConfig(provider="watttime")._effective() == (None, None, 33.0)
+    assert CarbonConfig()._effective() == (carbon.DEFAULT_MIN_RENEWABLE, None)
 
 
 def test_duration_parse():
@@ -120,25 +118,6 @@ def test_energy_charts_current(monkeypatch):
     r = carbon.ec_current("de")
     assert r.provider == "energy-charts" and r.zone == "DE"
     assert r.carbon_gco2 is None and round(r.renewable_fraction * 100) == 22  # nearest to now
-
-
-def test_watttime_current_and_percentile_gate(monkeypatch):
-    calls = []
-
-    def fake_get(url, headers=None, timeout=10.0):
-        calls.append(url)
-        if url.endswith("/login"):
-            return {"token": "tok123"}
-        return {"data": [{"point_time": "2026-07-01T20:00Z", "value": 18}], "meta": {}}
-
-    monkeypatch.setattr(carbon, "_get", fake_get)
-    r = carbon.wt_current("CAISO_NORTH", "user", "pw")
-    assert r.provider == "watttime" and r.percent == 18
-    assert r.carbon_gco2 is None and r.renewable_fraction is None
-    assert any("/login" in u for u in calls) and any("signal-index" in u for u in calls)
-    # default WattTime gate is "cleanest third" → 18th percentile passes
-    assert CarbonConfig(provider="watttime").is_clean(r) is True
-    assert CarbonConfig(provider="watttime", max_percent=10).is_clean(r) is False
 
 
 def test_cleanest_window_by_renewable_when_no_carbon():

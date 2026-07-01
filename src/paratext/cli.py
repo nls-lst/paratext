@@ -134,7 +134,6 @@ def _do_extract(args: argparse.Namespace) -> None:
         cfg = carbon.load_config(
             min_renewable=getattr(args, "renewables_above", None),
             max_carbon=getattr(args, "max_carbon", None),
-            max_percent=getattr(args, "max_percent", None),
         )
         reading = carbon.wait_for_clean(cfg)
         energy = reading.to_provenance(scheduled_window=cfg.mode == "window")
@@ -262,9 +261,7 @@ def _cmd_carbon(args: argparse.Namespace) -> int:
     from . import carbon
 
     cfg = carbon.load_config(
-        min_renewable=args.renewables_above,
-        max_carbon=args.max_carbon,
-        max_percent=args.max_percent,
+        min_renewable=args.renewables_above, max_carbon=args.max_carbon
     )
     if args.window:
         forecast = carbon.forecast_for(cfg, cfg.window_hours)
@@ -435,8 +432,6 @@ def _add_extract_args(p: argparse.ArgumentParser) -> None:
                    help="With --green: wait until renewables ≥ PCT%% (overrides config)")
     p.add_argument("--max-carbon", type=float, default=None, metavar="GCO2",
                    help="With --green: wait until intensity ≤ GCO2 gCO2/kWh (overrides config)")
-    p.add_argument("--max-percent", type=float, default=None, metavar="PCT",
-                   help="With --green (WattTime): wait until emissions ≤ PCT percentile")
 
 
 def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentParser]]:
@@ -502,8 +497,6 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
                     help="Renewables threshold to test against (overrides config)")
     cb.add_argument("--max-carbon", type=float, default=None, metavar="GCO2",
                     help="Carbon-intensity threshold to test against (overrides config)")
-    cb.add_argument("--max-percent", type=float, default=None, metavar="PCT",
-                    help="WattTime emissions-percentile threshold (overrides config)")
     cb.set_defaults(func=_cmd_carbon)
 
     s = sub.add_parser("sample", help="Symlink a random subset of a nested image tree")
