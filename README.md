@@ -209,7 +209,8 @@ max-wait = "12h"             # give up waiting and run anyway after this
   coverage; latest reading only on the free token.
 - **WattTime** (`provider = "watttime"`, `region`, `username`/`password`) — US +
   global; gates on the marginal-emissions percentile (`max-percent`, "run in the
-  cleanest third") rather than renewables. Needs a free watttime.org account.
+  cleanest third") rather than renewables. A free watttime.org account only
+  covers `CAISO_NORTH` (the suggested default) — other regions need a paid plan.
 - The grid region is *declared, not detected* — a box can be reached both locally
   and remotely, so paratext can't infer where compute runs.
   `paratext config --suggest-region` IP-geolocates your box and *proposes* a
