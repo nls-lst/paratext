@@ -94,7 +94,8 @@ rarely pass them — but every default can be overridden on the CLI.
 - **`config`** — `--show` (print resolved defaults instead of editing),
   `-p <project>` (which project's defaults to resolve), `--suggest-region`
   (IP-geolocate and propose a `[carbon]` region).
-- **`new [name]`** (alias `init`) — interactive; no flags.
+- **`new [name]`** (alias `init`) — interactive; `--no-install` (scaffold only,
+  don't edit pyproject.toml or run `uv sync`).
 
 ## Review
 
