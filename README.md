@@ -196,10 +196,12 @@ max-wait = "12h"             # give up waiting and run anyway after this
 
 - **UK** (default) needs no token and is uniquely granular — per-DNO-region
   readings *and* a 48h forecast, free and unauthenticated. No other country has a
-  direct equivalent at that resolution. **Electricity Maps**
-  (`provider = "electricitymaps"`, `zone`, `token`) covers the globe (latest
-  reading only on the free token). For Europe without a token, the Fraunhofer
-  **energy-charts** API is a good option (a candidate future provider).
+  direct equivalent at that resolution.
+- **energy-charts** (`provider = "energy-charts"`, `zone = "de"`) — Fraunhofer
+  ISE, **no token**, renewable-share readings *and* forecast for 20+ EU countries
+  (country-level).
+- **Electricity Maps** (`provider = "electricitymaps"`, `zone`, `token`) — global
+  coverage; latest reading only on the free token.
 - The grid region is *declared, not detected* — a box can be reached both locally
   and remotely, so paratext can't infer where compute runs.
   `paratext config --suggest-region` IP-geolocates your box and *proposes* a

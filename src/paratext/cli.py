@@ -264,15 +264,16 @@ def _cmd_carbon(args: argparse.Namespace) -> int:
         min_renewable=args.renewables_above, max_carbon=args.max_carbon
     )
     if args.window:
-        if cfg.provider != "uk":
-            raise SystemExit("--window (forecast) is uk-only")
-        forecast = carbon.uk_forecast(cfg.region, cfg.window_hours)
-        block = max(1, round(cfg.window_run_hours * 2))
-        i, avg = carbon.cleanest_window(forecast, block)
-        now = carbon.current_reading(cfg)
-        print(f"Now:  {now.summary()}")
+        forecast = carbon.forecast_for(cfg, cfg.window_hours)
+        if not forecast:
+            raise SystemExit(
+                f"provider {cfg.provider!r} has no free forecast (try uk / energy-charts)"
+            )
+        block = max(1, round(cfg.window_run_hours * 60 / carbon._period_minutes(cfg)))
+        i, _ = carbon.cleanest_window(forecast, block)
+        print(f"Now:  {carbon.current_reading(cfg).summary()}")
         print(f"Greenest {cfg.window_run_hours:g}h window in next {cfg.window_hours}h: "
-              f"{forecast[i].summary()} (avg {avg:.0f} gCO2/kWh) starting {forecast[i].ts}")
+              f"{forecast[i].summary()} starting {forecast[i].ts}")
         return 0
     r = carbon.current_reading(cfg)
     mr, mc = cfg.effective_thresholds()
@@ -326,27 +327,7 @@ def _cmd_config(args: argparse.Namespace) -> int:
     """Open paratext.toml in $EDITOR, print resolved defaults (--show), or
     suggest a carbon region from IP geolocation (--suggest-region)."""
     if args.suggest_region:
-        from . import carbon
-
-        info = carbon.suggest_region()
-        block = carbon.suggestion_toml(info)
-        loc = ", ".join(x for x in (info.get("city"), info.get("country")) if x)
-        print(f"Detected {loc} via IP (may reflect your ISP/host, not your site — confirm it).")
-        if info.get("region_name"):
-            print(f"UK grid region: {info['region_name']}")
-        if info.get("note"):
-            print(info["note"])
-        print(f"\nSuggested config:\n\n{block}")
-
-        path = local_config_path()
-        if path.exists() and re.search(r"^\[carbon\]", path.read_text(), re.M):
-            print(f"{path} already has a [carbon] section — not modifying it; "
-                  "paste the above to replace.")
-        else:
-            prefix = "" if path.exists() else "# paratext config\n"
-            with path.open("a") as f:
-                f.write(prefix + "\n" + block)
-            print(f"Appended the [carbon] block to {path}.")
+        _suggest_carbon_region()
         return 0
 
     if args.show:
@@ -360,12 +341,48 @@ def _cmd_config(args: argparse.Namespace) -> int:
         return 0
 
     path = local_config_path()
-    if not path.exists():
+    fresh = not path.exists()
+    if fresh:
         path.write_text(CONFIG_TEMPLATE)
         print(f"Created {path} from the default template.")
+        # Onboarding: offer (never force) carbon-aware scheduling on a new config.
+        import sys
+
+        if sys.stdin.isatty():
+            ans = input("Detect your electricity grid region for greener scheduling? [y/N] ")
+            if ans.strip().lower() in ("y", "yes"):
+                try:
+                    _suggest_carbon_region()
+                except SystemExit as e:
+                    print(e)
     editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
     subprocess.call([*editor.split(), str(path)])
     return 0
+
+
+def _suggest_carbon_region() -> None:
+    """IP-geolocate and append a suggested `[carbon]` block (confirm, don't detect)."""
+    from . import carbon
+
+    info = carbon.suggest_region()
+    block = carbon.suggestion_toml(info)
+    loc = ", ".join(x for x in (info.get("city"), info.get("country")) if x)
+    print(f"Detected {loc} via IP (may reflect your ISP/host, not your site — confirm it).")
+    if info.get("region_name"):
+        print(f"UK grid region: {info['region_name']}")
+    if info.get("note"):
+        print(info["note"])
+    print(f"\nSuggested config:\n\n{block}")
+
+    path = local_config_path()
+    if path.exists() and re.search(r"^\[carbon\]", path.read_text(), re.M):
+        print(f"{path} already has a [carbon] section — not modifying it; "
+              "paste the above to replace.")
+    else:
+        prefix = "" if path.exists() else "# paratext config\n"
+        with path.open("a") as f:
+            f.write(prefix + "\n" + block)
+        print(f"Appended the [carbon] block to {path}.")
 
 
 # ── New (scaffold a project) ────────────────────────────────────────────────

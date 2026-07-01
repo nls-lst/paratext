@@ -34,6 +34,7 @@ DEFAULT_MIN_RENEWABLE = 70.0
 
 UK_BASE = "https://api.carbonintensity.org.uk"
 EM_BASE = "https://api.electricitymaps.com/v3"
+EC_BASE = "https://api.energy-charts.info"
 
 # The 14 GB DNO regions, so a friendly slug works in config instead of an id.
 UK_REGION_SLUGS = {
@@ -197,18 +198,67 @@ def em_current(zone: str, token: str) -> Reading:
     )
 
 
+# ── Energy-Charts provider (Fraunhofer ISE — no token, EU countries) ──────────
+def _ec_reading(series: dict, idx: int, country: str) -> Reading:
+    share = series["share"][idx]
+    ts = datetime.fromtimestamp(series["unix_seconds"][idx], timezone.utc).strftime(
+        "%Y-%m-%dT%H:%MZ"
+    )
+    return Reading(
+        "energy-charts",
+        country.upper(),
+        None,  # the signal endpoint reports renewable share, not gCO2/kWh
+        share / 100 if share is not None else None,
+        None,
+        ts,
+    )
+
+
+def ec_current(country: str) -> Reading:
+    d = _get(f"{EC_BASE}/signal?country={country.lower()}")
+    now = time.time()
+    secs = d["unix_seconds"]
+    idx = min(range(len(secs)), key=lambda i: abs(secs[i] - now))
+    return _ec_reading(d, idx, country)
+
+
+def ec_forecast(country: str, hours: int = 24) -> list[Reading]:
+    d = _get(f"{EC_BASE}/signal?country={country.lower()}")
+    now, horizon = time.time(), time.time() + hours * 3600
+    return [
+        _ec_reading(d, i, country)
+        for i, s in enumerate(d["unix_seconds"])
+        if now - 900 <= s <= horizon
+    ]
+
+
 # ── Dispatch ─────────────────────────────────────────────────────────────────
 def current_reading(cfg: CarbonConfig) -> Reading:
     if cfg.provider == "uk":
         return uk_current(cfg.region)
     if cfg.provider == "electricitymaps":
         return em_current(cfg.zone or str(cfg.region or "GB"), cfg.token or "")
-    raise SystemExit(f"unknown carbon provider: {cfg.provider!r} (use uk | electricitymaps)")
+    if cfg.provider == "energy-charts":
+        return ec_current(cfg.zone or str(cfg.region or ""))
+    raise SystemExit(
+        f"unknown carbon provider: {cfg.provider!r} (use uk | electricitymaps | energy-charts)"
+    )
+
+
+def _dirtiness(r: Reading) -> float | None:
+    """A lower-is-greener score usable across providers: carbon intensity when
+    available, else negative renewable fraction (more renewable = lower score)."""
+    if r.carbon_gco2 is not None:
+        return r.carbon_gco2
+    if r.renewable_fraction is not None:
+        return -r.renewable_fraction
+    return None
 
 
 def cleanest_window(readings: list[Reading], block: int) -> tuple[int, float | None]:
-    """Index of the lowest-average-carbon contiguous block of `block` periods."""
-    vals = [r.carbon_gco2 for r in readings]
+    """Index of the greenest contiguous block of `block` periods (min average
+    dirtiness — carbon if available, else renewable share)."""
+    vals = [_dirtiness(r) for r in readings]
     best_i, best_avg = 0, None
     for i in range(max(1, len(readings) - block + 1)):
         w = [v for v in vals[i : i + block] if v is not None]
@@ -254,20 +304,34 @@ def wait_for_clean(cfg: CarbonConfig, log=print, sleep=time.sleep) -> Reading:
         sleep(cfg.poll_s)
 
 
+def forecast_for(cfg: CarbonConfig, hours: int) -> list[Reading] | None:
+    """Forecast series for window mode, or None if the provider has no free
+    forecast (Electricity Maps' free tier)."""
+    if cfg.provider == "uk":
+        return uk_forecast(cfg.region, hours)
+    if cfg.provider == "energy-charts":
+        return ec_forecast(cfg.zone or str(cfg.region or ""), hours)
+    return None
+
+
+def _period_minutes(cfg: CarbonConfig) -> int:
+    return 15 if cfg.provider == "energy-charts" else 30
+
+
 def _wait_window(cfg: CarbonConfig, log, sleep) -> Reading:
-    if cfg.provider != "uk":
-        log(f"window mode needs forecasts (uk only); falling back to poll for {cfg.provider}")
+    horizon = min(cfg.window_hours, max(1, cfg.max_wait_s // 3600))
+    forecast = forecast_for(cfg, horizon)
+    if not forecast:
+        log(f"no forecast for provider {cfg.provider}; falling back to poll")
         cfg.mode = "poll"
         return wait_for_clean(cfg, log, sleep)
 
-    horizon = min(cfg.window_hours, max(1, cfg.max_wait_s // 3600))
-    forecast = uk_forecast(cfg.region, horizon)
-    block = max(1, round(cfg.window_run_hours * 2))  # 30-min periods
-    i, avg = cleanest_window(forecast, block)
+    block = max(1, round(cfg.window_run_hours * 60 / _period_minutes(cfg)))
+    i, _ = cleanest_window(forecast, block)
     start = _parse_ts(forecast[i].ts)
     log(
         f"greenest {cfg.window_run_hours:g}h window in next {horizon}h: "
-        f"{forecast[i].summary()} (avg {avg:.0f} gCO2/kWh) starting {forecast[i].ts}"
+        f"{forecast[i].summary()} starting {forecast[i].ts}"
     )
     if start is not None:
         while True:
@@ -315,9 +379,9 @@ def suggest_region() -> dict:
         )
     else:
         info.update(
-            provider="electricitymaps", zone=cc, region=None, region_name=None,
-            note="Electricity Maps needs a free token; for the EU the no-token "
-            "Fraunhofer energy-charts API is an alternative.",
+            provider="energy-charts", zone=cc.lower(), region=None, region_name=None,
+            note="energy-charts (Fraunhofer) covers EU countries with no token; "
+            "for non-EU grids use provider=electricitymaps with a token.",
         )
     return info
 
@@ -328,6 +392,8 @@ def suggestion_toml(info: dict) -> str:
     if info["provider"] == "uk" and info.get("region"):
         comment = f"  # {info['region_name']}" if info.get("region_name") else ""
         lines.append(f'region = "{info["region"]}"{comment}')
+    elif info["provider"] == "energy-charts":
+        lines.append(f'zone = "{info.get("zone")}"')
     elif info["provider"] == "electricitymaps":
         lines.append(f'zone = "{info.get("zone")}"')
         lines.append('# token = "..."   # from electricitymaps.com')

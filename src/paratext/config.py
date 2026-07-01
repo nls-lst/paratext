@@ -55,8 +55,9 @@ review-out = "review/cards"
 # Carbon-aware scheduling for `paratext run --green` (opt-in). Declare your grid
 # region — it's far more precise than national (e.g. South Scotland is often
 # ~85% wind vs ~35% GB-wide). `paratext carbon` shows the current reading.
+# `paratext config --suggest-region` proposes this block from your IP.
 # [carbon]
-# provider = "uk"              # uk (no token) | electricitymaps (needs `token`)
+# provider = "uk"              # uk (no token) | energy-charts (EU, no token) | electricitymaps
 # region   = "south-scotland"  # DNO region slug/id, or a UK outcode like "EH"
 # min-renewable = 80           # wait until renewables ≥ 80% (or set max-carbon)
 # mode = "poll"                # poll | window (schedule to the greenest forecast)

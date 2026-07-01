@@ -102,9 +102,31 @@ def test_suggest_region_non_gb(monkeypatch):
             "status": "success", "country": "France", "countryCode": "FR", "city": "Paris"},
     )
     info = carbon.suggest_region()
-    assert info["provider"] == "electricitymaps" and info["zone"] == "FR"
-    assert "energy-charts" in info["note"]  # points at the no-token EU option
-    assert 'zone = "FR"' in carbon.suggestion_toml(info)
+    assert info["provider"] == "energy-charts" and info["zone"] == "fr"  # tokenless EU default
+    assert 'zone = "fr"' in carbon.suggestion_toml(info)
+
+
+# Trimmed energy-charts /signal response: renewable share-of-load + 15-min series.
+def _ec_signal(now):
+    return {"unix_seconds": [now - 900, now, now + 900, now + 1800],
+            "share": [20.0, 22.0, 90.0, 121.0], "signal": [0, 0, 0, 0]}
+
+
+def test_energy_charts_current(monkeypatch):
+    import time as _t
+    sig = _ec_signal(_t.time())
+    monkeypatch.setattr(carbon, "_get", lambda url, headers=None, timeout=10.0: sig)
+    r = carbon.ec_current("de")
+    assert r.provider == "energy-charts" and r.zone == "DE"
+    assert r.carbon_gco2 is None and round(r.renewable_fraction * 100) == 22  # nearest to now
+
+
+def test_cleanest_window_by_renewable_when_no_carbon():
+    # carbon absent → pick the block with the highest renewable share
+    fr = [0.20, 0.25, 0.90, 0.85, 0.30]
+    readings = [Reading("energy-charts", "DE", None, f, None, None) for f in fr]
+    i, _ = carbon.cleanest_window(readings, block=2)
+    assert i == 2  # (0.90+0.85) is the greenest 2-period block
 
 
 def test_wait_for_clean_gives_up_at_max_wait(monkeypatch):

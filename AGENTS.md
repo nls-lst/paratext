@@ -45,11 +45,13 @@ collections. This orients AI coding agents; `README.md` is the human guide.
 - Some models need `enable_thinking=False`; a project sets `disable_thinking`
   and `runner.py` passes it through.
 - `paratext carbon` / `run --green` (`carbon.py`) is opt-in carbon-aware
-  scheduling: wait for a clean grid (UK Carbon Intensity API — no token, regional
-  + 48h forecast — or Electricity Maps with a token) before extracting, and stamp
-  the reading into provenance (`energy`) so the export card can report it. Grid
-  region is declared in `[carbon]`, never auto-detected — `paratext config
-  --suggest-region` IP-geolocates only to *propose* one. Stdlib `urllib` only.
+  scheduling: wait for a clean grid before extracting, and stamp the reading into
+  provenance (`energy`) so the export card can report it. Providers: `uk` (Carbon
+  Intensity API — no token, regional + 48h forecast), `energy-charts` (Fraunhofer,
+  no token, EU country-level, forecast), `electricitymaps` (token, global, latest
+  only). Grid region is declared in `[carbon]`, never auto-detected — `paratext
+  config --suggest-region` (also offered once on fresh-config onboarding)
+  IP-geolocates only to *propose* one. Stdlib `urllib` only.
 - `paratext export` (`hf_export.py`) publishes a reviewed round as a HF dataset
   (imagefolder + `metadata.jsonl` + auto card) via the already-present
   `huggingface_hub` — no `datasets` dep. v1 gold = `good_enough` rows only,
