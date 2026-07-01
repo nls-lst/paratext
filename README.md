@@ -77,7 +77,8 @@ rarely pass them — but every default can be overridden on the CLI.
 - **`extract -p <project>`** — same as `run` minus the review flags
   (writes JSONL only); includes `--green`.
 - **`carbon`** — `--window` (show the greenest forecast window instead of the
-  current reading), `--renewables-above PCT`, `--max-carbon GCO2`.
+  current reading), `--renewables-above PCT`, `--max-carbon GCO2`,
+  `--max-percent PCT` (WattTime).
 - **`package <jsonl>`** — `-p/--project` (inferred from the JSONL's provenance
   if omitted), `--out DIR` (default: the `review/<project>-r<N>` round for this
   prompt), `--round N`, `--fresh` (rebuild, discarding annotations).
@@ -202,6 +203,9 @@ max-wait = "12h"             # give up waiting and run anyway after this
   (country-level).
 - **Electricity Maps** (`provider = "electricitymaps"`, `zone`, `token`) — global
   coverage; latest reading only on the free token.
+- **WattTime** (`provider = "watttime"`, `region`, `username`/`password`) — US +
+  global; gates on the marginal-emissions percentile (`max-percent`, "run in the
+  cleanest third") rather than renewables. Needs a free watttime.org account.
 - The grid region is *declared, not detected* — a box can be reached both locally
   and remotely, so paratext can't infer where compute runs.
   `paratext config --suggest-region` IP-geolocates your box and *proposes* a

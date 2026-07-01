@@ -63,8 +63,14 @@ class Reading:
     renewable_fraction: float | None  # 0..1
     index: str | None
     ts: str | None
+    percent: float | None = None  # WattTime MOER percentile (0..100, lower = cleaner)
 
-    def is_clean(self, min_renewable: float | None, max_carbon: float | None) -> bool:
+    def is_clean(
+        self,
+        min_renewable: float | None = None,
+        max_carbon: float | None = None,
+        max_percent: float | None = None,
+    ) -> bool:
         """True if every configured constraint is satisfied (AND)."""
         ok = True
         if min_renewable is not None:
@@ -73,6 +79,8 @@ class Reading:
             )
         if max_carbon is not None:
             ok = ok and self.carbon_gco2 is not None and self.carbon_gco2 <= max_carbon
+        if max_percent is not None:
+            ok = ok and self.percent is not None and self.percent <= max_percent
         return ok
 
     def summary(self) -> str:
@@ -81,6 +89,8 @@ class Reading:
             parts.append(f"{self.renewable_fraction * 100:.0f}% renewable")
         if self.carbon_gco2 is not None:
             parts.append(f"{self.carbon_gco2:.0f} gCO2/kWh")
+        if self.percent is not None:
+            parts.append(f"{self.percent:.0f}th pct emissions")
         if self.index:
             parts.append(self.index)
         return f"{self.zone}: " + (", ".join(parts) if parts else "no data")
@@ -91,6 +101,7 @@ class Reading:
             "zone": self.zone,
             "carbon_gco2": self.carbon_gco2,
             "renewable_fraction": self.renewable_fraction,
+            "percent": self.percent,
             "index": self.index,
             "ts": self.ts,
             "scheduled_window": scheduled_window,
@@ -100,30 +111,41 @@ class Reading:
 @dataclass
 class CarbonConfig:
     provider: str = "uk"
-    region: str | int | None = None  # uk: DNO id/slug/outcode; None = national
-    zone: str | None = None  # electricitymaps zone (e.g. "GB")
+    region: str | int | None = None  # uk: DNO id/slug/outcode; watttime: region code
+    zone: str | None = None  # electricitymaps / energy-charts zone (e.g. "GB", "de")
     token: str | None = None
+    username: str | None = None  # watttime credentials
+    password: str | None = None
     min_renewable: float | None = None
     max_carbon: float | None = None
+    max_percent: float | None = None  # watttime MOER percentile ceiling
     mode: str = "poll"  # poll | window
     max_wait_s: int = 12 * 3600
     poll_s: int = 15 * 60
     window_hours: int = 24
     window_run_hours: float = 1.0
 
-    def effective_thresholds(self) -> tuple[float | None, float | None]:
-        """The thresholds to gate on, applying the default when none are set."""
-        if self.min_renewable is None and self.max_carbon is None:
-            return DEFAULT_MIN_RENEWABLE, None
-        return self.min_renewable, self.max_carbon
+    def _effective(self) -> tuple[float | None, float | None, float | None]:
+        """(min_renewable, max_carbon, max_percent), applying a provider-apt
+        default when the user set none."""
+        if self.min_renewable is None and self.max_carbon is None and self.max_percent is None:
+            if self.provider == "watttime":
+                return None, None, 33.0  # cleanest third of recent marginal emissions
+            return DEFAULT_MIN_RENEWABLE, None, None
+        return self.min_renewable, self.max_carbon, self.max_percent
+
+    def is_clean(self, r: Reading) -> bool:
+        return r.is_clean(*self._effective())
 
     def target_str(self) -> str:
-        mr, mc = self.effective_thresholds()
+        mr, mc, mp = self._effective()
         bits = []
         if mr is not None:
             bits.append(f"≥{mr:.0f}% renewable")
         if mc is not None:
             bits.append(f"≤{mc:.0f} gCO2/kWh")
+        if mp is not None:
+            bits.append(f"≤{mp:.0f}th pct emissions")
         return " and ".join(bits)
 
 
@@ -232,6 +254,36 @@ def ec_forecast(country: str, hours: int = 24) -> list[Reading]:
     ]
 
 
+# ── WattTime provider (US/global — creds → short-lived token; MOER percentile) ─
+WT_BASE = "https://api.watttime.org/v3"
+
+
+def wt_token(username: str, password: str) -> str:
+    """Exchange credentials for a bearer token (WattTime tokens expire ~30 min,
+    so we fetch per call rather than cache across a long poll)."""
+    if not (username and password):
+        raise SystemExit("watttime needs username + password (config or PARATEXT_CARBON_*)")
+    import base64
+
+    cred = base64.b64encode(f"{username}:{password}".encode()).decode()
+    d = _get("https://api.watttime.org/login", headers={"Authorization": f"Basic {cred}"})
+    if not d.get("token"):
+        raise SystemExit("watttime login failed — check credentials")
+    return d["token"]
+
+
+def wt_current(region: str, username: str, password: str) -> Reading:
+    token = wt_token(username, password)
+    d = _get(
+        f"{WT_BASE}/signal-index?region={region}&signal_type=co2_moer",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    data = d.get("data") or []
+    first = data[0] if data else {}
+    return Reading("watttime", region, None, None, None, first.get("point_time"),
+                   percent=first.get("value"))
+
+
 # ── Dispatch ─────────────────────────────────────────────────────────────────
 def current_reading(cfg: CarbonConfig) -> Reading:
     if cfg.provider == "uk":
@@ -240,8 +292,11 @@ def current_reading(cfg: CarbonConfig) -> Reading:
         return em_current(cfg.zone or str(cfg.region or "GB"), cfg.token or "")
     if cfg.provider == "energy-charts":
         return ec_current(cfg.zone or str(cfg.region or ""))
+    if cfg.provider == "watttime":
+        return wt_current(str(cfg.region or ""), cfg.username or "", cfg.password or "")
     raise SystemExit(
-        f"unknown carbon provider: {cfg.provider!r} (use uk | electricitymaps | energy-charts)"
+        f"unknown carbon provider: {cfg.provider!r} "
+        "(use uk | energy-charts | electricitymaps | watttime)"
     )
 
 
@@ -252,6 +307,8 @@ def _dirtiness(r: Reading) -> float | None:
         return r.carbon_gco2
     if r.renewable_fraction is not None:
         return -r.renewable_fraction
+    if r.percent is not None:
+        return r.percent  # MOER percentile: lower = cleaner
     return None
 
 
@@ -287,11 +344,10 @@ def wait_for_clean(cfg: CarbonConfig, log=print, sleep=time.sleep) -> Reading:
     if cfg.mode == "window":
         return _wait_window(cfg, log, sleep)
 
-    mr, mc = cfg.effective_thresholds()
     deadline = time.monotonic() + cfg.max_wait_s
     while True:
         r = current_reading(cfg)
-        if r.is_clean(mr, mc):
+        if cfg.is_clean(r):
             log(f"grid clean — {r.summary()}; proceeding")
             return r
         if time.monotonic() >= deadline:
@@ -375,7 +431,8 @@ def suggest_region() -> dict:
     elif cc == "US":
         info.update(
             provider="watttime", region=None, region_name=None,
-            note="WattTime covers the US but needs credentials (watttime.org).",
+            note="WattTime covers the US but needs a free account (watttime.org) and a "
+            "grid region code (e.g. CAISO_NORTH); it gates on marginal-emissions percentile.",
         )
     else:
         info.update(
@@ -388,16 +445,25 @@ def suggest_region() -> dict:
 
 def suggestion_toml(info: dict) -> str:
     """Render a ready-to-paste `[carbon]` block from `suggest_region()`."""
-    lines = ["[carbon]", f'provider = "{info["provider"]}"']
-    if info["provider"] == "uk" and info.get("region"):
+    p = info["provider"]
+    lines = ["[carbon]", f'provider = "{p}"']
+    if p == "uk" and info.get("region"):
         comment = f"  # {info['region_name']}" if info.get("region_name") else ""
         lines.append(f'region = "{info["region"]}"{comment}')
-    elif info["provider"] == "energy-charts":
+        lines.append("min-renewable = 80")
+    elif p == "energy-charts":
         lines.append(f'zone = "{info.get("zone")}"')
-    elif info["provider"] == "electricitymaps":
+        lines.append("min-renewable = 80")
+    elif p == "electricitymaps":
         lines.append(f'zone = "{info.get("zone")}"')
         lines.append('# token = "..."   # from electricitymaps.com')
-    lines.append("min-renewable = 80")
+        lines.append("min-renewable = 80")
+    elif p == "watttime":
+        lines.append(f'region = "{info.get("region") or "CAISO_NORTH"}"   # your WattTime region')
+        lines.append('# username = "..."   # password = "..."  (watttime.org account)')
+        lines.append("max-percent = 33   # run when marginal emissions are in the cleanest third")
+    else:
+        lines.append("min-renewable = 80")
     return "\n".join(lines) + "\n"
 
 
@@ -415,7 +481,10 @@ def _dur(v, default: int) -> int:
 
 
 def load_config(
-    *, min_renewable: float | None = None, max_carbon: float | None = None
+    *,
+    min_renewable: float | None = None,
+    max_carbon: float | None = None,
+    max_percent: float | None = None,
 ) -> CarbonConfig:
     """Read the `[carbon]` table; CLI overrides (thresholds) win."""
     raw = config.load_table("carbon")
@@ -424,8 +493,11 @@ def load_config(
         region=raw.get("region"),
         zone=raw.get("zone"),
         token=config.env_or("carbon_token") or raw.get("token"),
+        username=config.env_or("carbon_username") or raw.get("username"),
+        password=config.env_or("carbon_password") or raw.get("password"),
         min_renewable=min_renewable if min_renewable is not None else raw.get("min_renewable"),
         max_carbon=max_carbon if max_carbon is not None else raw.get("max_carbon"),
+        max_percent=max_percent if max_percent is not None else raw.get("max_percent"),
         mode=raw.get("mode", "poll"),
         max_wait_s=_dur(raw.get("max_wait"), 12 * 3600),
         poll_s=_dur(raw.get("poll"), 15 * 60),
