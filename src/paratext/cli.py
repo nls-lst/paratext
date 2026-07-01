@@ -36,9 +36,56 @@ from .packaging import package
 from .projects import get_project, project_names
 from .review.server import DEFAULT_PORT
 
-# Default root holding each project's review dataset (review/<project>/), so
-# `paratext review` with no args lists every project on its homepage.
+# Default root holding each project's review datasets (review/<project>-r<N>/),
+# so `paratext review` with no args groups a project's rounds on its homepage.
 REVIEW_ROOT = Path("review")
+
+
+# ── Review rounds ────────────────────────────────────────────────────────────
+# A "round" is a prompt version: datasets are named `<project>-r<N>` and the
+# review UI diffs consecutive rounds. Re-running the *same* prompt updates the
+# current round in place (keeping its annotations); a *changed* prompt rolls to
+# the next round. The round is keyed on the prompt hash, not schema_version —
+# the prompt is what's iterated round to round.
+def _round_dirs(project: str) -> list[tuple[int, Path]]:
+    """Existing `<project>-r<N>` review dirs under REVIEW_ROOT, sorted by round."""
+    if not REVIEW_ROOT.is_dir():
+        return []
+    found: list[tuple[int, Path]] = []
+    for p in REVIEW_ROOT.iterdir():
+        m = re.match(rf"^{re.escape(project)}-r(\d+)$", p.name)
+        if m and (p / "samples.json").is_file():
+            found.append((int(m.group(1)), p))
+    return sorted(found)
+
+
+def _prompt_hash_of(dataset_dir: Path) -> str | None:
+    """The prompt hash a packaged round was built with (from its first record)."""
+    try:
+        records = json.loads((dataset_dir / "samples.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    return records[0].get("prompt_hash") if records else None
+
+
+def _resolve_round(
+    project: str, prompt_hash: str, forced: int | None
+) -> tuple[Path, int, bool]:
+    """Pick the review-output dir for this run. Returns (dir, round, reuse).
+
+    `reuse` is True when we're re-writing an existing round (same prompt), which
+    the caller uses to preserve that round's annotations. `forced` is --round N.
+    """
+    rounds = _round_dirs(project)
+    if forced is not None:
+        reuse = any(r == forced for r, _ in rounds)
+        return REVIEW_ROOT / f"{project}-r{forced}", forced, reuse
+    if not rounds:
+        return REVIEW_ROOT / f"{project}-r1", 1, False
+    last_round, last_dir = rounds[-1]
+    if prompt_hash and _prompt_hash_of(last_dir) == prompt_hash:
+        return last_dir, last_round, True  # same prompt → same round
+    return REVIEW_ROOT / f"{project}-r{last_round + 1}", last_round + 1, False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -98,12 +145,22 @@ def _cmd_extract(args: argparse.Namespace) -> int:
 # ── Run (extract + package) ────────────────────────────────────────────────
 def _cmd_run(args: argparse.Namespace) -> int:
     _do_extract(args)
-    # Each project's dataset lives under the review/ root, so `paratext review`
-    # (no args) lists them all.
-    review_out = args.review_out or REVIEW_ROOT / args.project
-    kept, skipped = package(Path(args.output), Path(review_out), args.project, fresh=True)
+    # Resolve which review round to write. An explicit --review-out wins; else
+    # each run lands in review/<project>-r<N>, rolling to a new round when the
+    # prompt changed and updating the current round in place when it didn't.
+    if args.review_out:
+        review_out, round_no, reuse = Path(args.review_out), None, args.review_out.exists()
+    else:
+        prompt_hash = read_provenance(Path(args.output)).get("prompt_hash", "")
+        review_out, round_no, reuse = _resolve_round(args.project, prompt_hash, args.round)
+    # Preserve a reused round's annotations; only clobber on a new round or --fresh.
+    kept, skipped = package(
+        Path(args.output), review_out, args.project, fresh=args.fresh or not reuse
+    )
     print(f"Wrote extractions to {args.output}")
-    print(f"Packaged {kept} record(s) to {review_out / 'samples.json'}")
+    where = f"round {round_no} ({review_out.name})" if round_no else str(review_out)
+    verb = "Updated" if reuse else "Packaged"
+    print(f"{verb} {kept} record(s) → {where}")
     if skipped:
         breakdown = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
         print(f"Skipped {sum(skipped.values())} item(s): {breakdown}")
@@ -111,7 +168,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from .review.server import is_running
 
     port = args.review_port
-    root = Path(review_out).parent  # the review/ root holding every project
+    root = review_out.parent  # the review/ root holding every project's rounds
     if is_running(port):
         print(f"\nReview server already running — reload "
               f"http://127.0.0.1:{port} to see '{args.project}'.")
@@ -127,16 +184,20 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 # ── Package ───────────────────────────────────────────────────────────────
 def _cmd_package(args: argparse.Namespace) -> int:
-    # Like `run`: infer the project from the JSONL's provenance and default the
-    # output to review/<project> when not given.
-    project = args.project or read_provenance(args.jsonl).get("project")
+    # Like `run`: infer the project from the JSONL's provenance and, unless --out
+    # is given, resolve the review/<project>-r<N> round from the prompt hash.
+    provenance = read_provenance(args.jsonl)
+    project = args.project or provenance.get("project")
     if not project:
         raise SystemExit(
             "could not infer the project from the JSONL provenance; pass -p/--project"
         )
-    out = args.out or REVIEW_ROOT / project
-    kept, skipped = package(args.jsonl, out, project, fresh=args.fresh)
-    print(f"Wrote {kept} records to {out / 'samples.json'}")
+    if args.out:
+        out, reuse = args.out, args.out.exists()
+    else:
+        out, _round, reuse = _resolve_round(project, provenance.get("prompt_hash", ""), args.round)
+    kept, skipped = package(args.jsonl, out, project, fresh=args.fresh or not reuse)
+    print(f"{'Updated' if reuse else 'Wrote'} {kept} records → {out}")
     if skipped:
         breakdown = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
         print(f"Skipped {sum(skipped.values())} item(s): {breakdown}")
@@ -259,7 +320,12 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
 
     r = sub.add_parser("run", help="Extract then package in one go")
     _add_extract_args(r)
-    r.add_argument("--review-out", type=Path, default=None, help="Review dataset dir")
+    r.add_argument("--review-out", type=Path, default=None,
+                   help="Review dataset dir (overrides round auto-naming)")
+    r.add_argument("--round", type=int, default=None,
+                   help="Force review round N (default: auto — new round when the prompt changes)")
+    r.add_argument("--fresh", action="store_true",
+                   help="Rebuild the round dir from scratch, discarding its annotations")
     r.add_argument("--review", action="store_true",
                    help="Launch the review UI when the run finishes (blocks)")
     r.set_defaults(func=_cmd_run)
@@ -273,8 +339,11 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     pk.add_argument("-p", "--project", choices=choices, default=None,
                     help="Project plug-in (inferred from the JSONL if omitted)")
     pk.add_argument("--out", type=Path, default=None,
-                    help="Output review dataset dir (default: review/<project>)")
-    pk.add_argument("--fresh", action="store_true", help="Delete the output directory first")
+                    help="Output dir (default: the review/<project>-r<N> round for this prompt)")
+    pk.add_argument("--round", type=int, default=None,
+                    help="Force review round N (default: auto from the prompt hash)")
+    pk.add_argument("--fresh", action="store_true",
+                    help="Rebuild the output dir from scratch, discarding its annotations")
     pk.set_defaults(func=_cmd_package)
 
     rv = sub.add_parser("review", help="Launch the local web UI to review datasets")

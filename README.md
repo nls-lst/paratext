@@ -40,11 +40,12 @@ paratext run -p my-cards --limit 50
 paratext review                       # serves ./review — all projects
 ```
 
-`run` writes the extraction JSONL and a `review/<project>/` dataset
-(`samples.json` + `images/` + `view.json`); `paratext review` opens a local web
-UI over the `review/` root. If a review server is already running, a fresh `run`
-shows up there on reload — no restart needed. Add `paratext run … --review` to
-launch the UI automatically when the run finishes.
+`run` writes the extraction JSONL and a `review/<project>-r<N>/` dataset
+(`samples.json` + `images/` + `view.json`) — the `-r<N>` is the review **round**
+(see [Iterating](#iterating-rounds)). `paratext review` opens a local web UI over
+the `review/` root. If a review server is already running, a fresh `run` shows up
+there on reload — no restart needed. Add `paratext run … --review` to launch the
+UI automatically when the run finishes.
 
 ## Commands
 
@@ -67,13 +68,14 @@ rarely pass them — but every default can be overridden on the CLI.
 
 - **`run -p <project>`** — `--source DIR`, `--output FILE` (default
   `output/<project>.jsonl`), `--model ID`, `--base-url URL`, `--api-key KEY`,
-  `--limit N`, `--no-structured`, `--skip-preflight`, `--review-out DIR`,
-  `--review` (open the UI when finished).
-- **`extract -p <project>`** — same as `run` minus the two review flags
+  `--limit N`, `--no-structured`, `--skip-preflight`, `--review-out DIR`
+  (overrides round auto-naming), `--round N` (force a round), `--fresh` (rebuild
+  the round, discarding its annotations), `--review` (open the UI when finished).
+- **`extract -p <project>`** — same as `run` minus the review flags
   (writes JSONL only).
 - **`package <jsonl>`** — `-p/--project` (inferred from the JSONL's provenance
-  if omitted), `--out DIR` (default `review/<project>`), `--fresh` (delete the
-  output dir first).
+  if omitted), `--out DIR` (default: the `review/<project>-r<N>` round for this
+  prompt), `--round N`, `--fresh` (rebuild, discarding annotations).
 - **`review [data_dir]`** — `data_dir` defaults to `./review`; `--port N`
   (config `review-port`, else 5050), `--no-open`.
 - **`sample`** — `--source DIR` (required), `--out DIR` (required), `-n N`
@@ -94,6 +96,32 @@ new `run` appears on reload without restarting the server.
 
 Once a project is configured, `run`/`extract` need only `-p <project>` —
 everything else resolves from config.
+
+<a id="iterating-rounds"></a>
+
+### Iterating: rounds & prompt feedback
+
+Extraction quality lives almost entirely in the prompt, so the workflow is a
+loop: run → review → edit the prompt → run again. A **round** captures one prompt
+version. The round is keyed on the prompt's hash (not `schema_version` — the
+prompt is what you iterate), and `run` names each dataset `review/<project>-r<N>`:
+
+- **Edit `prompt.md`, then `run` again → a new round** (`-r2`, `-r3`, …). The
+  review UI shows the two most recent rounds side by side and highlights what
+  changed, so you can see whether an edit helped.
+- **Re-run the *same* prompt** (a crash resume, or more `--limit`) → the current
+  round is **updated in place**, keeping the annotations you've already made.
+- Rounds are a linear history: reverting to an earlier prompt still starts a new
+  round. Force one with `--round N`; `--fresh` rebuilds a round from scratch
+  (discarding its annotations).
+
+Reading feedback back into the prompt: each round's `annotations.db` (a SQLite
+file in the dataset dir) holds every reviewer verdict and per-field correction
+(the `corrections` column, JSON). While the server runs, `GET /api/stats` gives
+the round's accuracy and verdict counts, and `GET /api/export/<id>` returns a CSV
+of scored/flagged samples with notes. Query the db (or those endpoints), see
+which fields reviewers corrected most, and tighten those parts of `prompt.md`
+before the next round.
 
 ## Configure
 

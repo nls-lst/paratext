@@ -6,8 +6,10 @@ collections. This orients AI coding agents; `README.md` is the human guide.
 ## Overview
 
 - One CLI (`paratext`) runs the loop: `extract` (VLM → JSONL), `package`
-  (JSONL → review dataset), or `run` (both); `review` launches the inbuilt web
-  UI over a packaged dataset. Plus `sample`, `config`, `new`.
+  (JSONL → review dataset), or `run` (both, the common path); `review` launches
+  the inbuilt web UI over a packaged dataset. Plus `sample`, `config`, `new`.
+  Typical: `paratext run -p <project> --limit 50` then `paratext review`. Most
+  flags resolve from `paratext.toml`/env, so `-p <project>` is usually enough.
 - The inbuilt review (`paratext.review`) is a dependency-free stdlib
   `http.server` + `sqlite3` app serving a generic vanilla-JS frontend in
   `review/static/`, driven entirely by each dataset's `view.json`.
@@ -43,5 +45,17 @@ collections. This orients AI coding agents; `README.md` is the human guide.
 - `paratext.cards` is the reusable scanned-card toolkit: the deterministic
   `is_verso` pre-filter (pure NumPy) and the optional RetinaNet
   `load_card_detector()` (weights from the Hugging Face Hub, `[cards]` extra).
-- Bump a project's `schema_version` when its schema changes; the prompt hash
-  drives the round-to-round diff shown by the review app.
+- Bump a project's `schema_version` when its schema changes.
+
+## Iterating: rounds & prompt feedback
+
+The prompt is what you tune. `run` writes each dataset to
+`review/<project>-r<N>`, where the round `N` is keyed on the **prompt hash**:
+editing `prompt.md` and re-running rolls a new round (the UI diffs the two latest
+rounds); re-running the same prompt updates the current round in place, keeping
+its annotations. Rounds are a linear history — reverting a prompt starts a new
+round. `--round N` forces one; `--fresh` rebuilds a round, discarding its
+annotations. To fold review feedback back into the prompt, read the round's
+`annotations.db` (SQLite; `corrections` column is per-field JSON) or, with the
+server running, `GET /api/stats` (accuracy/verdict counts) and
+`GET /api/export/<id>` (CSV) — then tighten the fields reviewers corrected most.
