@@ -25,9 +25,9 @@ collections. This orients AI coding agents; `README.md` is the human guide.
 
 ## Setup, build, run
 
-- Python 3.11–3.13 via `uv`. `uv sync --extra dev` (add `--extra pdf` for the
-  PDF tests). Run with `uv run paratext …`, or `uv tool install` for the bare
-  command.
+- Python 3.11–3.13 via `uv`. `uv sync --extra dev` (add `--extra cards` for the
+  torch detector runtime). Run with `uv run paratext …`, or `uv tool install`
+  for the bare command.
 - VLM endpoint is any OpenAI-compatible server; base URL via `paratext.toml` or
   `PARATEXT_BASE_URL`.
 

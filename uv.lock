@@ -709,6 +709,7 @@ dependencies = [
     { name = "openai" },
     { name = "pillow" },
     { name = "pydantic" },
+    { name = "pypdfium2" },
     { name = "rich" },
     { name = "stamina" },
     { name = "tqdm" },
@@ -723,9 +724,6 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
-pdf = [
-    { name = "pypdfium2" },
-]
 
 [package.metadata]
 requires-dist = [
@@ -734,7 +732,7 @@ requires-dist = [
     { name = "openai", specifier = "~=2.17" },
     { name = "pillow", specifier = "~=12.1" },
     { name = "pydantic", specifier = "~=2.12" },
-    { name = "pypdfium2", marker = "extra == 'pdf'", specifier = "~=5.4" },
+    { name = "pypdfium2", specifier = "~=5.4" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "rich", specifier = ">=14.3.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
@@ -743,7 +741,7 @@ requires-dist = [
     { name = "torchvision", marker = "extra == 'cards'", specifier = ">=0.19" },
     { name = "tqdm", specifier = "~=4.67" },
 ]
-provides-extras = ["dev", "cards", "pdf"]
+provides-extras = ["dev", "cards"]
 
 [[package]]
 name = "pillow"

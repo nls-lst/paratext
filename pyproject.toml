@@ -14,15 +14,17 @@ dependencies = [
     "tqdm~=4.67",
     "huggingface-hub~=1.4",
     "rich>=14.3.2",
+    # PDF page rendering. Small self-contained wheel (bundles PDFium, no extra
+    # Python deps), so it's a core dependency rather than an extra.
+    "pypdfium2~=5.4",
 ]
 
 [project.optional-dependencies]
 dev = ["ruff>=0.8", "pytest>=8.0"]
 # Scanned-card cropping: the permissive (BSD) torchvision RetinaNet detector in
-# paratext.cards. CPU inference is fine (~0.5s/image). `pip install paratext[cards]`.
+# paratext.cards. Heavy (torch is hundreds of MB) so it stays opt-in.
+# CPU inference is fine (~0.5s/image). `pip install paratext[cards]`.
 cards = ["torch>=2.4", "torchvision>=0.19"]
-# PDF rendering for page-image projects.
-pdf = ["pypdfium2~=5.4"]
 
 [project.scripts]
 paratext = "paratext.cli:main"

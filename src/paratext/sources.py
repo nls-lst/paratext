@@ -109,8 +109,7 @@ def pdf_source(
     scale: float = 2.0,
 ) -> Source:
     """PDFs under the source tree (recursive; id = filename stem), each rendered
-    to page images. ``pages(num_pages) -> indices`` selects which pages. Needs
-    the ``[pdf]`` extra (pypdfium2)."""
+    to page images. ``pages(num_pages) -> indices`` selects which pages."""
 
     def _render(pdf_path: Path, indices: list[int]) -> list[Image.Image]:
         import pypdfium2 as pdfium

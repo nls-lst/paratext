@@ -14,18 +14,16 @@ and sample iteration — so the same code path runs a 50-item pilot and a
 
 ```bash
 uv tool install paratext          # installs the `paratext` command on PATH
-# optional extras:
-uv tool install "paratext[cards]" # torchvision RetinaNet card cropping
-uv tool install "paratext[pdf]"   # pypdfium2 PDF page rendering
+uv tool install "paratext[cards]" # + torchvision RetinaNet card cropping (optional)
 ```
 
-For development from a checkout: `uv sync --extra dev` and run with
-`uv run paratext …`.
+Image and PDF collections both work out of the box; the `[cards]` extra only
+adds the (heavier) card-cropping detector.
 
 The VLM endpoint is any OpenAI-compatible server (e.g. Lemonade, vLLM,
 llama.cpp). The base URL defaults to `http://localhost:8000/v1`; override it in
-`paratext.toml` or via `PARATEXT_BASE_URL`. No API key is required for local
-servers.
+`paratext.toml` or via `PARATEXT_BASE_URL`. Set `api-key` if your endpoint
+requires one (see Configure).
 
 ## Quickstart
 
@@ -204,6 +202,17 @@ The View defaults to showing every schema field. Override only what you need:
 pass a `view=View(...)` to curate the display, and the optional hooks `curate`,
 `build_record`, `ground_truth` (and a custom `materialise_images` or
 `iter_samples`) for drop/quarantine rules, ground truth, etc.
+
+## Development
+
+Working from a checkout rather than an installed release:
+
+```bash
+uv sync --extra dev            # add --extra cards for the detector runtime
+uv run paratext …             # run the CLI against the local source
+uv run pytest -q              # tests
+uv run ruff check             # lint (line length 100, rules E/F/I/W)
+```
 
 ## License
 
