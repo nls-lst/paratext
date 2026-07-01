@@ -80,6 +80,33 @@ def test_wait_for_clean_polls_until_clean(monkeypatch):
     assert r.renewable_fraction == 0.82 and len(slept) == 1  # waited once, then proceeded
 
 
+def test_suggest_region_uk(monkeypatch):
+    def fake_get(url, headers=None, timeout=10.0):
+        if "ip-api" in url:
+            return {"status": "success", "country": "United Kingdom", "countryCode": "GB",
+                    "regionName": "Scotland", "city": "Prestonpans", "zip": "EH32"}
+        return {"data": [{"regionid": 2, "shortname": "South Scotland"}]}
+
+    monkeypatch.setattr(carbon, "_get", fake_get)
+    info = carbon.suggest_region()
+    assert info["provider"] == "uk" and info["region"] == "EH32"
+    assert info["region_name"] == "South Scotland"
+    toml = carbon.suggestion_toml(info)
+    assert 'provider = "uk"' in toml and 'region = "EH32"  # South Scotland' in toml
+
+
+def test_suggest_region_non_gb(monkeypatch):
+    monkeypatch.setattr(
+        carbon, "_get",
+        lambda url, headers=None, timeout=10.0: {
+            "status": "success", "country": "France", "countryCode": "FR", "city": "Paris"},
+    )
+    info = carbon.suggest_region()
+    assert info["provider"] == "electricitymaps" and info["zone"] == "FR"
+    assert "energy-charts" in info["note"]  # points at the no-token EU option
+    assert 'zone = "FR"' in carbon.suggestion_toml(info)
+
+
 def test_wait_for_clean_gives_up_at_max_wait(monkeypatch):
     monkeypatch.setattr(
         carbon, "current_reading",

@@ -323,7 +323,32 @@ def _cmd_sample(args: argparse.Namespace) -> int:
 
 # ── Config ─────────────────────────────────────────────────────────────────
 def _cmd_config(args: argparse.Namespace) -> int:
-    """Open paratext.toml in $EDITOR, or print the resolved defaults with --show."""
+    """Open paratext.toml in $EDITOR, print resolved defaults (--show), or
+    suggest a carbon region from IP geolocation (--suggest-region)."""
+    if args.suggest_region:
+        from . import carbon
+
+        info = carbon.suggest_region()
+        block = carbon.suggestion_toml(info)
+        loc = ", ".join(x for x in (info.get("city"), info.get("country")) if x)
+        print(f"Detected {loc} via IP (may reflect your ISP/host, not your site — confirm it).")
+        if info.get("region_name"):
+            print(f"UK grid region: {info['region_name']}")
+        if info.get("note"):
+            print(info["note"])
+        print(f"\nSuggested config:\n\n{block}")
+
+        path = local_config_path()
+        if path.exists() and re.search(r"^\[carbon\]", path.read_text(), re.M):
+            print(f"{path} already has a [carbon] section — not modifying it; "
+                  "paste the above to replace.")
+        else:
+            prefix = "" if path.exists() else "# paratext config\n"
+            with path.open("a") as f:
+                f.write(prefix + "\n" + block)
+            print(f"Appended the [carbon] block to {path}.")
+        return 0
+
     if args.show:
         resolved = coerce_paths(load_defaults(args.project))
         out = {
@@ -470,6 +495,8 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     cfg.add_argument("-p", "--project", choices=choices, default=None,
                      help="Project to resolve defaults for (with --show)")
     cfg.add_argument("--show", action="store_true", help="Print resolved defaults instead")
+    cfg.add_argument("--suggest-region", action="store_true",
+                     help="Suggest a [carbon] grid region from IP geolocation")
     cfg.set_defaults(func=_cmd_config)
 
     nw = sub.add_parser("new", aliases=["init"], help="Scaffold a new project package")

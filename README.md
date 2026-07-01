@@ -89,7 +89,8 @@ rarely pass them — but every default can be overridden on the CLI.
 - **`sample`** — `--source DIR` (required), `--out DIR` (required), `-n N`
   (default 500), `--seed N`.
 - **`config`** — `--show` (print resolved defaults instead of editing),
-  `-p <project>` (which project's defaults to resolve).
+  `-p <project>` (which project's defaults to resolve), `--suggest-region`
+  (IP-geolocate and propose a `[carbon]` region).
 - **`new [name]`** (alias `init`) — interactive; no flags.
 
 ## Review
@@ -174,6 +175,7 @@ are high enough (or carbon low enough), then proceeds — and records the readin
 into provenance so `export` reports it on the dataset card.
 
 ```bash
+paratext config --suggest-region    # geolocate your box → propose a [carbon] region
 paratext carbon                     # what's the grid doing right now?
 paratext carbon --window            # greenest window in the next 24h
 paratext run -p index-cards --green # wait for a clean grid, then run
@@ -192,12 +194,16 @@ mode = "poll"                # poll, or "window" to schedule to the greenest slo
 max-wait = "12h"             # give up waiting and run anyway after this
 ```
 
-- **UK** (default) needs no token and supports regional + 48h forecast.
-  **Electricity Maps** (`provider = "electricitymaps"`, `zone`, `token`) covers
-  the globe (latest reading only; free token from their site).
-- The grid region is *declared*, not detected — a box can be reached both locally
-  and remotely, so paratext can't infer where compute runs. (A future
-  `paratext config` helper can IP-geolocate to *suggest* a region.)
+- **UK** (default) needs no token and is uniquely granular — per-DNO-region
+  readings *and* a 48h forecast, free and unauthenticated. No other country has a
+  direct equivalent at that resolution. **Electricity Maps**
+  (`provider = "electricitymaps"`, `zone`, `token`) covers the globe (latest
+  reading only on the free token). For Europe without a token, the Fraunhofer
+  **energy-charts** API is a good option (a candidate future provider).
+- The grid region is *declared, not detected* — a box can be reached both locally
+  and remotely, so paratext can't infer where compute runs.
+  `paratext config --suggest-region` IP-geolocates your box and *proposes* a
+  region for you to confirm (it may reflect your ISP/host rather than your site).
 - Only meaningful when inference runs on the grid you name (e.g. a local VLM box).
 
 ## Configure

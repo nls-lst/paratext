@@ -48,7 +48,8 @@ collections. This orients AI coding agents; `README.md` is the human guide.
   scheduling: wait for a clean grid (UK Carbon Intensity API — no token, regional
   + 48h forecast — or Electricity Maps with a token) before extracting, and stamp
   the reading into provenance (`energy`) so the export card can report it. Grid
-  region is declared in `[carbon]`, never auto-detected. Stdlib `urllib` only.
+  region is declared in `[carbon]`, never auto-detected — `paratext config
+  --suggest-region` IP-geolocates only to *propose* one. Stdlib `urllib` only.
 - `paratext export` (`hf_export.py`) publishes a reviewed round as a HF dataset
   (imagefolder + `metadata.jsonl` + auto card) via the already-present
   `huggingface_hub` — no `datasets` dep. v1 gold = `good_enough` rows only,

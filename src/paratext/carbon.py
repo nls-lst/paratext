@@ -279,6 +279,62 @@ def _wait_window(cfg: CarbonConfig, log, sleep) -> Reading:
     return forecast[i]
 
 
+# ── Region suggestion (IP geolocation — suggest, never silently detect) ───────
+IPGEO_URL = "http://ip-api.com/json/?fields=status,country,countryCode,regionName,city,zip"
+
+
+def suggest_region() -> dict:
+    """Geolocate this box's public IP and suggest a `[carbon]` config. IP-geo is
+    approximate and may reflect the ISP/hosting registration rather than the
+    physical site — a *suggestion* to confirm, not an authoritative location."""
+    geo = _get(IPGEO_URL)
+    if geo.get("status") != "success":
+        raise SystemExit("IP geolocation failed — set [carbon] region manually")
+    cc = geo.get("countryCode")
+    info = {
+        "country": geo.get("country"),
+        "country_code": cc,
+        "city": geo.get("city"),
+        "zip": geo.get("zip"),
+    }
+    if cc == "GB":
+        outcode = (geo.get("zip") or "").split()[0].upper() or None
+        region_name = None
+        if outcode:
+            try:
+                region_name = _get(f"{UK_BASE}/regional/postcode/{outcode}")["data"][0].get(
+                    "shortname"
+                )
+            except Exception:
+                region_name = None
+        info.update(provider="uk", region=outcode, region_name=region_name, note=None)
+    elif cc == "US":
+        info.update(
+            provider="watttime", region=None, region_name=None,
+            note="WattTime covers the US but needs credentials (watttime.org).",
+        )
+    else:
+        info.update(
+            provider="electricitymaps", zone=cc, region=None, region_name=None,
+            note="Electricity Maps needs a free token; for the EU the no-token "
+            "Fraunhofer energy-charts API is an alternative.",
+        )
+    return info
+
+
+def suggestion_toml(info: dict) -> str:
+    """Render a ready-to-paste `[carbon]` block from `suggest_region()`."""
+    lines = ["[carbon]", f'provider = "{info["provider"]}"']
+    if info["provider"] == "uk" and info.get("region"):
+        comment = f"  # {info['region_name']}" if info.get("region_name") else ""
+        lines.append(f'region = "{info["region"]}"{comment}')
+    elif info["provider"] == "electricitymaps":
+        lines.append(f'zone = "{info.get("zone")}"')
+        lines.append('# token = "..."   # from electricitymaps.com')
+    lines.append("min-renewable = 80")
+    return "\n".join(lines) + "\n"
+
+
 # ── Config ───────────────────────────────────────────────────────────────────
 def _dur(v, default: int) -> int:
     if v is None:
