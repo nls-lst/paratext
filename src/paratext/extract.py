@@ -64,6 +64,7 @@ def run(
     limit: int | None = None,
     use_structured: bool = True,
     skip_preflight: bool = False,
+    energy: dict | None = None,
 ) -> None:
     """Execute the extraction pipeline and write JSONL to `output`."""
     if not skip_preflight:
@@ -74,17 +75,17 @@ def run(
     if project.disable_thinking:
         extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
 
-    write_provenance_header(
-        output,
-        {
-            "project": project.name,
-            "schema_version": project.schema_version,
-            "prompt_hash": _prompt_hash(project.prompt),
-            "prompt": project.prompt,
-            "model": model,
-            "base_url": base_url,
-        },
-    )
+    header = {
+        "project": project.name,
+        "schema_version": project.schema_version,
+        "prompt_hash": _prompt_hash(project.prompt),
+        "prompt": project.prompt,
+        "model": model,
+        "base_url": base_url,
+    }
+    if energy is not None:
+        header["energy"] = energy  # carbon reading captured by --green gating
+    write_provenance_header(output, header)
     seen = read_processed_ids(output, id_field="id")
     if seen:
         logger.info("Resuming run — skipping %d already-processed sample(s)", len(seen))

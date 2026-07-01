@@ -6,6 +6,7 @@ Subcommands:
     package     Convert JSONL into a review dataset (samples.json + images/).
     review      Launch the local web UI to review a packaged dataset.
     export      Publish a reviewed round as a Hugging Face dataset.
+    carbon      Show current grid carbon/renewables (for --green scheduling).
     sample      Build a random N-image subset of a source directory (helper).
     config      Open the config file (``--show`` prints the resolved defaults).
     new         Scaffold a new project package (interactive).
@@ -123,6 +124,20 @@ def _do_extract(args: argparse.Namespace) -> None:
     # --output defaults to output/<project>.jsonl when unset.
     output = args.output or Path("output") / f"{args.project}.jsonl"
     args.output = output  # so callers (e.g. `run`) see the resolved path
+
+    # Carbon-aware gating: block until the grid is clean, and stamp the reading
+    # into provenance so `export` can report it.
+    energy = None
+    if getattr(args, "green", False):
+        from . import carbon
+
+        cfg = carbon.load_config(
+            min_renewable=getattr(args, "renewables_above", None),
+            max_carbon=getattr(args, "max_carbon", None),
+        )
+        reading = carbon.wait_for_clean(cfg)
+        energy = reading.to_provenance(scheduled_window=cfg.mode == "window")
+
     run_extract(
         get_project(args.project),
         source=Path(args.source),
@@ -133,6 +148,7 @@ def _do_extract(args: argparse.Namespace) -> None:
         limit=args.limit,
         use_structured=not args.no_structured,
         skip_preflight=args.skip_preflight,
+        energy=energy,
     )
 
 
@@ -240,6 +256,32 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── Carbon ────────────────────────────────────────────────────────────────
+def _cmd_carbon(args: argparse.Namespace) -> int:
+    from . import carbon
+
+    cfg = carbon.load_config(
+        min_renewable=args.renewables_above, max_carbon=args.max_carbon
+    )
+    if args.window:
+        if cfg.provider != "uk":
+            raise SystemExit("--window (forecast) is uk-only")
+        forecast = carbon.uk_forecast(cfg.region, cfg.window_hours)
+        block = max(1, round(cfg.window_run_hours * 2))
+        i, avg = carbon.cleanest_window(forecast, block)
+        now = carbon.current_reading(cfg)
+        print(f"Now:  {now.summary()}")
+        print(f"Greenest {cfg.window_run_hours:g}h window in next {cfg.window_hours}h: "
+              f"{forecast[i].summary()} (avg {avg:.0f} gCO2/kWh) starting {forecast[i].ts}")
+        return 0
+    r = carbon.current_reading(cfg)
+    mr, mc = cfg.effective_thresholds()
+    ok = r.is_clean(mr, mc)
+    print(r.summary())
+    print(f"Target: {cfg.target_str()} — {'MET ✓' if ok else 'not met'}")
+    return 0
+
+
 # ── Review ────────────────────────────────────────────────────────────────
 def _cmd_review(args: argparse.Namespace) -> int:
     from .review import serve
@@ -344,6 +386,12 @@ def _add_extract_args(p: argparse.ArgumentParser) -> None:
     )
     p.add_argument("--skip-preflight", action="store_true", default=None,
                    help="Skip the endpoint reachability/model check")
+    p.add_argument("--green", action="store_true", default=None,
+                   help="Wait for a clean grid before extracting (see [carbon] config)")
+    p.add_argument("--renewables-above", type=float, default=None, metavar="PCT",
+                   help="With --green: wait until renewables ≥ PCT%% (overrides config)")
+    p.add_argument("--max-carbon", type=float, default=None, metavar="GCO2",
+                   help="With --green: wait until intensity ≤ GCO2 gCO2/kWh (overrides config)")
 
 
 def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentParser]]:
@@ -401,6 +449,15 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
                     help=f"Port to serve on (config review-port, else {DEFAULT_PORT})")
     rv.add_argument("--no-open", action="store_true", help="Don't open a browser")
     rv.set_defaults(func=_cmd_review)
+
+    cb = sub.add_parser("carbon", help="Show current grid carbon/renewables (see [carbon] config)")
+    cb.add_argument("--window", action="store_true",
+                    help="Show the greenest forecast window instead of the current reading")
+    cb.add_argument("--renewables-above", type=float, default=None, metavar="PCT",
+                    help="Renewables threshold to test against (overrides config)")
+    cb.add_argument("--max-carbon", type=float, default=None, metavar="GCO2",
+                    help="Carbon-intensity threshold to test against (overrides config)")
+    cb.set_defaults(func=_cmd_carbon)
 
     s = sub.add_parser("sample", help="Symlink a random subset of a nested image tree")
     s.add_argument("--source", type=Path, required=True, help="Root of the nested image tree")

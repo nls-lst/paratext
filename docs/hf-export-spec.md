@@ -209,8 +209,9 @@ This ties the two features together and answers "is the card the right place?" �
   renewable / 120 gCO₂·kWh⁻¹, Carbon Intensity API; scheduled to greenest 2h
   window"). If no reading exists, the section is omitted.
 
-Until the carbon feature lands the field is simply absent; the export spec just
-**reserves the slot** so no card format change is needed later.
+**Implemented:** `run --green` (see `carbon.py`) records this `energy` block into
+provenance, and the export card renders an "Environmental provenance" section
+when present; absent otherwise.
 
 ### Grid zone: sub-national precision, declare-don't-detect
 

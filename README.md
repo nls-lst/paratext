@@ -56,6 +56,7 @@ UI automatically when the run finishes.
 | `paratext package <jsonl>` | Re-package an existing JSONL for review (no VLM calls). |
 | `paratext review <dataset-dir>` | Launch the inbuilt web UI to review a packaged dataset. |
 | `paratext export -p <project>` | Publish a reviewed round as a Hugging Face dataset. |
+| `paratext carbon` | Show the current grid carbon/renewables (for `--green` scheduling). |
 | `paratext sample --source <tree> --out <dir> -n 500` | Symlink a random image subset out of a nested tree. |
 | `paratext config [--show]` | Open `paratext.toml`; `--show` prints the resolved defaults. |
 | `paratext new [name]` | Scaffold a new project package (asks fields, prompt, source). |
@@ -69,11 +70,14 @@ rarely pass them — but every default can be overridden on the CLI.
 
 - **`run -p <project>`** — `--source DIR`, `--output FILE` (default
   `output/<project>.jsonl`), `--model ID`, `--base-url URL`, `--api-key KEY`,
-  `--limit N`, `--no-structured`, `--skip-preflight`, `--review-out DIR`
-  (overrides round auto-naming), `--round N` (force a round), `--fresh` (rebuild
-  the round, discarding its annotations), `--review` (open the UI when finished).
+  `--limit N`, `--no-structured`, `--skip-preflight`, `--green` (wait for a clean
+  grid; see below), `--review-out DIR` (overrides round auto-naming), `--round N`
+  (force a round), `--fresh` (rebuild the round, discarding its annotations),
+  `--review` (open the UI when finished).
 - **`extract -p <project>`** — same as `run` minus the review flags
-  (writes JSONL only).
+  (writes JSONL only); includes `--green`.
+- **`carbon`** — `--window` (show the greenest forecast window instead of the
+  current reading), `--renewables-above PCT`, `--max-carbon GCO2`.
 - **`package <jsonl>`** — `-p/--project` (inferred from the JSONL's provenance
   if omitted), `--out DIR` (default: the `review/<project>-r<N>` round for this
   prompt), `--round N`, `--fresh` (rebuild, discarding annotations).
@@ -161,6 +165,40 @@ license = "cc-by-4.0"        # required before any --public push
 ```
 
 Auth uses your Hugging Face token (`huggingface-cli login` or `HF_TOKEN`).
+
+## Green scheduling (`--green`)
+
+A batch sweep is a movable load, so you can wait for the grid to be clean before
+running. `paratext run --green` (or `extract --green`) blocks until renewables
+are high enough (or carbon low enough), then proceeds — and records the reading
+into provenance so `export` reports it on the dataset card.
+
+```bash
+paratext carbon                     # what's the grid doing right now?
+paratext carbon --window            # greenest window in the next 24h
+paratext run -p index-cards --green # wait for a clean grid, then run
+```
+
+Configure a `[carbon]` block (thresholds and, importantly, your **grid region** —
+far more precise than national; South Scotland is often ~85% wind vs ~35%
+GB-wide):
+
+```toml
+[carbon]
+provider = "uk"              # uk (no token, incl. regional + forecast)
+region   = "south-scotland"  # DNO region slug/id, or a UK outcode like "EH"
+min-renewable = 80           # wait until renewables ≥ 80% (or set max-carbon)
+mode = "poll"                # poll, or "window" to schedule to the greenest slot
+max-wait = "12h"             # give up waiting and run anyway after this
+```
+
+- **UK** (default) needs no token and supports regional + 48h forecast.
+  **Electricity Maps** (`provider = "electricitymaps"`, `zone`, `token`) covers
+  the globe (latest reading only; free token from their site).
+- The grid region is *declared*, not detected — a box can be reached both locally
+  and remotely, so paratext can't infer where compute runs. (A future
+  `paratext config` helper can IP-geolocate to *suggest* a region.)
+- Only meaningful when inference runs on the grid you name (e.g. a local VLM box).
 
 ## Configure
 

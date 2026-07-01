@@ -51,6 +51,16 @@ base-url = "http://localhost:8000/v1"   # any OpenAI-compatible VLM server
 source     = "data/cards"
 output     = "output/cards.jsonl"
 review-out = "review/cards"
+
+# Carbon-aware scheduling for `paratext run --green` (opt-in). Declare your grid
+# region — it's far more precise than national (e.g. South Scotland is often
+# ~85% wind vs ~35% GB-wide). `paratext carbon` shows the current reading.
+# [carbon]
+# provider = "uk"              # uk (no token) | electricitymaps (needs `token`)
+# region   = "south-scotland"  # DNO region slug/id, or a UK outcode like "EH"
+# min-renewable = 80           # wait until renewables ≥ 80% (or set max-carbon)
+# mode = "poll"                # poll | window (schedule to the greenest forecast)
+# max-wait = "12h"             # give up waiting and run anyway after this
 """
 
 # Keys the loader will recognise. Anything else in TOML/env is ignored so a
@@ -119,6 +129,17 @@ def load_defaults(project: str | None) -> dict:
             out[key] = os.environ[env_key]
 
     return out
+
+
+def env_or(key: str) -> str | None:
+    """Return the ``PARATEXT_<KEY>`` environment variable, or None."""
+    return os.environ.get(ENV_PREFIX + key.upper())
+
+
+def load_table(section: str) -> dict:
+    """Return a top-level ``[section]`` table (kebab→snake keys), or empty."""
+    t = _load_toml(local_config_path()).get(section)
+    return _kebab_to_snake(t) if isinstance(t, dict) else {}
 
 
 def load_project_section(project: str, section: str) -> dict:

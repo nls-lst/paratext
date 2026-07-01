@@ -208,6 +208,23 @@ def _dataset_card(
     acc_str = f"{acc:.1f}%" if acc is not None else "n/a"
     prompt = provenance.get("prompt", "")
 
+    energy = provenance.get("energy")
+    energy_section = ""
+    if energy:
+        bits = []
+        if energy.get("renewable_fraction") is not None:
+            bits.append(f"{energy['renewable_fraction'] * 100:.0f}% renewable")
+        if energy.get("carbon_gco2") is not None:
+            bits.append(f"{energy['carbon_gco2']:.0f} gCO₂/kWh")
+        summary = ", ".join(bits) or "recorded"
+        sched = " (scheduled to a low-carbon window)" if energy.get("scheduled_window") else ""
+        energy_section = (
+            f"\n## Environmental provenance\n\n"
+            f"Extraction ran on the **{energy.get('zone', 'unknown')}** grid at "
+            f"{summary}{sched}, per the {energy.get('provider', 'carbon')} data "
+            f"({energy.get('ts', 'n/a')}).\n"
+        )
+
     body = f"""# {pretty}
 
 Catalogue metadata extracted from digitised material with a vision-language model
@@ -243,7 +260,7 @@ and human-reviewed, produced with [paratext](https://github.com/nls-lst/paratext
 
 Produced by paratext. Each row carries `_prompt_hash`, `_schema_version`,
 `_round`, `_model`, and the reviewer's `_review_note`.
-
+{energy_section}
 ## Rights & license
 
 License: `{lic}`. Set a rights statement appropriate to your collection before

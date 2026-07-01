@@ -94,3 +94,17 @@ def test_dry_run_builds_card(tmp_path, monkeypatch):
     assert "license: cc-by-4.0" in card
     assert "extract stuff" in card  # prompt inlined
     assert "`image_type`" in card  # schema field table
+
+
+def test_card_renders_energy(tmp_path):
+    d = _mk_dataset(tmp_path)
+    prov = json.loads((d / "provenance.json").read_text())
+    prov["energy"] = {"provider": "uk", "zone": "South Scotland", "carbon_gco2": 5,
+                      "renewable_fraction": 0.85, "scheduled_window": True,
+                      "ts": "2026-07-02T01:00Z"}
+    (d / "provenance.json").write_text(json.dumps(prov))
+    hf_export.build(d, "cards", hf_export.ExportConfig(license="cc-by-4.0"), tmp_path / "out")
+    card = (tmp_path / "out" / "README.md").read_text()
+    assert "Environmental provenance" in card
+    assert "South Scotland" in card and "85% renewable" in card
+    assert "scheduled to a low-carbon window" in card
