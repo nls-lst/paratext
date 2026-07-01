@@ -1,6 +1,7 @@
 # Spec: `paratext export` — publish a reviewed round as a Hugging Face dataset
 
-Status: design (not yet implemented). Owner: NLS. Target: framework (`paratext`).
+Status: **v1 implemented** (`paratext export`, `hf_export.py`). This doc is the
+design + roadmap; sections marked "future"/"v2" are not yet built. Owner: NLS.
 
 ## Goal
 

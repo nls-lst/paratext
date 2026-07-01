@@ -55,6 +55,7 @@ UI automatically when the run finishes.
 | `paratext extract -p <project>` | Run the VLM, write JSONL only. |
 | `paratext package <jsonl>` | Re-package an existing JSONL for review (no VLM calls). |
 | `paratext review <dataset-dir>` | Launch the inbuilt web UI to review a packaged dataset. |
+| `paratext export -p <project>` | Publish a reviewed round as a Hugging Face dataset. |
 | `paratext sample --source <tree> --out <dir> -n 500` | Symlink a random image subset out of a nested tree. |
 | `paratext config [--show]` | Open `paratext.toml`; `--show` prints the resolved defaults. |
 | `paratext new [name]` | Scaffold a new project package (asks fields, prompt, source). |
@@ -76,6 +77,9 @@ rarely pass them — but every default can be overridden on the CLI.
 - **`package <jsonl>`** — `-p/--project` (inferred from the JSONL's provenance
   if omitted), `--out DIR` (default: the `review/<project>-r<N>` round for this
   prompt), `--round N`, `--fresh` (rebuild, discarding annotations).
+- **`export -p <project>`** — `--to <org/name>` (else `export.repo` in config),
+  `--round N` (default: latest), `--public` (default private; needs a license),
+  `--dry-run` (build locally, don't push).
 - **`review [data_dir]`** — `data_dir` defaults to `./review`; `--port N`
   (config `review-port`, else 5050), `--no-open`.
 - **`sample`** — `--source DIR` (required), `--out DIR` (required), `-n N`
@@ -116,12 +120,47 @@ prompt is what you iterate), and `run` names each dataset `review/<project>-r<N>
   (discarding its annotations).
 
 Reading feedback back into the prompt: each round's `annotations.db` (a SQLite
-file in the dataset dir) holds every reviewer verdict and per-field correction
-(the `corrections` column, JSON). While the server runs, `GET /api/stats` gives
-the round's accuracy and verdict counts, and `GET /api/export/<id>` returns a CSV
-of scored/flagged samples with notes. Query the db (or those endpoints), see
-which fields reviewers corrected most, and tighten those parts of `prompt.md`
-before the next round.
+file in the dataset dir) holds every reviewer verdict and free-text note. While
+the server runs, `GET /api/stats` gives the round's accuracy and verdict counts,
+and `GET /api/export/<id>` returns a CSV of scored/flagged samples with notes.
+Query the db (or those endpoints), see where the model struggles, and tighten
+those parts of `prompt.md` before the next round.
+
+## Export to Hugging Face
+
+Once a round is reviewed, `paratext export -p <project>` turns the
+human-approved items into a Hugging Face dataset — a training contribution for
+other institutions and a benchmark for other models over the same material. It
+reuses the round's images and writes an imagefolder + `metadata.jsonl` with an
+auto-generated dataset card (schema, model, prompt, review accuracy).
+
+```bash
+paratext export -p index-cards --dry-run     # build ./export/<round>/ and inspect
+paratext export -p index-cards               # push (private repo)
+paratext export -p index-cards --public      # public — requires a license (below)
+```
+
+- **Private by default.** `--public` is opt-in and is **refused without a
+  `license`** set in config — no accidental publishing, and image rights are the
+  publisher's call.
+- **Gold = approved items.** Only items a reviewer marked *good enough* become
+  labelled rows (the label is the verified model output); *needs tweaks* /
+  *not accurate* items carry their note but aren't labels. (Structured per-field
+  corrections, which would promote *needs tweaks* to gold, are a planned review
+  feature.)
+- Single-image projects (index-cards) are supported; multi-image projects
+  (monographs) are rejected for now.
+
+Configure per project:
+
+```toml
+[project.index-cards.export]
+repo    = "nls-lst/advocates-index-cards"
+license = "cc-by-4.0"        # required before any --public push
+# min-verdict = "good_enough"  include-negatives = false  annotators = "omit"
+```
+
+Auth uses your Hugging Face token (`huggingface-cli login` or `HF_TOKEN`).
 
 ## Configure
 

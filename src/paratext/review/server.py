@@ -303,6 +303,26 @@ def load_view(dataset: dict, samples: list[dict]) -> dict:
     return synthesise_view(dataset, samples)
 
 
+def review_stats(total: int, annotations: list[dict]) -> dict:
+    """Verdict counts + accuracy for a round. `needs_tweaks` counts as half
+    credit. Shared by the `/api/stats` endpoint and `paratext export`."""
+    n = lambda v: sum(1 for a in annotations if a["model_correct"] == v)  # noqa: E731
+    good, tweaks, bad = n("good_enough"), n("needs_tweaks"), n("not_accurate")
+    scored = good + tweaks + bad
+    return {
+        "total": total,
+        "annotated": sum(1 for a in annotations if a["model_correct"] is not None),
+        "flagged_marc": sum(1 for a in annotations if a["catalogue_correct"] == "flagged"),
+        "model": {
+            "good_enough": good,
+            "needs_tweaks": tweaks,
+            "not_accurate": bad,
+            "scored": scored,
+            "accuracy": ((good + tweaks * 0.5) / scored * 100) if scored else None,
+        },
+    }
+
+
 # ── HTTP handler ────────────────────────────────────────────────────────────
 _MIME = {
     ".html": "text/html",
@@ -443,31 +463,8 @@ class Handler(BaseHTTPRequestHandler):
         self._json(sample)
 
     def _api_stats(self, ds):
-        all_s = load_samples(ds)
-        ann = self.store.all(ds["name"])
-        scored_for = lambda v: sum(1 for a in ann if a["model_correct"] == v)  # noqa: E731
-        good, tweaks, bad = (
-            scored_for("good_enough"),
-            scored_for("needs_tweaks"),
-            scored_for("not_accurate"),
-        )
-        scored = good + tweaks + bad
-        self._json(
-            {
-                "dataset": ds["name"],
-                "schema": ds["schema"],
-                "total": len(all_s),
-                "annotated": sum(1 for a in ann if a["model_correct"] is not None),
-                "flagged_marc": sum(1 for a in ann if a["catalogue_correct"] == "flagged"),
-                "model": {
-                    "good_enough": good,
-                    "needs_tweaks": tweaks,
-                    "not_accurate": bad,
-                    "scored": scored,
-                    "accuracy": ((good + tweaks * 0.5) / scored * 100) if scored else None,
-                },
-            }
-        )
+        stats = review_stats(len(load_samples(ds)), self.store.all(ds["name"]))
+        self._json({"dataset": ds["name"], "schema": ds["schema"], **stats})
 
     def _api_table(self, ds):
         all_s = load_samples(ds)

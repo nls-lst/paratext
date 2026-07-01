@@ -121,6 +121,23 @@ def load_defaults(project: str | None) -> dict:
     return out
 
 
+def load_project_section(project: str, section: str) -> dict:
+    """Return a nested ``[project.<name>.<section>]`` table (kebab→snake keys).
+
+    Used for feature-specific config (e.g. ``export``) that has its own key
+    namespace rather than the flat RECOGNISED set. Empty dict if absent.
+    """
+    toml = _load_toml(local_config_path())
+    projects = toml.get("project")
+    if not isinstance(projects, dict):
+        return {}
+    proj = projects.get(project)
+    if not isinstance(proj, dict):
+        return {}
+    sub = proj.get(section)
+    return _kebab_to_snake(sub) if isinstance(sub, dict) else {}
+
+
 def coerce_paths(d: dict) -> dict:
     """Convert string source/output values to Path objects."""
     for key in ("source", "output", "review_out"):

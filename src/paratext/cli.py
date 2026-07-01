@@ -5,6 +5,7 @@ Subcommands:
     extract     Run the VLM over a directory of inputs, write JSONL.
     package     Convert JSONL into a review dataset (samples.json + images/).
     review      Launch the local web UI to review a packaged dataset.
+    export      Publish a reviewed round as a Hugging Face dataset.
     sample      Build a random N-image subset of a source directory (helper).
     config      Open the config file (``--show`` prints the resolved defaults).
     new         Scaffold a new project package (interactive).
@@ -204,6 +205,41 @@ def _cmd_package(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── Export ────────────────────────────────────────────────────────────────
+def _cmd_export(args: argparse.Namespace) -> int:
+    from . import hf_export
+
+    project = args.project
+    if not project:
+        raise SystemExit("export needs a project: pass -p <project>")
+    if args.round is not None:
+        dataset_dir = REVIEW_ROOT / f"{project}-r{args.round}"
+    else:
+        rounds = _round_dirs(project)
+        if not rounds:
+            raise SystemExit(
+                f"no reviewed rounds found for '{project}' under {REVIEW_ROOT}/ — "
+                f"run `paratext run -p {project}` and review it first"
+            )
+        dataset_dir = rounds[-1][1]
+    if not (dataset_dir / "samples.json").is_file():
+        raise SystemExit(f"not a packaged dataset: {dataset_dir}")
+
+    cfg = hf_export.load_config(project, repo=args.to, public=args.public)
+    summary = hf_export.run(dataset_dir, project, cfg, dry_run=args.dry_run)
+
+    excluded = ", ".join(f"{k}={v}" for k, v in sorted(summary.excluded.items())) or "none"
+    print(f"Dataset {summary.dataset}: {summary.gold} gold, {summary.negatives} negative(s)")
+    print(f"Excluded: {excluded}")
+    if args.dry_run:
+        print(f"\nDry run — built {summary.build_dir} (not pushed). "
+              f"Inspect it, then re-run without --dry-run to publish.")
+    else:
+        vis = "public" if cfg.public else "private"
+        print(f"\nPushed {vis} dataset → {summary.url}")
+    return 0
+
+
 # ── Review ────────────────────────────────────────────────────────────────
 def _cmd_review(args: argparse.Namespace) -> int:
     from .review import serve
@@ -345,6 +381,18 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     pk.add_argument("--fresh", action="store_true",
                     help="Rebuild the output dir from scratch, discarding its annotations")
     pk.set_defaults(func=_cmd_package)
+
+    ex = sub.add_parser("export", help="Publish a reviewed round as a Hugging Face dataset")
+    ex.add_argument("-p", "--project", choices=choices, default=None, help="Project to export")
+    ex.add_argument("--to", default=None,
+                    help="HF repo id (org/name); default: export.repo in config")
+    ex.add_argument("--round", type=int, default=None,
+                    help="Review round to export (default: the latest)")
+    ex.add_argument("--public", action="store_true",
+                    help="Publish publicly (default: private; requires a license in config)")
+    ex.add_argument("--dry-run", action="store_true",
+                    help="Build the dataset folder locally without pushing")
+    ex.set_defaults(func=_cmd_export)
 
     rv = sub.add_parser("review", help="Launch the local web UI to review datasets")
     rv.add_argument("data_dir", type=Path, nargs="?", default=REVIEW_ROOT,

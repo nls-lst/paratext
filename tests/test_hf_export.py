@@ -1,0 +1,96 @@
+"""HF export: gold selection, negatives, multi-image guard, license gate, card."""
+
+import json
+
+import pytest
+from PIL import Image
+
+from paratext import hf_export
+from paratext.review.server import Store
+
+
+def _mk_dataset(tmp_path, images_per_sample=1):
+    """A packaged round dir with 3 samples + an annotations.db (uses the bundled
+    `cards` project's schema)."""
+    d = tmp_path / "cards-r2"
+    (d / "images").mkdir(parents=True)
+    samples = []
+    for sid in ("a", "b", "c"):
+        imgs = []
+        for k in range(images_per_sample):
+            rel = f"images/{sid}/img{k}.jpg"
+            (d / rel).parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (8, 8), "white").save(d / rel, "JPEG")
+            imgs.append(rel)
+        samples.append(
+            {
+                "id": sid,
+                "document_id": sid,
+                "model_output": {"image_type": "index_card", "heading": f"H-{sid}"},
+                "images": imgs,
+                "prompt_hash": "deadbeef",
+            }
+        )
+    (d / "samples.json").write_text(json.dumps(samples))
+    (d / "provenance.json").write_text(
+        json.dumps({"model": "test-vlm", "schema_version": "v9", "prompt_hash": "deadbeef",
+                    "prompt": "extract stuff"})
+    )
+    store = Store(d / "annotations.db")
+    store.upsert("cards-r2", "a", {"model_correct": "good_enough"})
+    store.upsert("cards-r2", "b", {"model_correct": "not_accurate", "notes": "wrong heading"})
+    # "c" left unreviewed
+    return d
+
+
+def test_gold_is_good_enough_only(tmp_path):
+    d = _mk_dataset(tmp_path)
+    cfg = hf_export.ExportConfig()
+    summary = hf_export.build(d, "cards", cfg, tmp_path / "out")
+    assert summary.gold == 1
+    assert summary.negatives == 0
+    assert summary.excluded == {"not_accurate": 1, "unreviewed": 1}
+
+    rows = [json.loads(x) for x in (tmp_path / "out" / "metadata.jsonl").read_text().splitlines()]
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["_sample_id"] == "a" and r["_label_status"] == "verified"
+    assert r["heading"] == "H-a"  # model output becomes the gold label
+    assert r["_model"] == "test-vlm" and r["_schema_version"] == "v9"
+    assert (tmp_path / "out" / r["file_name"]).is_file()  # image copied
+
+
+def test_include_negatives(tmp_path):
+    d = _mk_dataset(tmp_path)
+    cfg = hf_export.ExportConfig(include_negatives=True)
+    summary = hf_export.build(d, "cards", cfg, tmp_path / "out")
+    assert summary.gold == 1 and summary.negatives == 1
+    rows = [json.loads(x) for x in (tmp_path / "out" / "metadata.jsonl").read_text().splitlines()]
+    neg = next(r for r in rows if r["_label_status"] == "rejected")
+    assert neg["heading"] is None  # nulled label
+    assert neg["_review_note"] == "wrong heading"
+
+
+def test_multi_image_project_rejected(tmp_path):
+    d = _mk_dataset(tmp_path, images_per_sample=2)
+    with pytest.raises(SystemExit, match="multi-image"):
+        hf_export.build(d, "cards", hf_export.ExportConfig(), tmp_path / "out")
+
+
+def test_public_without_license_blocked(tmp_path):
+    d = _mk_dataset(tmp_path)
+    cfg = hf_export.ExportConfig(public=True, license=None, repo="x/y")
+    with pytest.raises(SystemExit, match="without a license"):
+        hf_export.run(d, "cards", cfg, dry_run=False)
+
+
+def test_dry_run_builds_card(tmp_path, monkeypatch):
+    monkeypatch.setattr(hf_export, "EXPORT_ROOT", tmp_path / "export")
+    d = _mk_dataset(tmp_path)
+    cfg = hf_export.ExportConfig(license="cc-by-4.0")
+    summary = hf_export.run(d, "cards", cfg, dry_run=True)
+    assert summary.build_dir == tmp_path / "export" / "cards-r2"
+    card = (summary.build_dir / "README.md").read_text()
+    assert "license: cc-by-4.0" in card
+    assert "extract stuff" in card  # prompt inlined
+    assert "`image_type`" in card  # schema field table

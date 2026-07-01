@@ -7,7 +7,8 @@ collections. This orients AI coding agents; `README.md` is the human guide.
 
 - One CLI (`paratext`) runs the loop: `extract` (VLM → JSONL), `package`
   (JSONL → review dataset), or `run` (both, the common path); `review` launches
-  the inbuilt web UI over a packaged dataset. Plus `sample`, `config`, `new`.
+  the inbuilt web UI over a packaged dataset; `export` publishes a reviewed round
+  as a Hugging Face dataset. Plus `sample`, `config`, `new`.
   Typical: `paratext run -p <project> --limit 50` then `paratext review`. Most
   flags resolve from `paratext.toml`/env, so `-p <project>` is usually enough.
 - The inbuilt review (`paratext.review`) is a dependency-free stdlib
@@ -42,6 +43,11 @@ collections. This orients AI coding agents; `README.md` is the human guide.
 
 - Some models need `enable_thinking=False`; a project sets `disable_thinking`
   and `runner.py` passes it through.
+- `paratext export` (`hf_export.py`) publishes a reviewed round as a HF dataset
+  (imagefolder + `metadata.jsonl` + auto card) via the already-present
+  `huggingface_hub` — no `datasets` dep. v1 gold = `good_enough` rows only,
+  single-image projects only, private-by-default with a license gate for
+  `--public`. Full design + roadmap: `docs/hf-export-spec.md`.
 - `paratext.cards` is the reusable scanned-card toolkit: the deterministic
   `is_verso` pre-filter (pure NumPy) and the optional RetinaNet
   `load_card_detector()` (weights from the Hugging Face Hub, `[cards]` extra).

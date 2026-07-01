@@ -112,6 +112,11 @@ def package(
         else:
             records.append(r)
 
+    # Stash the run's provenance header next to the samples so downstream tools
+    # (e.g. `paratext export`) have the model/schema-version/prompt without the
+    # original JSONL.
+    (out / "provenance.json").write_text(json.dumps(provenance, indent=2, ensure_ascii=False))
+
     (out / "samples.json").write_text(json.dumps(records, indent=2, ensure_ascii=False))
     if quarantined:
         (out / "samples-ephemera.json").write_text(
