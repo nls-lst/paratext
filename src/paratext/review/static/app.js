@@ -40,14 +40,6 @@ function groupDatasets(datasets) {
   return Array.from(byBase.values()).sort((a, b) => a.base.localeCompare(b.base));
 }
 
-function datasetLabel(d) {
-  // Datasets that have multi-round siblings get a "round N" tag; lone
-  // datasets show no round label since "round 1 of 1" adds no info.
-  const siblings = state.datasets.filter((x) => x.base === d.base);
-  if (siblings.length <= 1) return d.base;
-  return `${d.base} · round ${d.round}`;
-}
-
 function api(path, params = {}) {
   // Use a relative path so this works whether the app is served at the root
   // or behind a reverse-proxy prefix (e.g. /verify/). Building via `new URL`
@@ -153,28 +145,55 @@ function entriesBlock(field, entries) {
 }
 
 function renderHeader() {
-  // Insert a "Change dataset" link into the nav once.
   const nav = document.querySelector("nav[data-topnav]");
   if (!nav) return;
+
+  // Gate Review/Stats until a dataset is chosen — with no selection they just
+  // fall back to the picker (looking like dead buttons).
+  const gated = state.dataset ? "" : "none";
+  for (const id of ["nav-review", "nav-stats"]) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = gated;
+  }
+
+  // A project + round picker in the nav, so you can switch datasets without
+  // returning to the homepage. Shown whenever there's more than one to pick.
   let host = document.getElementById("dataset-picker-host");
   if (!host) {
     host = document.createElement("span");
     host.id = "dataset-picker-host";
     nav.insertBefore(host, document.getElementById("progress"));
   }
-  const groups = groupDatasets(state.datasets);
-  if (groups.length > 1 && state.dataset) {
-    const d = state.datasets.find((x) => x.name === state.dataset);
-    const label = d ? datasetLabel(d) : state.dataset;
-    const archivedTag = state.readOnly
-      ? ` <small style="color:var(--muted-foreground);">(archived)</small>`
-      : "";
-    host.innerHTML = `<a href="#/select" class="button outline small" style="margin-left:.5rem;">
-      <strong>${escapeHtml(label)}</strong>${archivedTag} ↻
-    </a>`;
-  } else {
+  if (state.datasets.length <= 1) {
     host.innerHTML = "";
+    return;
   }
+
+  const options = groupDatasets(state.datasets)
+    .map((g) => {
+      const opt = (d, label) =>
+        `<option value="${escapeHtml(d.name)}"${d.name === state.dataset ? " selected" : ""}>` +
+        `${escapeHtml(label)}</option>`;
+      if (g.rounds.length === 1) return opt(g.rounds[0], g.base);
+      const rounds = g.rounds
+        .map((d) => opt(d, `round ${d.round}${d.active === false ? " (archived)" : ""}`))
+        .join("");
+      return `<optgroup label="${escapeHtml(g.base)}">${rounds}</optgroup>`;
+    })
+    .join("");
+  const placeholder = state.dataset
+    ? ""
+    : `<option value="" selected disabled>Choose a project…</option>`;
+  host.innerHTML = `<select id="nav-dataset" class="small"
+      style="margin-left:.5rem; max-width:16rem; display:inline-block; width:auto;">
+      ${placeholder}${options}
+    </select>`;
+  document.getElementById("nav-dataset").addEventListener("change", (e) => {
+    if (!e.target.value) return;
+    setDataset(e.target.value);
+    if (currentRoute() === "select") location.hash = "#/review";
+    route();
+  });
 }
 
 function renderPicker() {
