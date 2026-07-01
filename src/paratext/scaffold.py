@@ -109,7 +109,8 @@ def _ask(question: str, default: bool) -> bool:
 
 def init(name: str | None = None) -> int:
     """Interactive scaffold. Asks input type + (for images) verso/crop, writes
-    the project files under ./<module>/, and prints the entry-point line."""
+    the project files under ./<module>/, offers to add a paratext.toml config
+    entry, and prints the register + run steps."""
     name = name or input("Project name: ").strip()
     if not name:
         raise SystemExit("a project name is required")
@@ -136,9 +137,54 @@ def init(name: str | None = None) -> int:
 
     ep_name = mod.replace("_", "-")
     print(f"\nCreated ./{mod}/ (schema.py + prompt.md + __init__.py).")
-    print("\nRegister it by adding this to your pyproject.toml, then reinstall:\n")
-    print('  [project.entry-points."paratext.projects"]')
-    print(f'  {ep_name} = "{mod}:PROJECT"\n')
-    print(f"Then edit {mod}/schema.py and {mod}/prompt.md, and run "
-          f"`paratext run -p {ep_name}`.")
+
+    _offer_config(ep_name)
+
+    print("\nNext steps:")
+    print("  1. Register the project — add to your pyproject.toml:\n")
+    print('       [project.entry-points."paratext.projects"]')
+    print(f'       {ep_name} = "{mod}:PROJECT"\n')
+    print("  2. Reinstall so it's discovered:  uv sync   (or: pip install -e .)")
+    print(f"  3. Edit {mod}/prompt.md and {mod}/schema.py (keep them in step).")
+    print(f"  4. Run it:  paratext run -p {ep_name}")
     return 0
+
+
+def _offer_config(ep_name: str) -> None:
+    """Optionally write a `[project.<name>]` block (and a top-level endpoint if the
+    config has none) to paratext.toml, so the project is runnable without a
+    separate `paratext config` trip."""
+    import tomllib
+
+    from .config import local_config_path
+
+    if not _ask(f"Add a paratext.toml config entry for '{ep_name}' now?", default=True):
+        return
+
+    path = local_config_path()
+    existing = path.read_text() if path.exists() else ""
+    parsed = tomllib.loads(existing) if existing.strip() else {}
+    if ep_name in (parsed.get("project") or {}):
+        print(f"  paratext.toml already has [project.{ep_name}] — leaving it as is.")
+        return
+
+    source = input("  Source directory (images or PDFs) []: ").strip()
+
+    block: list[str] = []
+    if not existing.strip():
+        block.append("# paratext config")
+    if not any(k in parsed for k in ("base-url", "base_url")):
+        base = input("  VLM base URL [http://localhost:8000/v1]: ").strip() \
+            or "http://localhost:8000/v1"
+        model = input("  Model id served by that endpoint []: ").strip()
+        block.append(f'base-url = "{base}"')
+        if model:
+            block.append(f'model = "{model}"')
+        block.append("")
+    block.append(f"[project.{ep_name}]")
+    block.append(f'source = "{source}"' if source else '# source = "path/to/your/data"')
+
+    sep = "\n" if existing.strip() else ""
+    with path.open("a") as f:
+        f.write(sep + "\n".join(block) + "\n")
+    print(f"  Wrote [project.{ep_name}] to {path}.")

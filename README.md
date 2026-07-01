@@ -28,17 +28,21 @@ requires one (see Configure).
 ## Quickstart
 
 ```bash
-# 1. Scaffold a project (asks about input type, verso filter, card cropping).
+# 1. Scaffold a project. Asks input type, fields, prompt — and offers to write
+#    the paratext.toml config entry (source dir + endpoint) for you.
 paratext new my-cards
 
-# 2. Register it (add the printed entry-point line to your pyproject.toml, then
-#    reinstall) and point the config at your data.
-paratext config                       # opens paratext.toml in $EDITOR
+# 2. Register it: add the printed entry-point line to your pyproject.toml, then
+#    reinstall so it's discovered.
+uv sync                               # or: pip install -e .
 
 # 3. Run extraction + packaging in one go, then review in the browser.
 paratext run -p my-cards --limit 50
 paratext review                       # serves ./review — all projects
 ```
+
+`paratext config` opens `paratext.toml` in your editor if you need to tweak it
+later (endpoint, model, per-project source).
 
 `run` writes the extraction JSONL and a `review/<project>-r<N>/` dataset
 (`samples.json` + `images/` + `view.json`) — the `-r<N>` is the review **round**
