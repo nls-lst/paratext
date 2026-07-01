@@ -20,8 +20,9 @@ collections. This orients AI coding agents; `README.md` is the human guide.
   `__init__.py` which wires them to a `paratext.sources` adapter
   (`image_source`/`pdf_source`) into a `PROJECT`. The bundled generic starter is
   `cards`; `paratext new` scaffolds this layout, offers to write the project's
-  `[project.<name>]` config block (`scaffold._offer_config`), and prints the
-  entry-point registration + reinstall + run steps.
+  `[project.<name>]` config block (`scaffold._offer_config`), then registers the
+  entry point in pyproject.toml and runs `uv sync` automatically
+  (`scaffold._register_and_sync`; `--no-install` skips it).
 - Output is JSONL with a `_provenance` header (git commit, prompt hash, model,
   schema version, timestamp). Resumable: re-running with the same `--output`
   skips ids already present.

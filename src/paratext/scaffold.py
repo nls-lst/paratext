@@ -107,10 +107,11 @@ def _ask(question: str, default: bool) -> bool:
     return ans in ("y", "yes")
 
 
-def init(name: str | None = None) -> int:
+def init(name: str | None = None, *, install: bool = True) -> int:
     """Interactive scaffold. Asks input type + (for images) verso/crop, writes
     the project files under ./<module>/, offers to add a paratext.toml config
-    entry, and prints the register + run steps."""
+    entry, then (unless ``install`` is False) registers the entry point in
+    pyproject.toml and runs ``uv sync``."""
     name = name or input("Project name: ").strip()
     if not name:
         raise SystemExit("a project name is required")
@@ -139,7 +140,7 @@ def init(name: str | None = None) -> int:
     print(f"\nCreated ./{mod}/ (schema.py + prompt.md + __init__.py).")
 
     _offer_config(ep_name)
-    registered = _offer_register(mod, ep_name)
+    registered = _register_and_sync(mod, ep_name, install)
 
     print("\nNext steps:")
     n = 1
@@ -172,14 +173,16 @@ def _insert_entry_point(pyproject: Path, text: str, ep_name: str, mod: str) -> b
     return True
 
 
-def _offer_register(mod: str, ep_name: str) -> bool:
-    """If a pyproject.toml is present, offer to register the entry point and run
-    `uv sync`. Returns True once the project is registered."""
+def _register_and_sync(mod: str, ep_name: str, install: bool) -> bool:
+    """Register the entry point in pyproject.toml and run `uv sync` — the
+    mechanical steps to make the project runnable, done without prompting. Skipped
+    by `--no-install` or when there's no pyproject.toml. Returns True if
+    registered."""
     import tomllib
 
     pyproject = Path.cwd() / "pyproject.toml"
-    if not pyproject.exists():
-        return False  # no package to install into; fall back to printed steps
+    if not install or not pyproject.exists():
+        return False  # nothing to install into; init() prints the manual steps
     text = pyproject.read_text()
     try:
         parsed = tomllib.loads(text)
@@ -189,34 +192,30 @@ def _offer_register(mod: str, ep_name: str) -> bool:
 
     if ep_name in (eps or {}):
         print(f"  '{ep_name}' is already registered in pyproject.toml.")
+    elif _insert_entry_point(pyproject, text, ep_name, mod):
+        print(f"  Registered '{ep_name}' in pyproject.toml.")
     else:
-        if not _ask(f"Register '{ep_name}' in pyproject.toml now?", default=True):
-            return False
-        if not _insert_entry_point(pyproject, text, ep_name, mod):
-            print("  Couldn't safely edit pyproject.toml — add the entry point by hand.")
-            return False
-        print(f"  Registered '{ep_name}' in {pyproject.name}.")
+        print("  Couldn't safely edit pyproject.toml — add the entry point by hand.")
+        return False
 
-    if _ask("Reinstall now so paratext can discover it (uv sync)?", default=True):
-        import shutil
-        import subprocess
+    import shutil
+    import subprocess
 
-        if shutil.which("uv"):
-            subprocess.call(["uv", "sync"])
-            # Confirm it's actually importable/discovered (catches src-layout
-            # packages where a module in the repo root isn't installed).
-            check = subprocess.run(
-                ["uv", "run", "python", "-c",
-                 f"from paratext.projects import project_names as p; "
-                 f"import sys; sys.exit(0 if '{ep_name}' in p() else 1)"],
-            )
-            if check.returncode == 0:
-                print(f"  Verified: '{ep_name}' is discovered by paratext.")
-            else:
-                print(f"  Note: '{ep_name}' isn't discovered yet — make sure {mod}/ is "
-                      "part of your installed package (e.g. under the package root).")
-        else:
-            print("  uv not found — run `pip install -e .` to reinstall.")
+    if shutil.which("uv"):
+        print("  Reinstalling (uv sync)…")
+        subprocess.call(["uv", "sync"])
+        # Confirm it's actually importable/discovered (catches src-layout packages
+        # where a module in the repo root isn't installed).
+        check = subprocess.run(
+            ["uv", "run", "python", "-c",
+             f"from paratext.projects import project_names as p; "
+             f"import sys; sys.exit(0 if '{ep_name}' in p() else 1)"],
+        )
+        if check.returncode != 0:
+            print(f"  Note: '{ep_name}' isn't discovered yet — make sure {mod}/ is "
+                  "part of your installed package (e.g. under the package root).")
+    else:
+        print("  uv not found — run `pip install -e .` to reinstall.")
     return True
 
 

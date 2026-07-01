@@ -28,9 +28,10 @@ requires one (see Configure).
 ## Quickstart
 
 ```bash
-# 1. Scaffold a project. Asks input type, fields, prompt, then offers to write
-#    the paratext.toml config (source + endpoint), register the entry point in
-#    your pyproject.toml, and run `uv sync` — so it's ready to run.
+# 1. Scaffold a project. Asks input type, fields, prompt, offers to write the
+#    paratext.toml config (source + endpoint), then registers the entry point in
+#    your pyproject.toml and runs `uv sync` — so it's ready to run.
+#    (--no-install to just scaffold the files.)
 paratext new my-cards
 
 # 2. Run extraction + packaging in one go, then review in the browser.

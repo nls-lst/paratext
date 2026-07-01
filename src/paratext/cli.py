@@ -387,7 +387,7 @@ def _suggest_carbon_region() -> None:
 def _cmd_new(args: argparse.Namespace) -> int:
     from .scaffold import init
 
-    return init(args.name)
+    return init(args.name, install=not args.no_install)
 
 
 # ── Argparse wiring ───────────────────────────────────────────────────────
@@ -516,6 +516,8 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
 
     nw = sub.add_parser("new", aliases=["init"], help="Scaffold a new project package")
     nw.add_argument("name", nargs="?", default=None, help="Project name")
+    nw.add_argument("--no-install", action="store_true",
+                    help="Scaffold only — don't edit pyproject.toml or run uv sync")
     nw.set_defaults(func=_cmd_new)
 
     sub.add_parser("help", help="Show this help message")
