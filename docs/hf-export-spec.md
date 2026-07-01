@@ -45,12 +45,13 @@ config so the command stays tiny.
 [project.index-cards.export]
 repo        = "nls-lst/advocates-index-cards"
 license     = "cc-by-4.0"        # SPDX-ish id; REQUIRED before any public push
-min-verdict = "needs_tweaks"     # lowest verdict to include (see policy)
+min-verdict = "good_enough"      # lowest verdict to include as gold (see policy)
 include-negatives = false        # also export not_accurate rows as hard negatives
 annotators  = "omit"             # omit | pseudonym | name  (privacy default: omit)
 ```
 
-Defaults if the section is absent: `min-verdict = "needs_tweaks"`,
+Defaults if the section is absent: `min-verdict = "good_enough"` (the only
+gold-producing verdict until structured corrections exist),
 `include-negatives = false`, `annotators = "omit"`, `license` unset (blocks
 public).
 
@@ -66,35 +67,46 @@ public).
 
 ## Gold-label derivation (the crux)
 
-For each sample in the round, combine the model output with its annotation from
-`annotations.db` (keyed by `(dataset, sample_id)`):
+For each sample in the round, read its annotation from `annotations.db` (keyed by
+`(dataset, sample_id)`):
 
 - `model_correct` ∈ `{good_enough, needs_tweaks, not_accurate}` or `None`
-  (unreviewed).
-- `corrections` — generic JSON keyed by **schema field name**; a corrected value
-  replaces that whole field. (Matches how the review UI writes it: per-field,
-  whole-value.)
+  (unreviewed) — the reviewer's verdict.
+- `notes` — a **free-text general comment** (this is how staff actually interact
+  today; a streamlined single box, not per-field edits).
+- `corrections` — a JSON-blob column keyed by field name that *exists* in the
+  store but is **not populated by the current review UI** (there is no
+  structured per-field correction control yet). Treat it as future-only.
 
-Gold value = `model_output` overlaid with `corrections`
-(`{**model_output, **corrections}` at the field level).
+**v1 reality (no structured corrections):** we cannot synthesise a corrected
+label from a free-text note, so the clean gold set is the **`good_enough`** rows
+— model output a human verified as correct as-is. `needs_tweaks`/`not_accurate`
+have a note saying *something* is off but not *what the right answer is*, so they
+are not labelled examples.
 
-Inclusion policy:
+Inclusion policy (v1):
 
-| Verdict | Corrections? | Action | `_label_status` |
-|---|---|---|---|
-| `good_enough` | — | include, gold = model output (+any corrections) | `verified` |
-| `needs_tweaks` | yes | include, gold = merged | `corrected` |
-| `needs_tweaks` | **no** | **exclude** (label untrustworthy), count `needs_tweaks_uncorrected` | — |
-| `not_accurate` | — | exclude by default; with `include-negatives`, include gold=merged-or-null | `rejected` |
-| unreviewed (`None`) | — | exclude (only human-checked rows ship) | — |
+| Verdict | Action | `_label_status` |
+|---|---|---|
+| `good_enough` | include; gold = model output as-is | `verified` |
+| `needs_tweaks` | exclude from gold; optionally emit to a **review queue** with its note | — |
+| `not_accurate` | exclude; with `include-negatives`, emit as a hard negative (gold = null) + note | `rejected` |
+| unreviewed (`None`) | exclude (only human-checked rows ship) | — |
 
-`min-verdict` gates the ordinal (`good_enough` > `needs_tweaks`): setting it to
-`good_enough` ships only fully-approved rows; the default `needs_tweaks` also
-ships human-corrected rows. `needs_tweaks`-without-corrections is *always*
-excluded regardless of `min-verdict`.
+So `min-verdict` effectively defaults to `good_enough` in v1. The reviewer's
+`notes` ride along on every exported/queued row as `_review_note` — useful
+context even when the row isn't gold.
 
-The `--dry-run` summary prints these counts (included / corrected / excluded by
-reason) so the operator sees exactly what would publish.
+**Future upgrade (needs a review-UI feature first):** add a structured per-field
+correction control to the review app that writes the `corrections` blob
+(`{field: corrected_value}`). Then `needs_tweaks` rows become mergeable gold
+(`{**model_output, **corrections}`), `_label_status = "corrected"`, and
+`min-verdict = "needs_tweaks"` starts including them. The export format below
+already reserves `_label_status`/`_corrected_fields` so this needs no card change
+— it just starts populating them. **Out of scope for the first export version.**
+
+The `--dry-run` summary prints the counts (gold / queued / excluded by reason) so
+the operator sees exactly what would publish.
 
 ## Repository layout (imagefolder + metadata.jsonl)
 
@@ -116,9 +128,9 @@ Dependency-free; the Hub auto-renders it as a browsable dataset.
   "heading_type": "person",
   "ms_no": "5538",
   "entries": [{"ms_no": "5538", "folios": ["f.1"], "description": "..."}],
-  "_label_status": "corrected",
-  "_verdict": "needs_tweaks",
-  "_corrected_fields": ["heading", "ms_no"],
+  "_label_status": "verified",
+  "_verdict": "good_enough",
+  "_review_note": "",
   "_sample_id": "000123",
   "_document_id": "000123",
   "_prompt_hash": "3af1c2e9b0d4",
@@ -129,9 +141,10 @@ Dependency-free; the Hub auto-renders it as a browsable dataset.
 ```
 
 The schema fields are top-level columns (so the Hub shows them as dataset
-columns); paratext-internal provenance is `_`-prefixed. `_corrected_fields`
-(which fields the human changed) is deliberately surfaced — it's gold for
-error-analysis and for the card's "where the model struggles" section.
+columns); paratext-internal provenance is `_`-prefixed. `_review_note` carries
+the reviewer's free-text comment. `_corrected_fields` (which fields a human
+changed) is reserved for the future structured-corrections upgrade and is absent
+in v1.
 
 **Multi-image records** (monographs: several pages per document; card runs that
 continue across cards): `file_name` = the primary/first image; any extras go in
@@ -166,9 +179,9 @@ Body sections, all populated from data we already track:
 2. **Schema** — field table (name, type, description) rendered from the Pydantic
    model (reuse the `view`/schema introspection that already builds `view.json`).
 3. **How it was labelled** — model id, prompt hash (+ the prompt text or a link),
-   the review process, the verdict/inclusion policy, headline **accuracy** and
-   verdict counts (reuse the review server's `_api_stats` computation), and the
-   most-frequently `_corrected_fields`.
+   the review process (staff verdict + free-text note; no per-field corrections
+   in v1), the inclusion policy (gold = `good_enough`), and headline **accuracy**
+   and verdict counts (reuse the review server's `_api_stats` computation).
 4. **Provenance** — paratext version, git commit, schema version, round number,
    extraction date range.
 5. **Environmental provenance** *(if recorded — see below)* — grid zone, average
@@ -196,17 +209,39 @@ This ties the two features together and answers "is the card the right place?" �
 Until the carbon feature lands the field is simply absent; the export spec just
 **reserves the slot** so no card format change is needed later.
 
-### Local vs. remote endpoint (open question, answered: *declare, don't detect*)
+### Grid zone: sub-national precision, declare-don't-detect
 
-There's no reliable way to auto-detect whether a `base-url` is local — the same
-box is reachable as `localhost:8000` and `api.ai.nls.uk`. So don't try. Instead,
-carbon-aware behaviour is opt-in **by declaring the grid zone** in config
-(`[carbon] zone = "GB"`). Presence of a zone = "I know where my compute runs;
-gate/record against this grid." For a remote endpoint whose datacenter is
-elsewhere, the operator sets the zone to that datacenter's grid. The
-local/remote distinction dissolves into a single value the operator owns.
-(Optional nicety: warn if `base-url` host isn't loopback and no zone override is
-set — but never guess.)
+Precision matters: NLS's box sits in the **South Scotland** DNO region, which is
+exactly why the grid was so wind-heavy. Coarse "GB" would miss that. The UK
+Carbon Intensity API has a **regional** endpoint — 14 GB DNO regions (North
+Scotland and South Scotland are separate) via `/regional/regionid/{id}` or
+`/regional/postcode/{outcode}` (e.g. `EH`) — so we can and should pin the region.
+
+There's no reliable way to auto-detect whether a `base-url` is local (the same
+box is `localhost:8000` and `api.ai.nls.uk`), so carbon-aware is opt-in by
+declaring the region in config:
+
+```toml
+[carbon]
+provider = "uk"            # uk (Carbon Intensity) | electricitymaps | watttime
+region   = "south-scotland"  # or a UK outcode like "EH"; sub-national for uk
+```
+
+**IP → region: derive-to-*suggest*, not at runtime.** We can offer a convenience
+in `paratext config`/setup: call an IP-geolocation service (ipinfo/ip-api) on the
+box's public IP → lat-long/outcode → map to the Carbon Intensity region, and
+**propose** it ("looks like South Scotland — use this?"). The operator confirms
+and it's written to config once. We deliberately do **not** geolocate silently at
+run time, because:
+
+- Server IP-geo often reflects the ISP/hosting registration, not the physical
+  site, and can't reliably split North vs. South Scotland — the very precision we
+  want. A wrong guess would silently mislabel the dataset's energy provenance.
+- It needs an external call + public IP; isolated networks break it.
+
+So: IP-geo is a first-run *suggestion* to make config easy; the committed
+`region` value is the source of truth. (Electricity Maps/WattTime zones are
+coarser than the UK regional API; for sub-national UK, prefer `provider = "uk"`.)
 
 ## Implementation notes
 
