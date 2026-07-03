@@ -286,7 +286,13 @@ def _cmd_carbon(args: argparse.Namespace) -> int:
 def _cmd_review(args: argparse.Namespace) -> int:
     from .review import serve
 
-    serve(args.data_dir, port=args.port, open_browser=not args.no_open)
+    serve(
+        args.data_dir,
+        port=args.port,
+        open_browser=not args.no_open,
+        host=args.host,
+        db_path=args.db,
+    )
     return 0
 
 
@@ -514,6 +520,11 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
                     help="A review root (default: ./review) or a single dataset dir")
     rv.add_argument("--port", type=int, default=DEFAULT_PORT,
                     help=f"Port to serve on (config review-port, else {DEFAULT_PORT})")
+    rv.add_argument("--host", default="127.0.0.1",
+                    help="Interface to bind (default: 127.0.0.1 — also correct behind "
+                         "nginx; use 0.0.0.0 to expose directly on the network)")
+    rv.add_argument("--db", type=Path, default=None,
+                    help="Annotations SQLite path (default: <data_dir>/annotations.db)")
     rv.add_argument("--no-open", action="store_true", help="Don't open a browser")
     rv.set_defaults(func=_cmd_review)
 

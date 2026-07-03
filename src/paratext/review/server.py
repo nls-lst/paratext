@@ -563,7 +563,13 @@ class Handler(BaseHTTPRequestHandler):
         )
 
 
-def serve(data_dir: Path, port: int = DEFAULT_PORT, open_browser: bool = True) -> None:
+def serve(
+    data_dir: Path,
+    port: int = DEFAULT_PORT,
+    open_browser: bool = True,
+    host: str = "127.0.0.1",
+    db_path: Path | None = None,
+) -> None:
     data_dir = Path(data_dir).resolve()
     if not data_dir.is_dir():
         raise SystemExit(
@@ -571,11 +577,16 @@ def serve(data_dir: Path, port: int = DEFAULT_PORT, open_browser: bool = True) -
             f"or pass a dataset directory: paratext review <dir>"
         )
     Handler.data_dir = data_dir
-    Handler.store = Store(data_dir / "annotations.db")
+    # Default the annotation store to <data_dir>/annotations.db; --db can point it
+    # elsewhere (e.g. an existing DB when swapping in for another review app).
+    Handler.store = Store(Path(db_path).resolve() if db_path else data_dir / "annotations.db")
     datasets = discover_datasets(data_dir)
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    url = f"http://127.0.0.1:{port}"
-    print(f"paratext review on {url}")
+    httpd = ThreadingHTTPServer((host, port), Handler)
+    # When bound to all interfaces there's no single canonical URL; show
+    # localhost for clicking and note the bind address.
+    shown = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
+    url = f"http://{shown}:{port}"
+    print(f"paratext review on {url}" + (f"  (bound to {host}:{port})" if shown != host else ""))
     names = ", ".join(d["name"] for d in datasets) or "none"
     print(
         f"  data dir: {data_dir}  ({len(datasets)} dataset(s): {names})"

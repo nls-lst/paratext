@@ -66,3 +66,40 @@ def test_synthesise_view_infers_types_and_layout(tmp_path):
     types = {f["key"]: f["type"] for f in model_panel["fields"]}
     # `entries` is empty in the first sample but an object-list in the second
     assert types == {"title": "string", "flagged": "bool", "entries": "entries"}
+
+
+def test_serve_honours_host_and_db(tmp_path, monkeypatch):
+    # serve() should bind the requested host/port and put the annotation store at
+    # the given --db path (rather than the default <data_dir>/annotations.db).
+    import json as _json
+
+    from paratext.review import server as srv
+
+    (tmp_path / "samples.json").write_text(_json.dumps([{"id": "1", "schema": "demo"}]))
+    captured = {}
+
+    class FakeHTTPD:
+        def __init__(self, addr, handler):
+            captured["addr"] = addr
+
+        def serve_forever(self):
+            raise KeyboardInterrupt  # unblock serve() immediately
+
+    monkeypatch.setattr(srv, "ThreadingHTTPServer", FakeHTTPD)
+    db = tmp_path / "custom" / "annotations.db"
+    db.parent.mkdir()
+    srv.serve(tmp_path, port=4000, open_browser=False, host="0.0.0.0", db_path=db)
+
+    assert captured["addr"] == ("0.0.0.0", 4000)
+    assert db.exists()  # store created at the custom path
+    assert not (tmp_path / "annotations.db").exists()  # not the default location
+
+
+def test_review_cli_host_db_flags_and_defaults():
+    import paratext.cli as cli
+
+    parser, *_ = cli._build_parser()
+    a = parser.parse_args(["review", "--host", "0.0.0.0", "--db", "/tmp/x.db", "somedir"])
+    assert a.host == "0.0.0.0" and str(a.db) == "/tmp/x.db"
+    d = parser.parse_args(["review", "somedir"])
+    assert d.host == "127.0.0.1" and d.db is None  # safe defaults (local + nginx)
