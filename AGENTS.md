@@ -9,7 +9,8 @@ collections. This orients AI coding agents; `README.md` is the human guide.
   (JSONL → review dataset), or `run` (both, the common path); `review` launches
   the inbuilt web UI over a packaged dataset; `export` publishes a reviewed round
   as a Hugging Face dataset; `carbon` reports grid intensity for `--green`
-  scheduling. Plus `sample`, `config`, `new`.
+  scheduling. Plus `sample`, `config`, `new`, and `guide` (prints this document
+  plus the installed projects, so an agent can self-orient from the PATH).
   Typical: `paratext run -p <project> --limit 50` then `paratext review`. Most
   flags resolve from `paratext.toml`/env, so `-p <project>` is usually enough.
 - The inbuilt review (`paratext.review`) is a dependency-free stdlib

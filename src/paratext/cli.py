@@ -10,6 +10,7 @@ Subcommands:
     sample      Build a random N-image subset of a source directory (helper).
     config      Open the config file (``--show`` prints the resolved defaults).
     new         Scaffold a new project package (interactive).
+    guide       Print the agent guide (orientation for LLMs/agents).
 
 Most values resolve from ``paratext.toml`` or the environment, so once a project
 is configured ``paratext run -p <project>`` is all you need. See paratext.config.
@@ -390,6 +391,29 @@ def _cmd_new(args: argparse.Namespace) -> int:
     return init(args.name, install=not args.no_install)
 
 
+# ── Guide (agent orientation) ────────────────────────────────────────────────
+def _cmd_guide(args: argparse.Namespace) -> int:
+    """Print the bundled agent guide, then the installed projects — so an agent
+    that finds `paratext` on PATH can self-orient without the source checkout.
+
+    The guide is packaged as ``paratext/AGENTS.md`` (the repo-root AGENTS.md,
+    symlinked into the package) so it stays in step with the code it describes.
+    """
+    from importlib.resources import files
+
+    guide = (files("paratext") / "AGENTS.md").read_text(encoding="utf-8")
+    print(guide.rstrip())
+
+    names = project_names()
+    print("\n## Installed projects\n")
+    if names:
+        for name in names:
+            print(f"- `{name}` — run: `paratext run -p {name}`")
+    else:
+        print("- (none installed) — scaffold one with `paratext new`")
+    return 0
+
+
 # ── Argparse wiring ───────────────────────────────────────────────────────
 def _peek_project(argv: list[str] | None) -> str | None:
     """Find ``-p/--project <name>`` in argv before full parsing, so we can load
@@ -438,6 +462,9 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     p = argparse.ArgumentParser(
         prog="paratext",
         description="VLM metadata-extraction pipeline for digitised collections.",
+        epilog="Agents/LLMs: run `paratext guide` for a full orientation "
+               "(project model, workflow, conventions).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = p.add_subparsers(dest="cmd", metavar="<command>")
     choices = project_names() or None
@@ -519,6 +546,9 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     nw.add_argument("--no-install", action="store_true",
                     help="Scaffold only — don't edit pyproject.toml or run uv sync")
     nw.set_defaults(func=_cmd_new)
+
+    gd = sub.add_parser("guide", help="Print the agent guide (orientation for LLMs/agents)")
+    gd.set_defaults(func=_cmd_guide)
 
     sub.add_parser("help", help="Show this help message")
 
