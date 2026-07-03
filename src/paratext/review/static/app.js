@@ -75,7 +75,15 @@ function setDataset(name) {
 async function loadList(targetId = null) {
   const res = await fetch(api("api/samples"));
   state.samples = await res.json();
-  if (!state.samples.length) return;
+  if (!state.samples.length) {
+    document.getElementById("progress").textContent = "";
+    document.getElementById("view").innerHTML = `
+      <h2>${escapeHtml(state.view?.title ?? "Review")}</h2>
+      <p class="muted">Nothing to review in this dataset — every record was filtered
+        out during packaging (e.g. blank versos). Try another round from the picker.</p>
+      <p><a href="#/select" class="button outline small">← Back to datasets</a></p>`;
+    return;
+  }
   if (targetId !== null) {
     const idx = state.samples.findIndex((s) => String(s.id) === String(targetId));
     if (idx !== -1) {
@@ -169,30 +177,54 @@ function renderHeader() {
     return;
   }
 
-  const options = groupDatasets(state.datasets)
-    .map((g) => {
-      const opt = (d, label) =>
-        `<option value="${escapeHtml(d.name)}"${d.name === state.dataset ? " selected" : ""}>` +
-        `${escapeHtml(label)}</option>`;
-      if (g.rounds.length === 1) return opt(g.rounds[0], g.base);
-      const rounds = g.rounds
-        .map((d) => opt(d, `round ${d.round}${d.active === false ? " (archived)" : ""}`))
-        .join("");
-      return `<optgroup label="${escapeHtml(g.base)}">${rounds}</optgroup>`;
+  // Oat popover dropdown (ot-dropdown): a trigger button + a <menu popover>.
+  // Menu items carry popovertargetaction="hide" so a click closes the popover
+  // natively; the change listener handles selection.
+  const MENU_ID = "nav-dataset-menu";
+  const groups = groupDatasets(state.datasets);
+  const roundLabel = (d) => `round ${d.round}${d.active === false ? " (archived)" : ""}`;
+  const item = (d, label) =>
+    `<button role="menuitem" class="ghost" data-dataset="${escapeHtml(d.name)}"
+       popovertarget="${MENU_ID}" popovertargetaction="hide"
+       style="display:block; width:100%; text-align:left;${
+         d.name === state.dataset ? " font-weight:600;" : ""
+       }">${d.name === state.dataset ? "✓ " : ""}${escapeHtml(label)}</button>`;
+
+  const menuInner = groups
+    .map((g, gi) => {
+      const sep = gi > 0 ? "<hr>" : "";
+      if (g.rounds.length === 1) return sep + item(g.rounds[0], g.base);
+      const header = `<small role="presentation" style="display:block;
+        padding:.25rem .75rem; color:var(--muted-foreground);">${escapeHtml(g.base)}</small>`;
+      return sep + header + g.rounds.map((d) => item(d, roundLabel(d))).join("");
     })
     .join("");
-  const placeholder = state.dataset
-    ? ""
-    : `<option value="" selected disabled>Choose a project…</option>`;
-  host.innerHTML = `<select id="nav-dataset" class="small"
-      style="margin-left:.5rem; max-width:16rem; display:inline-block; width:auto;">
-      ${placeholder}${options}
-    </select>`;
-  document.getElementById("nav-dataset").addEventListener("change", (e) => {
-    if (!e.target.value) return;
-    setDataset(e.target.value);
-    if (currentRoute() === "select") location.hash = "#/review";
-    route();
+
+  // Label the trigger with the current selection (or a prompt to choose).
+  let triggerLabel = "Choose a project…";
+  if (state.dataset) {
+    const g = groups.find((g) => g.rounds.some((d) => d.name === state.dataset));
+    const d = g?.rounds.find((d) => d.name === state.dataset);
+    if (g && d) triggerLabel = g.rounds.length === 1 ? g.base : `${g.base} · ${roundLabel(d)}`;
+  }
+
+  host.innerHTML = `
+    <ot-dropdown style="margin-left:.5rem;">
+      <button popovertarget="${MENU_ID}" class="outline small"
+              style="display:inline-flex; align-items:center; gap:.35rem;">
+        ${escapeHtml(triggerLabel)}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <menu popover id="${MENU_ID}">${menuInner}</menu>
+    </ot-dropdown>`;
+
+  host.querySelectorAll("[data-dataset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setDataset(btn.dataset.dataset);
+      if (currentRoute() === "select") location.hash = "#/review";
+      route();
+    });
   });
 }
 
@@ -200,7 +232,9 @@ function renderPicker() {
   document.getElementById("progress").textContent = "";
   if (!state.datasets.length) {
     document.getElementById("view").innerHTML =
-      `<p>No datasets found. Place samples.json in <code>annotation-data/</code> or in a subdirectory under it.</p>`;
+      `<p>No datasets found. Run <code>paratext run -p &lt;project&gt;</code> to create a
+         review round under <code>review/</code>, then reload — or point
+         <code>paratext review</code> at a directory that contains one.</p>`;
     return;
   }
 
@@ -290,10 +324,17 @@ function render() {
 
   const panelsHtml = view.panels.map((p) => renderPanel(p, s, a)).join("");
   const heading = `<h2>${escapeHtml(view.title)} ${escapeHtml(String(s.document_id ?? s.id))}</h2>`;
+  const atFirst = state.index === 0;
+  const atLast = state.index === state.samples.length - 1;
+  // At the end of the pass the primary CTA becomes a route to the stats summary,
+  // rather than a Next button that silently no-ops.
+  const nextControl = atLast
+    ? `<a href="#/stats" class="button primary">Done — see stats →</a>`
+    : `<button id="next" class="primary">Next →</button>`;
   const nav = `
     <div class="controls">
-      <button id="prev">← Previous</button>
-      <button id="next" class="primary">Next →</button>
+      <button id="prev"${atFirst ? " disabled" : ""}>← Previous</button>
+      ${nextControl}
     </div>`;
   const readOnlyBanner = state.readOnly
     ? `<aside class="readonly-banner">
@@ -332,7 +373,7 @@ function render() {
     });
   });
   document.getElementById("prev").addEventListener("click", () => navigate(-1));
-  document.getElementById("next").addEventListener("click", () => navigate(1));
+  document.getElementById("next")?.addEventListener("click", () => navigate(1));
   const form = document.getElementById("tweaks-form");
   if (form) {
     if (state.readOnly) {
@@ -413,7 +454,19 @@ function escapeHtml(s) {
   );
 }
 
+// Capture the notes textarea into state before a re-render throws the DOM away,
+// so switching verdicts (or a verdict hotkey) mid-sentence doesn't lose the text.
+function flushNotes() {
+  const form = document.getElementById("tweaks-form");
+  if (!form || form.hidden || !state.current) return;
+  const a =
+    state.current.annotation ??
+    (state.current.annotation = { sample_id: String(state.current.id) });
+  for (const [k, v] of new FormData(form).entries()) a[k] = String(v);
+}
+
 async function mark(scope, value) {
+  flushNotes();
   const a = state.current.annotation ?? { sample_id: String(state.current.id) };
   if (scope === "catalogue")
     a.catalogue_correct = a.catalogue_correct === value ? null : value;
@@ -425,12 +478,8 @@ async function mark(scope, value) {
 
 async function save() {
   if (state.readOnly) return;
+  flushNotes();
   const a = state.current.annotation ?? { sample_id: String(state.current.id) };
-  const form = document.getElementById("tweaks-form");
-  if (form && !form.hidden) {
-    const data = new FormData(form);
-    for (const [k, v] of data.entries()) a[k] = String(v);
-  }
   const res = await fetch(api(`api/annotations/${state.current.id}`), {
     method: "POST",
     headers: { "content-type": "application/json" },
