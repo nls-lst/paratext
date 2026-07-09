@@ -320,6 +320,14 @@ pass a `view=View(...)` to curate the display, and the optional hooks `curate`,
 `build_record`, `ground_truth` (and a custom `materialise_images` or
 `iter_samples`) for drop/quarantine rules, ground truth, etc.
 
+Your fields end up named in all three files — schema (structure), prompt
+(instructions), and View (display) — with no automatic link between them. Keep
+them in step by calling `audit_project(PROJECT)` from a test: it checks every View
+field exists in the schema and every model field is named in the prompt. Put
+behaviour in `prompt.md`; keep the schema's `Field(description=...)` short and
+structural, since those descriptions are sent to the model too and shouldn't
+restate the prompt.
+
 ## Development
 
 Working from a checkout rather than an installed release:
