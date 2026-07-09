@@ -1,14 +1,15 @@
 # paratext
 
-A small, plugin-based pipeline for extracting catalogue metadata from digitised
-library and archive collections with a vision-language model (VLM), then
-packaging the results for human review.
+A modular, project-based pipeline for extracting catalogue metadata from
+digitised library and archive collections with a vision-language model (VLM),
+then packaging the results for human review.
 
 One command (`paratext`) does the whole loop: run a VLM over a directory of
 images or PDFs, write resumable JSONL with provenance, and package it into a
-review dataset. Each **project** is a plug-in — its own prompt, output schema,
-and sample iteration — so the same code path runs a 50-item pilot and a
-250,000-item sweep; only `--limit` differs.
+review dataset. Each **project** is a self-contained module — its own prompt,
+output schema, and sample iteration, added without forking the framework — so the
+same code path runs a 50-item pilot and a 250,000-item sweep; only `--limit`
+differs.
 
 ## Install
 
@@ -24,6 +25,17 @@ The VLM endpoint is any OpenAI-compatible server (e.g. Lemonade, vLLM,
 llama.cpp). The base URL defaults to `http://localhost:8000/v1`; override it in
 `paratext.toml` or via `PARATEXT_BASE_URL`. Set `api-key` if your endpoint
 requires one (see Configure).
+
+### Updating
+
+```bash
+uv tool upgrade paratext                          # installed as a CLI tool
+# or, as a project dependency:
+uv lock --upgrade-package paratext && uv sync
+```
+
+Your projects live in their own package, so upgrading the framework leaves them
+untouched.
 
 ## Quickstart
 
