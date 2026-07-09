@@ -8,6 +8,7 @@ a `prompt.md` beside the module and load it with `load_prompt(__file__)`.
 
 from __future__ import annotations
 
+import re
 import types
 import typing
 from dataclasses import dataclass, field
@@ -285,3 +286,37 @@ def build_view(project: Project) -> dict:
     if v.exports:
         out["exports"] = list(v.exports)
     return out
+
+
+# ── Project consistency audit ────────────────────────────────────────────────
+# A project names its fields in three places — the Pydantic schema (structure,
+# sent to the model as response_format), the prompt (instructions), and the View
+# (presentation) — with no compile-time link between the string field names. This
+# audit is the link: run it from a project's test suite so a field rename can't
+# silently leave the prompt or view referring to a field that no longer exists.
+def audit_project(project: Project) -> list[str]:
+    """Cross-check a project's View and prompt against its schema. Returns a list of
+    human-readable problems (empty == consistent).
+
+    - Every field the View references (panel fields, custom labels, table_label)
+      must be a real schema field — the View derives labels/types from the schema,
+      so a stale key breaks view.json rendering.
+    - Every field shown in a ``model_output`` panel must be named in the prompt, so
+      a rename can't leave the prompt instructing a field the model no longer emits
+      — and so prompts name fields exactly as the JSON keys the model must return.
+    """
+    problems: list[str] = []
+    fields = set(project.schema.model_fields)
+    view = project.view or default_view(project)
+
+    referenced = {k for p in view.panels for k in p.fields} | set(view.labels)
+    if view.table_label:
+        referenced.add(view.table_label[1])
+    for key in sorted(referenced - fields):
+        problems.append(f"view references field {key!r} that is not in the schema")
+
+    model_shown = {k for p in view.panels if p.source == "model_output" for k in p.fields}
+    for key in sorted(model_shown):
+        if not re.search(rf"\b{re.escape(key)}\b", project.prompt):
+            problems.append(f"prompt never names model_output field {key!r}")
+    return problems

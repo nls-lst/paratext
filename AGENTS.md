@@ -65,6 +65,15 @@ collections. This orients AI coding agents; `README.md` is the human guide.
   `is_verso` pre-filter (pure NumPy) and the optional RetinaNet
   `load_card_detector()` (weights from the Hugging Face Hub, `[cards]` extra).
 - Bump a project's `schema_version` when its schema changes.
+- A project names its fields in three places — `schema.py` (structure; also sent
+  to the model as `response_format`), `prompt.md` (instructions), and the `View`
+  (presentation). They share no compile-time link, so keep them in step with
+  `paratext.projects.audit_project(project)` (call it from your project tests): it
+  checks the View's fields exist in the schema and that every `model_output` field
+  is named in the prompt. Put behavioural guidance in `prompt.md` (its natural
+  home — prose, examples, versioned with the prompt hash); keep Pydantic
+  `Field(description=...)` short and structural, since those descriptions are
+  *also* sent to the model and shouldn't repeat the prompt in a second voice.
 
 ## Iterating: rounds & prompt feedback
 
