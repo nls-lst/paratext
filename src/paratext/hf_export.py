@@ -4,7 +4,8 @@ Turns a `review/<project>-r<N>/` round plus its `annotations.db` into an
 imagefolder + `metadata.jsonl` dataset with an auto-generated dataset card, then
 (optionally) pushes it to the Hub. Design points (see docs/hf-export-spec.md):
 
-- **Private by default**; `--public` is opt-in and blocked without a license.
+- **Private by default**; `--public` is opt-in. A licence is strongly steered —
+  `export` prompts for one when none is set — but never blocks publishing.
 - **v1 gold = `good_enough` rows only** — the review UI records a free-text note,
   not structured per-field corrections, so `needs_tweaks`/`not_accurate` can't be
   turned into labels yet. Their note rides along for context.
@@ -42,12 +43,14 @@ class ExportConfig:
     public: bool = False
 
 
-def load_config(project: str, *, repo: str | None, public: bool) -> ExportConfig:
+def load_config(
+    project: str, *, repo: str | None, public: bool, license: str | None = None
+) -> ExportConfig:
     """Build the export config from `[project.<name>.export]`, with CLI overrides."""
     raw = load_project_section(project, "export")
     cfg = ExportConfig(
         repo=repo or raw.get("repo"),
-        license=raw.get("license"),
+        license=license or raw.get("license"),
         min_verdict=raw.get("min_verdict", "good_enough"),
         include_negatives=bool(raw.get("include_negatives", False)),
         annotators=raw.get("annotators", "omit"),
@@ -179,7 +182,17 @@ def _dataset_card(
 ) -> str:
     proj = get_project(project)
     pretty = project.replace("-", " ").replace("_", " ").title()
+    # Front-matter stays honest: `other` when unset (never assert a licence the
+    # publisher didn't choose). The Rights section then steers toward CC0.
     lic = cfg.license or "other"
+    if cfg.license:
+        lic_line = f"License: `{cfg.license}`."
+    else:
+        lic_line = (
+            "No licence set (`license: other`). **CC0-1.0** is recommended for open "
+            "sharing — set `license` under `[project.<name>.export]` in paratext.toml "
+            "or pass `--license` to `paratext export`."
+        )
 
     front = [
         "---",
@@ -263,7 +276,7 @@ Produced by paratext. Each row carries `_prompt_hash`, `_schema_version`,
 {energy_section}
 ## Rights & license
 
-License: `{lic}`. Set a rights statement appropriate to your collection before
+{lic_line} Set a rights statement appropriate to your collection before
 publishing — image rights are the publisher's responsibility.
 
 ## Limitations
@@ -300,13 +313,6 @@ def build(dataset_dir: Path, project: str, cfg: ExportConfig, dest: Path) -> Exp
 
 def run(dataset_dir: Path, project: str, cfg: ExportConfig, *, dry_run: bool) -> ExportSummary:
     """Build the export and, unless `dry_run`, push it to the Hub."""
-    # License gate — before any network call.
-    if cfg.public and not cfg.license:
-        raise SystemExit(
-            "refusing to publish a public dataset without a license.\n"
-            "  set `license` under [project.<name>.export] in paratext.toml "
-            "(`paratext config`)."
-        )
     dest = EXPORT_ROOT / dataset_dir.name
     summary = build(dataset_dir, project, cfg, dest)
 
@@ -315,7 +321,9 @@ def run(dataset_dir: Path, project: str, cfg: ExportConfig, *, dry_run: bool) ->
     if not cfg.repo:
         raise SystemExit("no target repo: pass --to <org/name> or set export.repo in config")
     if not cfg.license:
-        print("warning: no license set — this dataset can't be made public until one is added")
+        vis = "publicly" if cfg.public else "privately"
+        print(f"warning: publishing {vis} with no licence set — the dataset card shows "
+              "`license: other`. Add a licence (e.g. cc0-1.0) to make reuse terms clear.")
 
     from huggingface_hub import HfApi
 

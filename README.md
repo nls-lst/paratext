@@ -97,8 +97,8 @@ rarely pass them — but every default can be overridden on the CLI.
   if omitted), `--out DIR` (default: the `review/<project>-r<N>` round for this
   prompt), `--round N`, `--fresh` (rebuild, discarding annotations).
 - **`export -p <project>`** — `--to <org/name>` (else `export.repo` in config),
-  `--round N` (default: latest), `--public` (default private; needs a license),
-  `--dry-run` (build locally, don't push).
+  `--round N` (default: latest), `--public` (default private), `--license <id>`
+  (else you're prompted; CC0 recommended), `--dry-run` (build locally, don't push).
 - **`review [data_dir]`** — `data_dir` defaults to `./review`; `--port N`
   (config `review-port`, else 5050), `--no-open`.
 - **`sample`** — `--source DIR` (required), `--out DIR` (required), `-n N`
@@ -158,12 +158,15 @@ auto-generated dataset card (schema, model, prompt, review accuracy).
 ```bash
 paratext export -p index-cards --dry-run     # build ./export/<round>/ and inspect
 paratext export -p index-cards               # push (private repo)
-paratext export -p index-cards --public      # public — requires a license (below)
+paratext export -p index-cards --public      # public (see licence steer below)
 ```
 
-- **Private by default.** `--public` is opt-in and is **refused without a
-  `license`** set in config — no accidental publishing, and image rights are the
-  publisher's call.
+- **Private by default.** `--public` is opt-in.
+- **Licence steer, not a gate.** If no `license` is set (in config or via
+  `--license`), `export` prompts for one — **CC0-1.0 is recommended for open
+  sharing**, or set your own, or leave it blank. Leaving it blank no longer blocks
+  publishing; the dataset card just records `license: other`. Image rights remain
+  the publisher's call.
 - **Gold = approved items.** Only items a reviewer marked *good enough* become
   labelled rows (the label is the verified model output); *needs tweaks* /
   *not accurate* items carry their note but aren't labels. (Structured per-field
@@ -177,7 +180,7 @@ Configure per project:
 ```toml
 [project.index-cards.export]
 repo    = "nls-lst/advocates-index-cards"
-license = "cc-by-4.0"        # required before any --public push
+license = "cc0-1.0"          # recommended for open sharing (else you're prompted)
 # min-verdict = "good_enough"  include-negatives = false  annotators = "omit"
 ```
 

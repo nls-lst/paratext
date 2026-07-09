@@ -6,7 +6,32 @@ import pytest
 from PIL import Image
 
 from paratext import hf_export
+from paratext.cli import _steer_license
 from paratext.review.server import Store
+
+
+def test_steer_license_defaults_to_cc0(monkeypatch):
+    cfg = hf_export.ExportConfig()
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a: "")  # accept default
+    _steer_license(cfg, "cards")
+    assert cfg.license == "cc0-1.0"
+
+
+def test_steer_license_skip_leaves_blank(monkeypatch):
+    cfg = hf_export.ExportConfig()
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a: "s")
+    _steer_license(cfg, "cards")
+    assert cfg.license is None
+
+
+def test_steer_license_non_tty_no_prompt(monkeypatch):
+    cfg = hf_export.ExportConfig()
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setattr("builtins.input", lambda *a: (_ for _ in ()).throw(AssertionError))
+    _steer_license(cfg, "cards")  # must not call input()
+    assert cfg.license is None
 
 
 def _mk_dataset(tmp_path, images_per_sample=1):
@@ -77,11 +102,15 @@ def test_multi_image_project_rejected(tmp_path):
         hf_export.build(d, "cards", hf_export.ExportConfig(), tmp_path / "out")
 
 
-def test_public_without_license_blocked(tmp_path):
+def test_public_without_license_not_blocked(tmp_path, monkeypatch):
+    # A missing licence no longer blocks publishing — the card falls back to
+    # `license: other` and run() warns instead of refusing.
+    monkeypatch.setattr(hf_export, "EXPORT_ROOT", tmp_path / "export")
     d = _mk_dataset(tmp_path)
     cfg = hf_export.ExportConfig(public=True, license=None, repo="x/y")
-    with pytest.raises(SystemExit, match="without a license"):
-        hf_export.run(d, "cards", cfg, dry_run=False)
+    summary = hf_export.run(d, "cards", cfg, dry_run=True)
+    card = (summary.build_dir / "README.md").read_text()
+    assert "license: other" in card
 
 
 def test_dry_run_builds_card(tmp_path, monkeypatch):

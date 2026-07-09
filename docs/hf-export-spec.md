@@ -14,8 +14,9 @@ Design principles:
 
 - **Minimal flags.** One command, ~4 flags; everything else in config with sane
   defaults.
-- **Private by default.** Publishing is an explicit opt-in and is **blocked
-  without a license** in config.
+- **Private by default.** Publishing is an explicit opt-in. A licence is
+  **steered but not gated**: `export` prompts for one when none is set (CC0
+  recommended), and leaving it blank does not block publishing.
 - **Zero new dependencies.** `huggingface-hub` is already a core dep; we use the
   imagefolder + `metadata.jsonl` convention so we never pull in `datasets`.
 - **Provenance is the product.** The value to other institutions is trust: what
@@ -25,15 +26,16 @@ Design principles:
 ## Command & flags
 
 ```
-paratext export -p <project> [--to <repo_id>] [--round N] [--public] [--dry-run]
+paratext export -p <project> [--to <repo_id>] [--round N] [--public] [--license <id>] [--dry-run]
 ```
 
 - `-p/--project` — project (inferred from config if only one is set).
 - `--to <repo_id>` — HF repo (`org/name`); defaults to `export.repo` in config.
 - `--round N` — which review round to export; defaults to the **latest reviewed**
   round for the project.
-- `--public` — publish publicly; default is a **private** repo. Requires a
-  license (see gate).
+- `--public` — publish publicly; default is a **private** repo.
+- `--license <id>` — licence for the dataset card (e.g. `cc0-1.0`, `apache-2.0`,
+  `cc-by-4.0`); overrides config. If unset, `export` prompts for one (see steer).
 - `--dry-run` — build the export folder locally and print a summary; do **not**
   create/push a repo. The obvious "let me look before I publish" path.
 
@@ -45,7 +47,7 @@ config so the command stays tiny.
 ```toml
 [project.index-cards.export]
 repo        = "nls-lst/advocates-index-cards"
-license     = "cc-by-4.0"        # SPDX-ish id; REQUIRED before any public push
+license     = "cc0-1.0"          # SPDX-ish id; recommended (else export prompts)
 min-verdict = "good_enough"      # lowest verdict to include as gold (see policy)
 include-negatives = false        # also export not_accurate rows as hard negatives
 annotators  = "omit"             # omit | pseudonym | name  (privacy default: omit)
@@ -53,17 +55,20 @@ annotators  = "omit"             # omit | pseudonym | name  (privacy default: om
 
 Defaults if the section is absent: `min-verdict = "good_enough"` (the only
 gold-producing verdict until structured corrections exist),
-`include-negatives = false`, `annotators = "omit"`, `license` unset (blocks
-public).
+`include-negatives = false`, `annotators = "omit"`, `license` unset (steered,
+not blocked).
 
-## License gate
+## Licence steer
 
-- **Public push** (`--public`, or `export.public = true`): hard-error unless
-  `export.license` is set and non-empty. The message points at
-  `paratext config`. No network call happens before this check.
-- **Private push**: license optional but **warned** ("no license set — this
-  dataset can't be made public until one is added").
-- The license id flows into the dataset card's YAML front matter (`license:`),
+- **When unset**, `export` prompts before building: **CC0-1.0** (recommended for
+  open sharing, the enter-to-accept default), enter your own id, or skip. The
+  choice applies to this export; a hint shows how to set it in config to skip the
+  prompt next time. Non-interactive runs (CI, piped stdin) are left untouched.
+- **`--license <id>`** or `export.license` in config skips the prompt entirely.
+- **Publishing is never blocked** by a missing licence. Both public and private
+  pushes **warn** if none is set; the card front matter records `license: other`
+  and the Rights section steers toward CC0.
+- The licence id flows into the dataset card's YAML front matter (`license:`),
   which is what the Hub reads.
 
 ## Gold-label derivation (the crux)
@@ -167,7 +172,7 @@ YAML front matter:
 
 ```yaml
 ---
-license: cc-by-4.0            # from config; required for public
+license: cc0-1.0             # from config/--license/prompt; `other` if left unset
 pretty_name: Advocates' Manuscript Index Cards (NLS)
 task_categories: [image-to-text]
 tags: [paratext, library-metadata, index-cards, glam]

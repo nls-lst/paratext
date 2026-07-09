@@ -60,8 +60,9 @@ human guide.
 - `paratext export` (`hf_export.py`) publishes a reviewed round as a HF dataset
   (imagefolder + `metadata.jsonl` + auto card) via the already-present
   `huggingface_hub` — no `datasets` dep. v1 gold = `good_enough` rows only,
-  single-image projects only, private-by-default with a license gate for
-  `--public`. Full design + roadmap: `docs/hf-export-spec.md`.
+  single-image projects only, private-by-default. A missing licence is steered
+  (interactive prompt, CC0 recommended) but never blocks publishing. Full design
+  + roadmap: `docs/hf-export-spec.md`.
 - `paratext.cards` is the reusable scanned-card toolkit: the deterministic
   `is_verso` pre-filter (pure NumPy) and the optional RetinaNet
   `load_card_detector()` (weights from the Hugging Face Hub, `[cards]` extra).

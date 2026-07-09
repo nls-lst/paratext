@@ -223,6 +223,34 @@ def _cmd_package(args: argparse.Namespace) -> int:
 
 
 # ── Export ────────────────────────────────────────────────────────────────
+def _steer_license(cfg, project: str) -> None:
+    """Heavy steer toward setting a licence — but never block. Mutates cfg.license.
+
+    Prompts only on an interactive terminal; a non-TTY (CI, piped input) is left
+    untouched so nothing hangs, and hf_export.run warns before pushing.
+    """
+    if cfg.license:
+        return
+    import sys
+
+    if not sys.stdin.isatty():
+        return
+    print("No licence is set for this dataset.")
+    print("  CC0 (cc0-1.0) is recommended for open sharing — or set your own, "
+          "or leave it blank.")
+    ans = input("Set a licence? [C]C0 / [o]wn / [s]kip (default C): ").strip().lower()
+    if ans in ("", "c", "cc0"):
+        cfg.license = "cc0-1.0"
+    elif ans[:1] == "o":
+        val = input("  Licence identifier (e.g. apache-2.0, cc-by-4.0): ").strip()
+        cfg.license = val or None
+        if not val:
+            print("  no identifier entered — leaving blank")
+    if cfg.license:
+        print(f"  using licence {cfg.license} — set `license` under "
+              f"[project.{project}.export] in paratext.toml to skip this prompt")
+
+
 def _cmd_export(args: argparse.Namespace) -> int:
     from . import hf_export
 
@@ -242,7 +270,10 @@ def _cmd_export(args: argparse.Namespace) -> int:
     if not (dataset_dir / "samples.json").is_file():
         raise SystemExit(f"not a packaged dataset: {dataset_dir}")
 
-    cfg = hf_export.load_config(project, repo=args.to, public=args.public)
+    cfg = hf_export.load_config(
+        project, repo=args.to, public=args.public, license=args.license
+    )
+    _steer_license(cfg, project)
     summary = hf_export.run(dataset_dir, project, cfg, dry_run=args.dry_run)
 
     excluded = ", ".join(f"{k}={v}" for k, v in sorted(summary.excluded.items())) or "none"
@@ -510,7 +541,10 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
     ex.add_argument("--round", type=int, default=None,
                     help="Review round to export (default: the latest)")
     ex.add_argument("--public", action="store_true",
-                    help="Publish publicly (default: private; requires a license in config)")
+                    help="Publish publicly (default: private)")
+    ex.add_argument("--license", default=None,
+                    help="Licence for the dataset card (e.g. cc0-1.0, apache-2.0, "
+                         "cc-by-4.0); overrides config. If unset, export prompts for one.")
     ex.add_argument("--dry-run", action="store_true",
                     help="Build the dataset folder locally without pushing")
     ex.set_defaults(func=_cmd_export)
