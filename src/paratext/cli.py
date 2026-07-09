@@ -242,8 +242,10 @@ def _steer_license(cfg, project: str) -> None:
     if ans in ("", "c", "cc0"):
         cfg.license = "cc0-1.0"
     elif ans[:1] == "o":
+        from .hf_export import normalise_license
+
         val = input("  Licence identifier (e.g. apache-2.0, cc-by-4.0): ").strip()
-        cfg.license = val or None
+        cfg.license = normalise_license(val) or None
         if not val:
             print("  no identifier entered — leaving blank")
     if cfg.license:
@@ -544,7 +546,8 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
                     help="Publish publicly (default: private)")
     ex.add_argument("--license", default=None,
                     help="Licence for the dataset card (e.g. cc0-1.0, apache-2.0, "
-                         "cc-by-4.0); overrides config. If unset, export prompts for one.")
+                         "cc-by-4.0); shorthands like cc0 are normalised. Overrides "
+                         "config; if unset, export prompts for one.")
     ex.add_argument("--dry-run", action="store_true",
                     help="Build the dataset folder locally without pushing")
     ex.set_defaults(func=_cmd_export)

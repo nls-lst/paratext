@@ -29,6 +29,41 @@ from .review.server import Store, review_stats
 # Verdict ordering for the min-verdict gate (higher = more approved).
 _VERDICT_ORDER = {"not_accurate": 0, "needs_tweaks": 1, "good_enough": 2}
 
+# HF Hub licence ids are a controlled, SPDX-like vocabulary — the Hub only renders
+# a tag it recognises (so `cc0`, unversioned, would NOT show as a licence; use
+# `cc0-1.0`). Recommended for NLS outputs: cc0-1.0, cc-by-4.0, apache-2.0. This is
+# the common subset we recognise silently; anything else gets a soft warning, not a
+# rejection. Full list: https://huggingface.co/docs/hub/repositories-licenses
+KNOWN_LICENSES = frozenset({
+    "apache-2.0", "mit", "bsd-2-clause", "bsd-3-clause", "isc",
+    "gpl-2.0", "gpl-3.0", "lgpl-2.1", "lgpl-3.0", "agpl-3.0", "mpl-2.0", "unlicense",
+    "cc0-1.0", "cc-by-4.0", "cc-by-sa-4.0", "cc-by-nc-4.0", "cc-by-nd-4.0",
+    "cc-by-nc-sa-4.0", "cc-by-nc-nd-4.0", "cc-by-3.0", "cc-by-sa-3.0",
+    "cdla-permissive-2.0", "cdla-sharing-1.0", "odc-by", "odbl", "pddl",
+    "openrail", "other", "unknown",
+})
+
+# Forgiving shorthands → canonical HF id, so `--license cc0` / a config typo works.
+_LICENSE_ALIASES = {
+    "cc0": "cc0-1.0", "cc-0": "cc0-1.0", "cc-by": "cc-by-4.0", "ccby": "cc-by-4.0",
+    "cc-by-sa": "cc-by-sa-4.0", "cc-by-nc": "cc-by-nc-4.0", "cc-by-nd": "cc-by-nd-4.0",
+    "apache": "apache-2.0", "apache2": "apache-2.0", "apache-2": "apache-2.0",
+    "bsd": "bsd-3-clause", "bsd-3": "bsd-3-clause", "gpl": "gpl-3.0", "gpl3": "gpl-3.0",
+    "lgpl": "lgpl-3.0", "agpl": "agpl-3.0", "mpl": "mpl-2.0",
+}
+
+
+def normalise_license(value: str | None) -> str | None:
+    """Canonicalise a licence id: lower-case, strip, expand common shorthands.
+
+    Returns the (possibly unchanged) value; unknown ids pass through so the caller
+    can soft-warn rather than reject.
+    """
+    if not value:
+        return value
+    v = value.strip().lower()
+    return _LICENSE_ALIASES.get(v, v)
+
 # Where local export folders are built (inspectable; --dry-run stops here).
 EXPORT_ROOT = Path("export")
 
@@ -184,9 +219,10 @@ def _dataset_card(
     pretty = project.replace("-", " ").replace("_", " ").title()
     # Front-matter stays honest: `other` when unset (never assert a licence the
     # publisher didn't choose). The Rights section then steers toward CC0.
-    lic = cfg.license or "other"
-    if cfg.license:
-        lic_line = f"License: `{cfg.license}`."
+    canon = normalise_license(cfg.license)
+    lic = canon or "other"
+    if canon:
+        lic_line = f"License: `{canon}`."
     else:
         lic_line = (
             "No licence set (`license: other`). **CC0-1.0** is recommended for open "
@@ -313,6 +349,10 @@ def build(dataset_dir: Path, project: str, cfg: ExportConfig, dest: Path) -> Exp
 
 def run(dataset_dir: Path, project: str, cfg: ExportConfig, *, dry_run: bool) -> ExportSummary:
     """Build the export and, unless `dry_run`, push it to the Hub."""
+    cfg.license = normalise_license(cfg.license)
+    if cfg.license and cfg.license not in KNOWN_LICENSES:
+        print(f"warning: '{cfg.license}' isn't a recognised HF licence id — the Hub "
+              "may not display it. Common ids: cc0-1.0, cc-by-4.0, apache-2.0.")
     dest = EXPORT_ROOT / dataset_dir.name
     summary = build(dataset_dir, project, cfg, dest)
 

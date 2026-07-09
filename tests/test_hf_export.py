@@ -113,6 +113,32 @@ def test_public_without_license_not_blocked(tmp_path, monkeypatch):
     assert "license: other" in card
 
 
+def test_normalise_license_expands_shorthands():
+    assert hf_export.normalise_license("cc0") == "cc0-1.0"
+    assert hf_export.normalise_license("Apache") == "apache-2.0"
+    assert hf_export.normalise_license("cc-by-4.0") == "cc-by-4.0"  # already canonical
+    assert hf_export.normalise_license("  MIT ") == "mit"
+    assert hf_export.normalise_license("weird-thing") == "weird-thing"  # unknown: passthrough
+    assert hf_export.normalise_license(None) is None
+
+
+def test_shorthand_license_canonical_in_card(tmp_path, monkeypatch):
+    monkeypatch.setattr(hf_export, "EXPORT_ROOT", tmp_path / "export")
+    d = _mk_dataset(tmp_path)
+    cfg = hf_export.ExportConfig(license="cc0")  # shorthand
+    summary = hf_export.run(d, "cards", cfg, dry_run=True)
+    card = (summary.build_dir / "README.md").read_text()
+    assert "license: cc0-1.0" in card  # normalised for the Hub
+
+
+def test_unrecognised_license_soft_warns(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(hf_export, "EXPORT_ROOT", tmp_path / "export")
+    d = _mk_dataset(tmp_path)
+    cfg = hf_export.ExportConfig(license="my-custom-licence")
+    hf_export.run(d, "cards", cfg, dry_run=True)  # not blocked
+    assert "isn't a recognised HF licence id" in capsys.readouterr().out
+
+
 def test_dry_run_builds_card(tmp_path, monkeypatch):
     monkeypatch.setattr(hf_export, "EXPORT_ROOT", tmp_path / "export")
     d = _mk_dataset(tmp_path)

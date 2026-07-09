@@ -180,7 +180,10 @@ Configure per project:
 ```toml
 [project.index-cards.export]
 repo    = "nls-lst/advocates-index-cards"
-license = "cc0-1.0"          # recommended for open sharing (else you're prompted)
+# HF licence id (canonical, SPDX-like). Recommended: cc0-1.0 (open sharing),
+# cc-by-4.0 (attribution), apache-2.0 (code/models). Shorthands like `cc0` are
+# accepted and normalised; unrecognised ids get a soft warning.
+license = "cc0-1.0"          # else export prompts; CC0 recommended
 # min-verdict = "good_enough"  include-negatives = false  annotators = "omit"
 ```
 

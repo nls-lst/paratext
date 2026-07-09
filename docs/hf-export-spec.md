@@ -47,7 +47,7 @@ config so the command stays tiny.
 ```toml
 [project.index-cards.export]
 repo        = "nls-lst/advocates-index-cards"
-license     = "cc0-1.0"          # SPDX-ish id; recommended (else export prompts)
+license     = "cc0-1.0"          # canonical HF id; recommended: cc0-1.0 / cc-by-4.0 / apache-2.0
 min-verdict = "good_enough"      # lowest verdict to include as gold (see policy)
 include-negatives = false        # also export not_accurate rows as hard negatives
 annotators  = "omit"             # omit | pseudonym | name  (privacy default: omit)
@@ -70,6 +70,11 @@ not blocked).
   and the Rights section steers toward CC0.
 - The licence id flows into the dataset card's YAML front matter (`license:`),
   which is what the Hub reads.
+- **Ids are canonical HF/SPDX-like** (the Hub only renders a tag it recognises —
+  `cc0` alone wouldn't show; `cc0-1.0` does). `normalise_license` expands common
+  shorthands (`cc0`→`cc0-1.0`, `apache`→`apache-2.0`, …) and an id outside the
+  recognised set (`KNOWN_LICENSES`) gets a **soft warning**, not a rejection.
+  Recommended: `cc0-1.0` / `cc-by-4.0` / `apache-2.0`.
 
 ## Gold-label derivation (the crux)
 
