@@ -21,12 +21,20 @@ You are extracting catalogue metadata from a digitised item for a library or
 archive. Look at the image(s) and return a single JSON object matching the
 schema. Emit JSON only — no commentary or markdown.
 
-TODO: describe each field of the schema and how to handle edge cases. The
-quality of extraction depends almost entirely on this prompt.
+Describe each field and how to handle edge cases — extraction quality depends
+almost entirely on this prompt:
+
+{fields}
 """
 
 SCHEMA_HEADER = '''\
-"""Output schema for {name}. Edit these fields (keep prompt.md in step)."""
+"""Output schema for {name}.
+
+Keep each Field(description=...) short and structural (a type/format hint or a
+short example) — behaviour and edge cases belong in prompt.md, which is *also*
+sent to the model, so a long description just restates the prompt in a second
+voice. Keep schema, prompt, and view in step; the generated audit test guards it.
+"""
 
 from __future__ import annotations
 
@@ -36,20 +44,51 @@ from pydantic import BaseModel, Field
 
 
 class Record(BaseModel):
-    # TODO: set types and describe each field for the prompt.
+    # TODO: set types + a structural description each; behaviour goes in prompt.md.
+'''
+
+# A ready-to-run guard so a field rename can't silently drift the prompt or view.
+TEST_STUB = '''\
+"""Guard: {ep_name}'s prompt and view stay in step with its schema.
+
+`audit_project` checks that every field the view shows exists in the schema, and
+that every model_output field is named in the prompt.
+"""
+
+from paratext.projects import audit_project
+
+from {mod} import PROJECT
+
+
+def test_project_is_consistent():
+    problems = audit_project(PROJECT)
+    assert not problems, "; ".join(problems)
 '''
 
 def to_module_name(name: str) -> str:
     return re.sub(r"[^0-9a-zA-Z]+", "_", name.strip().lower()).strip("_")
 
 
+def _field_names(fields: list[str]) -> list[str]:
+    return [to_module_name(f) for f in fields if to_module_name(f)] or ["title"]
+
+
 def _render_schema(name: str, fields: list[str]) -> str:
-    names = [to_module_name(f) for f in fields if to_module_name(f)] or ["title"]
     lines = [
         f'    {f}: Optional[str] = Field(None, description="TODO: describe {f}")'
-        for f in names
+        for f in _field_names(fields)
     ]
     return SCHEMA_HEADER.format(name=name) + "\n".join(lines) + "\n"
+
+
+def _render_prompt(fields: list[str]) -> str:
+    # Seed a bullet per field so the field names appear in the prompt (keeping the
+    # prompt in step with the schema — and letting the generated audit test pass).
+    bullets = "\n".join(
+        f"- `{f}`: TODO — what to extract, and how to handle edge cases."
+        for f in _field_names(fields)
+    )
+    return PROMPT_STUB.format(fields=bullets)
 
 
 def _source_expr(kind: str, verso: bool, crop: bool) -> tuple[str, str]:
@@ -94,8 +133,9 @@ PROJECT = Project(
 '''
     return {
         f"{mod}/schema.py": _render_schema(name, fields or ["title"]),
-        f"{mod}/prompt.md": PROMPT_STUB,
+        f"{mod}/prompt.md": _render_prompt(fields or ["title"]),
         f"{mod}/__init__.py": init_py,
+        f"tests/test_{mod}_audit.py": TEST_STUB.format(ep_name=ep_name, mod=mod),
     }
 
 
@@ -137,7 +177,8 @@ def init(name: str | None = None, *, install: bool = True) -> int:
         path.write_text(content)
 
     ep_name = mod.replace("_", "-")
-    print(f"\nCreated ./{mod}/ (schema.py + prompt.md + __init__.py).")
+    print(f"\nCreated ./{mod}/ (schema.py + prompt.md + __init__.py) "
+          f"and tests/test_{mod}_audit.py.")
 
     _offer_config(ep_name)
     registered = _register_and_sync(mod, ep_name, install)
@@ -152,6 +193,7 @@ def init(name: str | None = None, *, install: bool = True) -> int:
         n += 1
     print(f"  {n}. Edit {mod}/prompt.md and {mod}/schema.py (keep them in step).")
     print(f"  {n + 1}. Run it:  paratext run -p {ep_name}")
+    print(f"  {n + 2}. Guard schema/prompt drift:  uv run pytest tests/test_{mod}_audit.py")
     return 0
 
 

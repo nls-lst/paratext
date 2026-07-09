@@ -33,6 +33,15 @@ def test_render_project_is_valid_python(kwargs):
     assert files["demo_project/prompt.md"].strip()
     # seeded fields become schema attributes (slugified)
     assert "title: Optional[str]" in schema and "author_name: Optional[str]" in schema
+    # schema notes the prompt-owns-behaviour convention
+    assert "prompt.md" in schema
+    # a runnable drift-guard test is scaffolded alongside
+    test = files["tests/test_demo_project_audit.py"]
+    ast.parse(test)
+    assert "audit_project" in test and "from demo_project import PROJECT" in test
+    # prompt is seeded with the fields, so a fresh scaffold passes its own audit
+    prompt = files["demo_project/prompt.md"]
+    assert "title" in prompt and "author_name" in prompt
     if kwargs["kind"] == "pdf":
         assert "pdf_source(" in init
     else:
