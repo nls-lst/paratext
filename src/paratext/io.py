@@ -28,7 +28,7 @@ def _git_commit() -> str:
 
 
 def preflight_check(base_url: str) -> list[str]:
-    """Confirm the VLM server is reachable and has at least one model loaded."""
+    """Confirm the model server is reachable and has at least one model loaded."""
     import urllib.error
     import urllib.request
 

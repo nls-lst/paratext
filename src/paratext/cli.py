@@ -2,7 +2,7 @@
 
 Subcommands:
     run         Extract then package in one go (the common path).
-    extract     Run the VLM over a directory of inputs, write JSONL.
+    extract     Run the model over a directory of inputs, write JSONL.
     package     Convert JSONL into a review dataset (samples.json + images/).
     review      Launch the local web UI to review a packaged dataset.
     export      Publish a reviewed round as a Hugging Face dataset.
@@ -444,8 +444,8 @@ def _add_extract_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--source", type=Path, default=None, help="Input directory (images or PDFs)")
     p.add_argument("--output", type=Path, default=None,
                    help="Output JSONL path (default: output/<project>.jsonl)")
-    p.add_argument("--model", default=None, help="Model id served by the VLM endpoint")
-    p.add_argument("--base-url", default=None, help="VLM endpoint base URL (OpenAI-compatible)")
+    p.add_argument("--model", default=None, help="Model id served by the endpoint")
+    p.add_argument("--base-url", default=None, help="model endpoint base URL (OpenAI-compatible)")
     p.add_argument("--api-key", default=None, help="API key for the endpoint (often unused)")
     p.add_argument("--limit", type=int, default=None, help="Process at most N inputs")
     p.add_argument(
@@ -467,7 +467,7 @@ def _add_extract_args(p: argparse.ArgumentParser) -> None:
 def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentParser]]:
     p = argparse.ArgumentParser(
         prog="paratext",
-        description="VLM metadata-extraction pipeline for digitised collections.",
+        description="Metadata extraction from digitised collections with a multimodal model.",
         epilog="Agents/LLMs: run `paratext guide` for a full orientation "
                "(project model, workflow, conventions).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -487,7 +487,7 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
                    help="Launch the review UI when the run finishes (blocks)")
     r.set_defaults(func=_cmd_run)
 
-    e = sub.add_parser("extract", help="Run VLM extraction over a directory")
+    e = sub.add_parser("extract", help="Run model extraction over a directory")
     _add_extract_args(e)
     e.set_defaults(func=_cmd_extract)
 

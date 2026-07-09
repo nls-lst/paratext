@@ -1,12 +1,12 @@
 # paratext
 
-A modular, project-based pipeline for extracting catalogue metadata from
-digitised library and archive collections with a vision-language model (VLM),
-then packaging the results for human review.
+A modular, project-based pipeline that produces metadata from digitised library
+& archive collections with a multimodal model. Includes a human-in-the-loop
+review tool.
 
-One command (`paratext`) does the whole loop: run a VLM over a directory of
-images or PDFs, write resumable JSONL with provenance, and package it into a
-review dataset. Each **project** is a self-contained module — its own prompt,
+One command (`paratext`) does the whole loop: run a multimodal model over a
+directory of images or PDFs, write resumable JSONL with provenance, and package
+it into a review dataset. Each **project** is a self-contained module — its own prompt,
 output schema, and sample iteration, added without forking the framework — so the
 same code path runs a 50-item pilot and a 250,000-item sweep; only `--limit`
 differs.
@@ -21,7 +21,7 @@ uv tool install "paratext[cards]" # + torchvision RetinaNet card cropping (optio
 Image and PDF collections both work out of the box; the `[cards]` extra only
 adds the (heavier) card-cropping detector.
 
-The VLM endpoint is any OpenAI-compatible server (e.g. Lemonade, vLLM,
+The model endpoint is any OpenAI-compatible server (e.g. Lemonade, vLLM,
 llama.cpp). The base URL defaults to `http://localhost:8000/v1`; override it in
 `paratext.toml` or via `PARATEXT_BASE_URL`. Set `api-key` if your endpoint
 requires one (see Configure).
@@ -67,8 +67,8 @@ UI automatically when the run finishes.
 | Command | What it does |
 | --- | --- |
 | `paratext run -p <project>` | Extract **and** package in one step (the common path). |
-| `paratext extract -p <project>` | Run the VLM, write JSONL only. |
-| `paratext package <jsonl>` | Re-package an existing JSONL for review (no VLM calls). |
+| `paratext extract -p <project>` | Run the model, write JSONL only. |
+| `paratext package <jsonl>` | Re-package an existing JSONL for review (no model calls). |
 | `paratext review <dataset-dir>` | Launch the inbuilt web UI to review a packaged dataset. |
 | `paratext export -p <project>` | Publish a reviewed round as a Hugging Face dataset. |
 | `paratext carbon` | Show the current grid carbon/renewables (for `--green` scheduling). |
@@ -222,7 +222,7 @@ max-wait = "12h"             # give up waiting and run anyway after this
   and remotely, so paratext can't infer where compute runs.
   `paratext config --suggest-region` IP-geolocates your box and *proposes* a
   region for you to confirm (it may reflect your ISP/host rather than your site).
-- Only meaningful when inference runs on the grid you name (e.g. a local VLM box).
+- Only meaningful when inference runs on the grid you name (e.g. a local model box).
 
 ## Configure
 
@@ -252,7 +252,7 @@ card-crop    = true
 
 ### Remote / hosted endpoints (incl. Hugging Face)
 
-The VLM endpoint is just an OpenAI-compatible URL, so a hosted API works exactly
+The model endpoint is just an OpenAI-compatible URL, so a hosted API works exactly
 like a local server — only `base-url`, `api-key`, and `model` change. For example,
 Hugging Face Inference Providers (or a dedicated Inference Endpoint's URL + `/v1`):
 
@@ -278,7 +278,7 @@ self-host it behind vLLM/TGI/llama.cpp and point `base-url` at that.
 For index-card collections, two reusable, opt-in tools:
 
 - **`is_verso(image)`** — a pure-NumPy blank-back filter (no ML dependency) that
-  drops the blank backs of cards before any VLM call. Thresholds are arguments;
+  drops the blank backs of cards before any model call. Thresholds are arguments;
   recalibrate them for your scanner.
 - **`load_card_detector()`** — a permissive (BSD) torchvision RetinaNet that
   crops a scan to the card region. Weights download from the Hugging Face Hub on

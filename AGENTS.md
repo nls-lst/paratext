@@ -1,11 +1,12 @@
 # paratext — agent guide
 
-Plugin VLM metadata-extraction pipeline for digitised library/archive
-collections. This orients AI coding agents; `README.md` is the human guide.
+Modular metadata-extraction pipeline for digitised library/archive collections,
+driven by a multimodal model. This orients AI coding agents; `README.md` is the
+human guide.
 
 ## Overview
 
-- One CLI (`paratext`) runs the loop: `extract` (VLM → JSONL), `package`
+- One CLI (`paratext`) runs the loop: `extract` (model → JSONL), `package`
   (JSONL → review dataset), or `run` (both, the common path); `review` launches
   the inbuilt web UI over a packaged dataset; `export` publishes a reviewed round
   as a Hugging Face dataset; `carbon` reports grid intensity for `--green`
@@ -36,7 +37,7 @@ collections. This orients AI coding agents; `README.md` is the human guide.
 - Python 3.11–3.13 via `uv`. `uv sync --extra dev` (add `--extra cards` for the
   torch detector runtime). Run with `uv run paratext …`, or `uv tool install`
   for the bare command.
-- VLM endpoint is any OpenAI-compatible server; base URL via `paratext.toml` or
+- model endpoint is any OpenAI-compatible server; base URL via `paratext.toml` or
   `PARATEXT_BASE_URL`.
 
 ## Testing and lint

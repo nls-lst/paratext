@@ -1,4 +1,4 @@
-"""Run a Project end-to-end: iterate samples, call the VLM, write JSONL."""
+"""Run a Project end-to-end: iterate samples, call the model, write JSONL."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ def run(
         if sample.id in seen:
             continue
         # A sample can be pre-classified by iter_samples (e.g. a deterministic
-        # verso filter) to skip the VLM call entirely.
+        # verso filter) to skip the model call entirely.
         pre = (sample.metadata or {}).get("preclassified")
         if pre is not None:
             append_jsonl(
@@ -133,7 +133,7 @@ def run(
                 )
                 parsed_dict = _parse_loose_json(raw)
                 if parsed_dict is None:
-                    raise ValueError("Could not parse JSON from VLM response")
+                    raise ValueError("Could not parse JSON from model response")
                 extraction = parsed_dict
         except Exception as e:
             append_error(output, sample.id, str(e))

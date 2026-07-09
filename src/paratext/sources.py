@@ -45,7 +45,7 @@ def image_source(
 ) -> Source:
     """A flat directory of images, one Sample per file.
 
-    ``verso_filter`` drops blank card backs before the VLM (pre-classifies them
+    ``verso_filter`` drops blank card backs before the model (pre-classifies them
     as ``image_type="verso"`` — the project's ``curate`` decides to drop them).
     ``crop`` crops each scan to the detected card region (needs the ``[cards]``
     extra; falls back to a uniform crop). Both come from ``paratext.cards``.

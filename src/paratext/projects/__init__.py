@@ -35,7 +35,7 @@ def load_prompt(module_file: str) -> str:
 
 @dataclass
 class Sample:
-    """One unit of work fed to the VLM."""
+    """One unit of work fed to the model."""
 
     id: str
     images: list[Image.Image]
@@ -85,7 +85,7 @@ class Project:
     # Optional review/display contract spec; drives view.json. Defaults to one
     # panel showing every schema field (see default_view / build_view).
     view: "View | None" = None
-    # Image encoding for the VLM call. Raise image_max_size when faint or small
+    # Image encoding for the model call. Raise image_max_size when faint or small
     # detail matters (e.g. dense handwriting); 1024 suits most inputs.
     image_max_size: int = 1024
     image_quality: int = 85

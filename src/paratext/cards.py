@@ -4,7 +4,7 @@ Two independent, opt-in tools that any card project can use:
 
   - ``is_verso(image)`` — a pure-NumPy blank-back filter with **no ML
     dependency**. It drops blank versos (the backs of cards) before any
-    detector or VLM call. The thresholds are exposed as arguments because they
+    detector or model call. The thresholds are exposed as arguments because they
     are calibrated to a particular scanning setup; recalibrate for yours.
 
   - ``load_card_detector()`` — a torchvision **RetinaNet** (BSD-licensed) that
@@ -43,7 +43,7 @@ DEFAULT_DETECTOR_FILE = "card_detector_retinanet.pt"
 # The reference thresholds below were calibrated against 1035 human-labelled
 # NLS images (97 versos / 938 cards) spanning two scan configs: ZERO false
 # positives (never drops a real card) at ~96% verso recall; misses fall through
-# to the VLM / a human (the safe way). Other collections will want to recheck.
+# to the model / a human (the safe way). Other collections will want to recheck.
 VERSO_TEXTURE_MAX = 18.0  # centre-right std below this = blank (no entries text)
 VERSO_DARKTEXT_MAX = 0.02  # central dark-pixel fraction below this = no ink/text
 
@@ -55,7 +55,7 @@ def is_verso(
     darktext_max: float = VERSO_DARKTEXT_MAX,
 ) -> bool:
     """True if the image is a blank verso (uniform centre + no dark text), so it
-    can skip the detector and the VLM. Border-independent — works across a
+    can skip the detector and the model. Border-independent — works across a
     collection's scan-config changes (e.g. a black binding band vs a manilla
     background). Tune ``texture_max`` / ``darktext_max`` for your scans."""
     a = np.asarray(image.convert("L"), dtype=np.float32)

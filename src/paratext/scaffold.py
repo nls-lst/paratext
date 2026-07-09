@@ -160,7 +160,7 @@ def init(name: str | None = None, *, install: bool = True) -> int:
     kind = "pdf" if is_pdf else "images"
     verso = crop = False
     if kind == "images":
-        verso = _ask("Filter blank versos (backs of cards) before the VLM?", default=True)
+        verso = _ask("Filter blank versos (backs of cards) before the model?", default=True)
         crop = _ask("Crop each scan to the card region (RetinaNet from HF)?", default=False)
 
     raw = input("Metadata fields, comma-separated (e.g. title, author, date) [title]: ")
@@ -285,7 +285,7 @@ def _offer_config(ep_name: str) -> None:
     if not existing.strip():
         block.append("# paratext config")
     if not any(k in parsed for k in ("base-url", "base_url")):
-        base = input("  VLM base URL [http://localhost:8000/v1]: ").strip() \
+        base = input("  model base URL [http://localhost:8000/v1]: ").strip() \
             or "http://localhost:8000/v1"
         model = input("  Model id served by that endpoint []: ").strip()
         block.append(f'base-url = "{base}"')

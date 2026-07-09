@@ -1,4 +1,4 @@
-"""VLM call wrapper: structured output (Pydantic) with plain-JSON fallback,
+"""model call wrapper: structured output (Pydantic) with plain-JSON fallback,
 retry on transient errors, image encoding."""
 
 from __future__ import annotations
@@ -91,5 +91,5 @@ def call_plain(
     completion = client.chat.completions.create(**kwargs)
     content = completion.choices[0].message.content
     if content is None:
-        raise ValueError("VLM returned empty content")
+        raise ValueError("model returned empty content")
     return content.strip()
