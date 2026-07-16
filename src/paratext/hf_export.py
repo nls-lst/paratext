@@ -257,6 +257,9 @@ human-reviewed.
 
 {schema_table}
 
+The exact machine-readable output schema (enum values, nested objects, optionality)
+is in [`schema.json`](schema.json) — the `response_format` the labels follow.
+
 ## How it was labelled
 
 - **Model:** `{provenance.get("model", "unknown")}`
@@ -316,6 +319,13 @@ def build(dataset_dir: Path, project: str, cfg: ExportConfig, dest: Path) -> Exp
     with (dest / "metadata.jsonl").open("w") as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    # The machine-readable output schema (field names, types, enum values, nested
+    # objects, optionality) — so a downstream eval/bench harness has the exact
+    # response_format the labels follow, not just the card's prose table.
+    (dest / "schema.json").write_text(
+        json.dumps(get_project(project).schema.model_json_schema(), indent=2, ensure_ascii=False)
+    )
 
     gold_ids = {g["sample_id"] for g in store.all_gold(name)}
     stats = review_stats(len(samples), store.all(name), gold_ids)

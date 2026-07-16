@@ -130,6 +130,16 @@ def test_corrected_needs_tweaks_row(tmp_path):
     assert rows["c"]["text"] is None
 
 
+def test_build_writes_schema_json(tmp_path):
+    d = _mk_dataset(tmp_path)
+    hf_export.build(d, "cards", hf_export.ExportConfig(), tmp_path / "out")
+    schema = json.loads((tmp_path / "out" / "schema.json").read_text())
+    props = schema["properties"]
+    assert set(("image_type", "heading", "text")) <= set(props)
+    # Literal enum values are exposed for a bench harness (image_type options).
+    assert "verso" in json.dumps(props["image_type"])
+
+
 def test_include_negatives(tmp_path):
     d = _mk_dataset(tmp_path)
     cfg = hf_export.ExportConfig(include_negatives=True)
