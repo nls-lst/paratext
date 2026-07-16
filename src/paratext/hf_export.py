@@ -250,8 +250,8 @@ def _dataset_card(
 
     body = f"""# {pretty}
 
-Catalogue metadata extracted from digitised material with a vision-language model
-and human-reviewed, produced with [paratext](https://github.com/nls-lst/paratext).
+Catalogue metadata extracted from digitised material with a multimodal model and
+human-reviewed.
 
 ## Schema
 
