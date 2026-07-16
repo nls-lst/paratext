@@ -70,6 +70,7 @@ EXPORT_ROOT = Path("export")
 class ExportConfig:
     repo: str | None = None
     license: str | None = None
+    rights: str | None = None  # free-text rights statement for the card (overrides default)
     min_verdict: str = "good_enough"
     include_negatives: bool = False
     annotators: str = "omit"  # omit | pseudonym | name
@@ -77,13 +78,15 @@ class ExportConfig:
 
 
 def load_config(
-    project: str, *, repo: str | None, public: bool, license: str | None = None
+    project: str, *, repo: str | None, public: bool,
+    license: str | None = None, rights: str | None = None,
 ) -> ExportConfig:
     """Build the export config from `[project.<name>.export]`, with CLI overrides."""
     raw = load_project_section(project, "export")
     cfg = ExportConfig(
         repo=repo or raw.get("repo"),
         license=license or raw.get("license"),
+        rights=rights or raw.get("rights"),
         min_verdict=raw.get("min_verdict", "good_enough"),
         include_negatives=bool(raw.get("include_negatives", False)),
         annotators=raw.get("annotators", "omit"),
@@ -184,13 +187,21 @@ def _dataset_card(
     # publisher didn't choose). The Rights section then steers toward CC0.
     canon = normalise_license(cfg.license)
     lic = canon or "other"
-    if canon:
-        lic_line = f"License: `{canon}`."
+    # A project can set an explicit `rights` statement; otherwise a licence-aware
+    # default (no unfinished-TODO boilerplate). Front matter is set separately.
+    if cfg.rights:
+        rights_body = cfg.rights
+    elif canon:
+        rights_body = (
+            f"Released under [`{canon}`](https://spdx.org/licenses/{canon}.html) — "
+            "labels and images alike. If your collection includes third-party material, "
+            "confirm the image rights position before reuse."
+        )
     else:
-        lic_line = (
-            "No licence set (`license: other`). **CC0-1.0** is recommended for open "
-            "sharing — set `license` under `[project.<name>.export]` in paratext.toml "
-            "or pass `--license` to `paratext export`."
+        rights_body = (
+            "No licence set (front matter records `license: other`). **CC0-1.0** is "
+            "recommended for open sharing — pass `--license`/`--rights` to "
+            "`paratext export` or set them under `[project.<name>.export]`."
         )
 
     front = [
@@ -257,11 +268,13 @@ and human-reviewed, produced with [paratext](https://github.com/nls-lst/paratext
   {n_corrected} _corrected_ (a reviewer edited the fields into the right answer).
   Each row's `_label_status` (`verified` / `corrected`) and, for corrected rows,
   `_corrected_fields` record which is which.
-- **Review accuracy (this round):** {acc_str} over {stats["model"]["scored"]}
+- **Model baseline (for benchmarking — not the label quality):** the labels above are
+  fully human-verified, so this figure describes the *generating* model, not the
+  dataset. It agreed with reviewers on **{acc_str}** of {stats["model"]["scored"]}
   scored items (good_enough={stats["model"]["good_enough"]},
   needs_tweaks={stats["model"]["needs_tweaks"]},
-  not_accurate={stats["model"]["not_accurate"]}). Accuracy measures the **model**;
-  corrected rows still count as model errors here even though they are gold.
+  not_accurate={stats["model"]["not_accurate"]}; needs_tweaks scored as half credit) —
+  a reference point for scoring other models against this set.
 
 <details>
 <summary>Extraction prompt</summary>
@@ -280,8 +293,7 @@ Produced by paratext. Each row carries `_label_status`, `_verdict`,
 {energy_section}
 ## Rights & license
 
-{lic_line} Set a rights statement appropriate to your collection before
-publishing — image rights are the publisher's responsibility.
+{rights_body}
 
 ## Limitations
 

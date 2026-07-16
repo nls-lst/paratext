@@ -312,7 +312,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
     from . import hf_export
 
     cfg = hf_export.load_config(
-        project, repo=args.to, public=args.public, license=args.license
+        project, repo=args.to, public=args.public, license=args.license, rights=args.rights
     )
     _steer_license(cfg, project)
     summary = hf_export.run(dataset_dir, project, cfg, dry_run=args.dry_run)
@@ -592,6 +592,10 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
                     help="Licence for the dataset card (e.g. cc0-1.0, apache-2.0, "
                          "cc-by-4.0); shorthands like cc0 are normalised. Overrides "
                          "config; if unset, export prompts for one.")
+    ex.add_argument("--rights", default=None,
+                    help="Rights statement for the card's Rights section (hf only; "
+                         "overrides the licence-aware default). Also settable as "
+                         "`rights` in config.")
     ex.add_argument("--dry-run", action="store_true",
                     help="Build the dataset folder locally without pushing")
     ex.set_defaults(func=_cmd_export)
