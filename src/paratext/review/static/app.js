@@ -168,7 +168,7 @@ function renderHeader() {
   // Gate Review/Stats until a dataset is chosen — with no selection they just
   // fall back to the picker (looking like dead buttons).
   const gated = state.dataset ? "" : "none";
-  for (const id of ["nav-review", "nav-eval", "nav-stats"]) {
+  for (const id of ["nav-review", "nav-stats"]) {
     const el = document.getElementById(id);
     if (el) el.style.display = gated;
   }
