@@ -1,7 +1,13 @@
 # Spec: `paratext export` — publish a reviewed round as a Hugging Face dataset
 
-Status: **v1 implemented** (`paratext export`, `hf_export.py`). This doc is the
-design + roadmap; sections marked "future"/"v2" are not yet built. Owner: NLS.
+Status: **v1 implemented** (`paratext export --format hf`, `hf_export.py`). This doc
+is the design + roadmap for the **HF** format; sections marked "future"/"v2" are not
+yet built. Owner: NLS.
+
+`export` also has **MARC** and **Dublin Core** formats (`--format marc|dc`,
+`catalogue.py`) for catalogue ingest — all three share the same gold record selection
+(`records.select_records`). See the README "Export" section for MARC/DC and its
+field-mapping wizard; this spec covers the HF format only.
 
 ## Goal
 

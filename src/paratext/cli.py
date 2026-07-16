@@ -253,9 +253,31 @@ def _steer_license(cfg, project: str) -> None:
               f"[project.{project}.export] in paratext.toml to skip this prompt")
 
 
-def _cmd_export(args: argparse.Namespace) -> int:
-    from . import hf_export
+_FORMAT_MENU = {
+    "": "hf", "1": "hf", "hf": "hf",
+    "2": "marc", "marc": "marc",
+    "3": "dc", "dc": "dc",
+}
 
+
+def _pick_format(chosen: str | None) -> str:
+    """Resolve the export format: explicit `--format`, else an interactive menu on a
+    terminal, else `hf` (back-compat for scripts/CI)."""
+    if chosen:
+        return chosen
+    import sys
+
+    if not sys.stdin.isatty():
+        return "hf"
+    print("Export format:")
+    print("  [1] hf   — Hugging Face dataset (images + labels, for ML)")
+    print("  [2] marc — MARCXML catalogue records")
+    print("  [3] dc   — Dublin Core (OAI-DC) records")
+    ans = input("Choose [1/2/3] (default 1): ").strip().lower()
+    return _FORMAT_MENU.get(ans, "hf")
+
+
+def _cmd_export(args: argparse.Namespace) -> int:
     project = args.project
     if not project:
         raise SystemExit("export needs a project: pass -p <project>")
@@ -271,6 +293,23 @@ def _cmd_export(args: argparse.Namespace) -> int:
         dataset_dir = rounds[-1][1]
     if not (dataset_dir / "samples.json").is_file():
         raise SystemExit(f"not a packaged dataset: {dataset_dir}")
+
+    fmt = _pick_format(args.format)
+    if fmt in ("marc", "dc"):
+        from . import catalogue
+
+        if args.to or args.public or args.license:
+            print(f"note: --to/--public/--license apply to the hf format only; "
+                  f"ignored for {fmt}.")
+        summary = catalogue.run(dataset_dir, project, fmt)
+        print(f"{fmt.upper()}: wrote {summary.records} record(s) → {summary.path}")
+        detail = f"Mapped {len(summary.mapped)} field(s)"
+        if summary.skipped:
+            detail += f"; skipped (unmapped): {', '.join(summary.skipped)}"
+        print(detail)
+        return 0
+
+    from . import hf_export
 
     cfg = hf_export.load_config(
         project, repo=args.to, public=args.public, license=args.license
@@ -538,10 +577,13 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
                     help="Rebuild the output dir from scratch, discarding its annotations")
     pk.set_defaults(func=_cmd_package)
 
-    ex = sub.add_parser("export", help="Publish a reviewed round as a Hugging Face dataset")
+    ex = sub.add_parser("export", help="Export a reviewed round (HF dataset / MARC / Dublin Core)")
     ex.add_argument("-p", "--project", choices=choices, default=None, help="Project to export")
+    ex.add_argument("--format", choices=["hf", "marc", "dc"], default=None,
+                    help="Output format: hf (HF dataset), marc (MARCXML), dc (Dublin Core). "
+                         "Omit to be prompted on a terminal (hf by default).")
     ex.add_argument("--to", default=None,
-                    help="HF repo id (org/name); default: export.repo in config")
+                    help="HF repo id (org/name); default: export.repo in config (hf only)")
     ex.add_argument("--round", type=int, default=None,
                     help="Review round to export (default: the latest)")
     ex.add_argument("--public", action="store_true",

@@ -24,10 +24,8 @@ from pathlib import Path
 
 from .config import load_project_section
 from .projects import get_project
-from .review.server import Store, review_stats
-
-# Verdict ordering for the min-verdict gate (higher = more approved).
-_VERDICT_ORDER = {"not_accurate": 0, "needs_tweaks": 1, "good_enough": 2}
+from .records import select_records
+from .review.server import review_stats
 
 # HF Hub licence ids are a controlled, SPDX-like vocabulary — the Hub only renders
 # a tag it recognises (so `cc0`, unversioned, would NOT show as a licence; use
@@ -106,112 +104,58 @@ class ExportSummary:
     url: str | None = None
 
 
-def _round_of(dataset_name: str) -> int | None:
-    m = re.match(r"^.*-r(\d+)$", dataset_name)
-    return int(m.group(1)) if m else None
-
-
-def _annotator_value(ann: dict, mode: str) -> str | None:
-    who = ann.get("annotator")
-    if not who or mode == "omit":
-        return None
-    if mode == "pseudonym":
-        import hashlib
-
-        return "anon-" + hashlib.sha256(who.encode()).hexdigest()[:8]
-    return who
-
-
 def _rows(dataset_dir: Path, project: str, cfg: ExportConfig):
     """Yield (metadata_row, source_image_path) for included samples, plus a
-    running tally of what was excluded and why. Raises on multi-image projects."""
-    samples = json.loads((dataset_dir / "samples.json").read_text())
-    provenance = {}
-    pfile = dataset_dir / "provenance.json"
-    if pfile.is_file():
-        provenance = json.loads(pfile.read_text())
+    running tally of what was excluded and why. Raises on multi-image projects.
 
-    proj = get_project(project)
-    schema_fields = list(proj.schema.model_fields)
-    store = Store(dataset_dir / "annotations.db")
-    name = dataset_dir.name
-    rnd = _round_of(name)
-
+    Selection (which items are gold) is shared with the other export formats via
+    `records.select_records`; here we add the image-count rules and the HF row shape.
+    """
+    sel = select_records(
+        dataset_dir,
+        project,
+        min_verdict=cfg.min_verdict,
+        include_negatives=cfg.include_negatives,
+        annotators=cfg.annotators,
+    )
+    excluded = dict(sel.excluded)
     rows: list[dict] = []
     images: list[Path] = []
-    excluded: dict[str, int] = {}
-    threshold = _VERDICT_ORDER.get(cfg.min_verdict, 2)
 
-    for s in samples:
-        sid = str(s["id"])
-        ann = store.get(name, sid) or {}
-        gold = store.get_gold(name, sid)
-        verdict = ann.get("model_correct")
-        note = ann.get("notes") or ""
-        imgs = s.get("images") or []
-        model_output = s.get("model_output") or {}
-
-        # A human-corrected row is gold regardless of its (original) verdict — that
-        # verdict measured the *model*, which was wrong; the human supplied the
-        # right answer. With no gold rows at all, this path never fires and export
-        # behaves exactly as before (good_enough only).
-        is_corrected = gold is not None
-        if not is_corrected and verdict is None:
-            excluded["unreviewed"] = excluded.get("unreviewed", 0) + 1
-            continue
-
-        is_gold = is_corrected or _VERDICT_ORDER.get(verdict, -1) >= threshold
-        is_negative = not is_corrected and verdict == "not_accurate" and cfg.include_negatives
-        if not (is_gold or is_negative):
-            excluded[verdict] = excluded.get(verdict, 0) + 1
-            continue
-
-        if len(imgs) > 1:
+    for rec in sel.records:
+        if len(rec.images) > 1:
             raise SystemExit(
-                f"'{project}' has multi-image records (sample {sid} has {len(imgs)}). "
-                "v1 export supports single-image projects only (e.g. index-cards); "
-                "multi-image support is planned for v2."
+                f"'{project}' has multi-image records (sample {rec.sid} has "
+                f"{len(rec.images)}). v1 HF export supports single-image projects only "
+                "(e.g. index-cards); use --format marc/dc for multi-image, or v2."
             )
-        if not imgs:
+        if not rec.images:
             excluded["no_image"] = excluded.get("no_image", 0) + 1
             continue
 
-        src = dataset_dir / imgs[0]  # e.g. images/<id>/image.jpg, relative to the round dir
-        ext = Path(imgs[0]).suffix or ".jpg"
-        file_name = f"images/{sid}{ext}"
-
-        row = {"file_name": file_name}
-        # Label source: corrected rows use the human's gold output; plain gold uses
-        # the model output; negatives carry nulls.
-        gold_output = (gold or {}).get("output") or {}
-        for f in schema_fields:
-            if is_negative:
-                row[f] = None
-            elif is_corrected:
-                row[f] = gold_output.get(f, model_output.get(f))
-            else:
-                row[f] = model_output.get(f)
-        row["_label_status"] = (
-            "corrected" if is_corrected else "rejected" if is_negative else "verified"
-        )
-        if is_corrected:
-            row["_corrected_fields"] = gold.get("fields") or []
-        row["_verdict"] = verdict
-        row["_review_note"] = note
-        row["_sample_id"] = sid
-        row["_document_id"] = s.get("document_id")
-        row["_prompt_hash"] = s.get("prompt_hash") or provenance.get("prompt_hash")
-        row["_schema_version"] = provenance.get("schema_version")
-        row["_round"] = rnd
-        row["_model"] = provenance.get("model")
-        annotator = _annotator_value(ann, cfg.annotators)
-        if annotator:
-            row["_annotator"] = annotator
+        src = rec.images[0]  # resolved: <round>/images/<id>/image.jpg
+        ext = src.suffix or ".jpg"
+        row = {"file_name": f"images/{rec.sid}{ext}"}
+        for f in sel.schema_fields:
+            row[f] = rec.label.get(f)
+        row["_label_status"] = rec.status
+        if rec.status == "corrected":
+            row["_corrected_fields"] = rec.corrected_fields
+        row["_verdict"] = rec.verdict
+        row["_review_note"] = rec.note
+        row["_sample_id"] = rec.sid
+        row["_document_id"] = rec.document_id
+        row["_prompt_hash"] = rec.prompt_hash
+        row["_schema_version"] = sel.provenance.get("schema_version")
+        row["_round"] = sel.round
+        row["_model"] = sel.provenance.get("model")
+        if rec.annotator:
+            row["_annotator"] = rec.annotator
 
         rows.append(row)
         images.append(src)
 
-    return rows, images, excluded, provenance, samples, store, name
+    return rows, images, excluded, sel.provenance, sel.samples, sel.store, sel.name
 
 
 def _type_str(annotation) -> str:

@@ -70,7 +70,7 @@ UI automatically when the run finishes.
 | `paratext extract -p <project>` | Run the model, write JSONL only. |
 | `paratext package <jsonl>` | Re-package an existing JSONL for review (no model calls). |
 | `paratext review <dataset-dir>` | Launch the inbuilt web UI to review a packaged dataset. |
-| `paratext export -p <project>` | Publish a reviewed round as a Hugging Face dataset. |
+| `paratext export -p <project>` | Export a reviewed round (`--format hf`/`marc`/`dc`). |
 | `paratext carbon` | Show the current grid carbon/renewables (for `--green` scheduling). |
 | `paratext sample --source <tree> --out <dir> -n 500` | Symlink a random image subset out of a nested tree. |
 | `paratext config [--show]` | Open `paratext.toml`; `--show` prints the resolved defaults. |
@@ -96,9 +96,10 @@ rarely pass them — but every default can be overridden on the CLI.
 - **`package <jsonl>`** — `-p/--project` (inferred from the JSONL's provenance
   if omitted), `--out DIR` (default: the `review/<project>-r<N>` round for this
   prompt), `--round N`, `--fresh` (rebuild, discarding annotations).
-- **`export -p <project>`** — `--to <org/name>` (else `export.repo` in config),
-  `--round N` (default: latest), `--public` (default private), `--license <id>`
-  (else you're prompted; CC0 recommended), `--dry-run` (build locally, don't push).
+- **`export -p <project>`** — `--format {hf,marc,dc}` (omit → prompt on a terminal,
+  hf default); `--round N` (default: latest). HF-only: `--to <org/name>` (else
+  `export.repo`), `--public` (default private), `--license <id>` (else prompted; CC0
+  recommended), `--dry-run` (build locally, don't push).
 - **`review [data_dir]`** — `data_dir` defaults to `./review`; `--port N`
   (config `review-port`, else 5050), `--no-open`.
 - **`sample`** — `--source DIR` (required), `--out DIR` (required), `-n N`
@@ -161,13 +162,27 @@ value. `paratext export` then ships these corrected rows **alongside** the
 *good enough* ones as one gold set (see below). The Stats tab reports the eval-set
 size (good-enough + corrected).
 
-## Export to Hugging Face
+## Export
 
-Once a round is reviewed, `paratext export -p <project>` turns the
-human-approved items into a Hugging Face dataset — a training contribution for
-other institutions and a benchmark for other models over the same material. It
-reuses the round's images and writes an imagefolder + `metadata.jsonl` with an
-auto-generated dataset card (schema, model, prompt, review accuracy).
+Once a round is reviewed, `paratext export -p <project>` turns the human-approved
+items (the gold set — see below) into one of three formats via `--format`:
+
+```bash
+paratext export -p monographs --format hf     # Hugging Face dataset (ML)
+paratext export -p monographs --format marc   # MARCXML catalogue records
+paratext export -p monographs --format dc     # Dublin Core (OAI-DC) records
+paratext export -p monographs                 # no --format: prompts on a terminal (hf default)
+```
+
+**The gold set** is the same for every format: *verified* rows (a reviewer marked
+the model output *good enough*) plus *corrected* rows (a reviewer edited the fields
+in **Build eval set**). With no corrections made, that's just the *good enough* rows.
+
+### Hugging Face (`--format hf`, the default)
+
+Writes an imagefolder + `metadata.jsonl` with an auto-generated dataset card (schema,
+model, prompt, review accuracy) — a training contribution for other institutions and
+a benchmark for other models over the same material.
 
 ```bash
 paratext export -p index-cards --dry-run     # build ./export/<round>/ and inspect
@@ -186,12 +201,9 @@ paratext export -p index-cards --public      # public (see licence steer below)
   output) and *corrected* (a reviewer edited the fields in **Build eval set** — the
   label is the edited output). Each row's `_label_status` says which; corrected
   rows also carry `_corrected_fields`. `_verdict` keeps the original model verdict,
-  so accuracy still measures the model. With no corrections made, export is
-  unchanged: *good enough* only.
-- Single-image projects (index-cards) are supported; multi-image projects
-  (monographs) are rejected for now.
-
-Configure per project:
+  so accuracy still measures the model.
+- HF is single-image only (index-cards); multi-image projects (monographs) are
+  rejected — use `--format marc`/`dc` for those.
 
 ```toml
 [project.index-cards.export]
@@ -204,6 +216,36 @@ license = "cc0-1.0"          # else export prompts; CC0 recommended
 ```
 
 Auth uses your Hugging Face token (`huggingface-cli login` or `HF_TOKEN`).
+
+### MARC & Dublin Core (`--format marc` / `--format dc`)
+
+Writes catalogue records — a MARCXML `<collection>` (`export/<round>.marcxml`) or an
+OAI Dublin Core file (`export/<round>.dc.xml`) — for loading into an ILS / discovery
+layer. Plain XML, no extra dependency. Unlike HF, these are metadata-only, so
+**multi-image projects like monographs work**.
+
+Each schema field maps to a MARC tag / DC element. Fields with **standard names**
+(title, subtitle, author/creator, publisher, place, date, isbn, subject, …) are
+inferred automatically — monographs needs no configuration. For any field with a
+non-standard name, a **wizard** prompts you for a target (a `TAG$sub` like `500$a`, or
+a DC element) and saves your answers so it's asked only once. Unmapped fields are
+dropped with a warning, never a hard error.
+
+```toml
+# Auto-inferred for standard names; only edit to override or map the unknowns.
+# A value of "" means "skip this field" (so the wizard won't ask again).
+[project.monographs.export.marc]
+title             = "245$a"
+personal_authors  = "100$a|700$a"   # first → 100 (main entry), rest → 700 (added)
+publisher         = "264$b"
+publication_date  = "264$c"
+isbn              = "020$a"
+
+[project.monographs.export.dc]
+title            = "title"
+personal_authors = "creator"
+publication_date = "date"
+```
 
 ## Green scheduling (`--green`)
 

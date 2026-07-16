@@ -61,14 +61,20 @@ human guide.
   only). Grid region is declared in `[carbon]`, never auto-detected — `paratext
   config --suggest-region` (also offered once on fresh-config onboarding)
   IP-geolocates only to *propose* one. Stdlib `urllib` only.
-- `paratext export` (`hf_export.py`) publishes a reviewed round as a HF dataset
-  (imagefolder + `metadata.jsonl` + auto card) via the already-present
-  `huggingface_hub` — no `datasets` dep. Gold = `good_enough` rows (`_label_status:
-  verified`) **plus** human-corrected rows from `gold_labels` (`corrected`), shipped
-  together; no `gold_labels` rows → good-enough-only, as before. Single-image
-  projects only, private-by-default. A missing licence is steered (interactive
-  prompt, CC0 recommended) but never blocks publishing. Full design + roadmap:
-  `docs/hf-export-spec.md`.
+- `paratext export -p <project> --format {hf,marc,dc}` (omit → menu on a TTY, hf
+  default). All formats share the same gold set via `records.select_records`:
+  `good_enough` rows (`_label_status: verified`) **plus** human-corrected `gold_labels`
+  rows (`corrected`); no gold rows → good-enough-only, as before.
+  - **hf** (`hf_export.py`): imagefolder + `metadata.jsonl` + auto card via the
+    already-present `huggingface_hub` (no `datasets` dep). Single-image only,
+    private-by-default; a missing licence is steered (CC0 recommended) but never
+    blocks. Spec: `docs/hf-export-spec.md`.
+  - **marc/dc** (`catalogue.py`): MARCXML / OAI Dublin Core to `export/<round>.*`
+    via stdlib `xml.etree` (no dep); metadata-only, so multi-image (monographs) works.
+    Schema fields → MARC tag / DC element: standard names auto-inferred (`CANONICAL`),
+    unknowns filled by an interactive wizard and persisted to
+    `[project.<name>.export.marc|dc]` in paratext.toml (`""` = skip). Unmapped fields
+    are dropped with a warning, never a hard error.
 - `paratext.cards` is the reusable scanned-card toolkit: the deterministic
   `is_verso` pre-filter (pure NumPy) and the optional RetinaNet
   `load_card_detector()` (weights from the Hugging Face Hub, `[cards]` extra).
