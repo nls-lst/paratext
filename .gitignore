@@ -21,3 +21,6 @@ build/
 
 # Session handoff note (local only)
 HANDOFF.md
+
+# Deployed service venv (built from a wheel; not source)
+/deploy/
