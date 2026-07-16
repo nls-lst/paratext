@@ -698,9 +698,11 @@ function renderEditor() {
     ${evalHeader()}
     ${readOnlyBanner}
     <div class="split">
-      <div class="split-media">${imagesHtml(s, "media")}</div>
+      <div class="split-media">
+        ${imagesHtml(s, "media")}
+        ${note ? `<p class="muted eval-note"><strong>Reviewer note:</strong> ${escapeHtml(note)}</p>` : ""}
+      </div>
       <div class="split-content">
-        ${note ? `<p class="muted"><strong>Reviewer note:</strong> ${escapeHtml(note)}</p>` : ""}
         <form id="editor">${fields}</form>
         <div class="controls">
           <button id="ev-prev" ${atFirst ? "disabled" : ""}>← Previous</button>
