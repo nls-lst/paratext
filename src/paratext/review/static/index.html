@@ -59,12 +59,30 @@
         font-size: .875rem;
       }
       .readonly-banner a { margin-left: .5rem; }
+      /* Eval / correction editor. */
+      .eval-head { margin-bottom: 1rem; font-size: .9rem; }
+      .eval-head .pill { display: inline-block; padding: .1em .5em; border-radius: 999px;
+        background: var(--muted); margin-right: .5rem; }
+      .edit-field { display: grid; grid-template-columns: 10rem 1fr; gap: .5rem;
+        padding: .5rem 0; align-items: start; border-top: 1px solid var(--muted); }
+      .edit-field > label.k { font-weight: 600; padding-top: .35rem; }
+      .edit-field .hint { display: block; font-size: .75rem; color: var(--muted-foreground);
+        margin-top: .2rem; word-break: break-word; }
+      .edit-field input, .edit-field textarea, .edit-field select { width: 100%; box-sizing: border-box; }
+      .edit-field.changed > label.k::after { content: " ●"; color: #f59e0b; }
+      .entries-editor .entry-row { border: 1px solid var(--muted); border-radius: .25rem;
+        padding: .5rem .625rem; margin-bottom: .5rem; }
+      .entry-grid { display: grid; gap: .375rem; }
+      .entry-field { display: grid; grid-template-columns: 7rem 1fr; gap: .5rem; align-items: center; }
+      .entry-field > span { font-size: .8125rem; color: var(--muted-foreground); }
+      .gold-badge { color: #22c55e; font-weight: 600; }
     </style>
   </head>
   <body>
     <nav data-topnav>
       <a href="#/select"><strong>paratext</strong></a>
       <a href="#/review" id="nav-review" class="button outline small">Review</a>
+      <a href="#/eval" id="nav-eval" class="button outline small">Build eval set</a>
       <a href="#/stats" id="nav-stats" class="button outline small">Stats</a>
       <span id="progress" style="margin-left:auto; font-size:.875rem;"></span>
     </nav>

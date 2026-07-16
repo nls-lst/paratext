@@ -222,6 +222,11 @@ def _field_spec(
     spec: dict = {"key": key, "label": label}
     if ann is bool:
         spec["type"] = "bool"
+    elif typing.get_origin(ann) is typing.Literal:
+        # A fixed set of allowed values (e.g. image_type) — the review editor
+        # renders these as a <select> so gold labels can't drift to a typo.
+        spec["type"] = "enum"
+        spec["options"] = [str(a) for a in typing.get_args(ann)]
     elif typing.get_origin(ann) is list:
         (inner,) = typing.get_args(ann) or (str,)
         inner = _unwrap_optional(inner)

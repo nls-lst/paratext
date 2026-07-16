@@ -279,7 +279,9 @@ def _cmd_export(args: argparse.Namespace) -> int:
     summary = hf_export.run(dataset_dir, project, cfg, dry_run=args.dry_run)
 
     excluded = ", ".join(f"{k}={v}" for k, v in sorted(summary.excluded.items())) or "none"
-    print(f"Dataset {summary.dataset}: {summary.gold} gold, {summary.negatives} negative(s)")
+    gold_detail = f" ({summary.corrected} human-corrected)" if summary.corrected else ""
+    print(f"Dataset {summary.dataset}: {summary.gold} gold{gold_detail}, "
+          f"{summary.negatives} negative(s)")
     print(f"Excluded: {excluded}")
     if args.dry_run:
         print(f"\nDry run — built {summary.build_dir} (not pushed). "

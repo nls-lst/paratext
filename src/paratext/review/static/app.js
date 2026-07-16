@@ -12,9 +12,12 @@ const state = {
   view: null, // the /api/view contract for state.viewDataset
   viewDataset: null, // which dataset state.view describes
   readOnly: false, // true when current dataset is an archived (non-active) round
-  samples: [],
+  samples: [], // the working list: full list in review mode, filtered queue in eval mode
+  allSamples: [], // unfiltered list (eval mode uses it for the header counts)
+  samplesMode: null, // "review" | "eval" — so a mode switch reloads the working list
   index: 0,
   current: null,
+  evalDirty: false, // an unsaved edit exists in the correction editor
 };
 
 // Fetch (and cache) the display/review contract for the current dataset.
@@ -68,6 +71,8 @@ function setDataset(name) {
   state.view = null;
   state.viewDataset = null;
   state.samples = [];
+  state.allSamples = [];
+  state.samplesMode = null;
   state.index = 0;
   state.current = null;
 }
@@ -75,6 +80,7 @@ function setDataset(name) {
 async function loadList(targetId = null) {
   const res = await fetch(api("api/samples"));
   state.samples = await res.json();
+  state.samplesMode = "review";
   if (!state.samples.length) {
     document.getElementById("progress").textContent = "";
     document.getElementById("view").innerHTML = `
@@ -101,7 +107,10 @@ async function loadSample() {
   const id = state.samples[state.index].id;
   const res = await fetch(api(`api/samples/${id}`));
   state.current = await res.json();
-  render();
+  clearTimeout(state.evalTimer);
+  state.evalDirty = false;
+  if (isEval()) renderEditor();
+  else render();
 }
 
 function fmt(v) {
@@ -159,7 +168,7 @@ function renderHeader() {
   // Gate Review/Stats until a dataset is chosen — with no selection they just
   // fall back to the picker (looking like dead buttons).
   const gated = state.dataset ? "" : "none";
-  for (const id of ["nav-review", "nav-stats"]) {
+  for (const id of ["nav-review", "nav-eval", "nav-stats"]) {
     const el = document.getElementById(id);
     if (el) el.style.display = gated;
   }
@@ -493,7 +502,8 @@ async function save() {
 }
 
 async function navigate(delta) {
-  await save();
+  if (isEval()) await flushGold();
+  else await save();
   const next = state.index + delta;
   if (next < 0 || next >= state.samples.length) return;
   state.index = next;
@@ -515,12 +525,13 @@ async function jumpToNextUnchecked() {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-  if (currentRoute() !== "review") return;
-  // Navigation works in read-only; annotation actions don't.
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return;
+  if (currentRoute() !== "review" && currentRoute() !== "eval") return;
+  // Navigation works in read-only and in the correction editor.
   if (e.key === "ArrowRight") return navigate(1);
   if (e.key === "ArrowLeft") return navigate(-1);
-  if (state.readOnly || !state.view) return;
+  // Verdict/flag hotkeys are review-only (the editor has no verdict buttons).
+  if (isEval() || state.readOnly || !state.view) return;
   if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     return save();
@@ -532,6 +543,315 @@ document.addEventListener("keydown", (e) => {
   const verdict = state.view.scoring.verdicts.find((v) => v.hotkey === e.key);
   if (verdict) mark("model", verdict.value);
 });
+
+// ── Build eval set (correction editor) ─────────────────────────────────
+// Surfaces only the rows the model got wrong (needs_tweaks / not_accurate) and
+// lets a reviewer edit the fields into a correct answer. A saved edit becomes a
+// gold label (POST /api/gold) which `paratext export` ships alongside the
+// already-verified good_enough rows. The model verdict is never changed here.
+const EVAL_VERDICTS = ["needs_tweaks", "not_accurate"];
+
+async function loadEvalList(targetId = null) {
+  const res = await fetch(api("api/samples"));
+  state.allSamples = await res.json();
+  state.samples = state.allSamples.filter((s) => EVAL_VERDICTS.includes(s.model_correct));
+  state.samplesMode = "eval";
+  if (!state.samples.length) return renderEvalEmpty();
+  let idx = 0;
+  if (targetId !== null) {
+    const i = state.samples.findIndex((s) => String(s.id) === String(targetId));
+    if (i !== -1) idx = i;
+  } else {
+    const firstUncorrected = state.samples.findIndex((s) => !s.corrected);
+    idx = firstUncorrected === -1 ? 0 : firstUncorrected;
+  }
+  state.index = idx;
+  await loadSample();
+}
+
+function renderEvalEmpty() {
+  document.getElementById("progress").textContent = "";
+  const good = state.allSamples.filter((s) => s.model_correct === "good_enough").length;
+  const reviewed = state.allSamples.filter((s) => s.model_correct).length;
+  document.getElementById("view").innerHTML = `
+    <h2>Build eval set</h2>
+    <p class="muted">Nothing to correct — no rows are marked <em>needs tweaks</em> or
+      <em>not accurate</em>. ${
+        reviewed
+          ? `${good} good-enough row${good === 1 ? "" : "s"} ${
+              good === 1 ? "is" : "are"
+            } already gold.`
+          : "Score some rows in Review first."
+      }</p>
+    <p><a href="#/review" class="button outline small">← Back to review</a></p>`;
+}
+
+function evalHeader() {
+  const total = state.allSamples.length;
+  const good = state.allSamples.filter((s) => s.model_correct === "good_enough").length;
+  const queue = state.samples.length;
+  const corrected = state.samples.filter((s) => s.corrected).length;
+  return `
+    <div class="eval-head">
+      <span class="pill">${corrected} / ${queue} corrected</span>
+      <span class="pill">${good} good-enough (already gold)</span>
+      <span class="pill">eval set so far: ${good + corrected} of ${total}</span>
+    </div>`;
+}
+
+// Editable control for one field spec, prefilled with `value`. Shared by the
+// top-level fields and (recursively) the item fields of an entries editor.
+function fieldControl(f, value) {
+  const key = escapeHtml(f.key);
+  if (f.type === "bool") {
+    return `<select data-field="${key}" data-type="bool">
+      <option value="true" ${value === true ? "selected" : ""}>yes</option>
+      <option value="false" ${value === true ? "" : "selected"}>no</option>
+    </select>`;
+  }
+  if (f.type === "enum") {
+    const blank = `<option value="" ${
+      value == null || value === "" ? "selected" : ""
+    }>—</option>`;
+    const opts = (f.options ?? [])
+      .map((o) => `<option ${String(value) === o ? "selected" : ""}>${escapeHtml(o)}</option>`)
+      .join("");
+    return `<select data-field="${key}" data-type="enum">${blank}${opts}</select>`;
+  }
+  if (f.type === "number") {
+    return `<input type="number" data-field="${key}" data-type="number" value="${value ?? ""}" />`;
+  }
+  if (f.type === "list") {
+    const text = Array.isArray(value) ? value.join("\n") : "";
+    return `<textarea data-field="${key}" data-type="list" rows="2"
+      placeholder="one per line">${escapeHtml(text)}</textarea>`;
+  }
+  if (f.type === "entries") return entriesEditor(f, Array.isArray(value) ? value : []);
+  return `<textarea data-field="${key}" data-type="string" rows="2">${escapeHtml(
+    value ?? "",
+  )}</textarea>`;
+}
+
+function entriesEditor(f, entries) {
+  const rows = entries.map((e) => entryRow(f, e)).join("");
+  return `<div class="entries-editor" data-field="${escapeHtml(f.key)}">
+    <div class="entry-rows">${rows}</div>
+    <button type="button" class="outline small" data-add-entry>+ Add ${escapeHtml(
+      f.label.toLowerCase(),
+    )}</button>
+  </div>`;
+}
+
+function entryRow(f, entry) {
+  const inner = (f.item_fields ?? [])
+    .map(
+      (it) => `<label class="entry-field"><span>${escapeHtml(it.label)}</span>
+      ${fieldControl(it, entry?.[it.key])}</label>`,
+    )
+    .join("");
+  return `<fieldset class="entry-row">
+    <div class="entry-grid">${inner}</div>
+    <button type="button" class="ghost small" data-del-entry>Remove</button>
+  </fieldset>`;
+}
+
+function modelPanelOf(view) {
+  return view.panels.find((p) => p.source === "model_output") ?? view.panels[0];
+}
+
+function fieldSpec(key) {
+  return modelPanelOf(state.view).fields.find((f) => f.key === key);
+}
+
+function renderEditor() {
+  const s = state.current;
+  const base = s.model_output ?? {};
+  const prefill = s.gold?.output ?? base;
+  const note = s.annotation?.notes;
+  const total = state.samples.length;
+  document.getElementById("progress").innerHTML = `Correcting ${state.index + 1} / ${total} — ${escapeHtml(
+    String(s.document_id ?? s.id),
+  )}`;
+
+  const fields = modelPanelOf(state.view)
+    .fields.map((f) => {
+      const hint =
+        f.type === "entries" ? "" : `<small class="hint">model: ${escapeHtml(fmt(base[f.key]))}</small>`;
+      return `<div class="edit-field" data-key="${escapeHtml(f.key)}" data-type="${escapeHtml(
+        f.type,
+      )}">
+        <label class="k">${escapeHtml(f.label)}</label>
+        <div>${fieldControl(f, prefill[f.key])}${hint}</div>
+      </div>`;
+    })
+    .join("");
+
+  const atFirst = state.index === 0;
+  const atLast = state.index === total - 1;
+  const readOnlyBanner = state.readOnly
+    ? `<aside class="readonly-banner">This round is archived (read-only). Corrections can't be saved.
+        <a href="#/select">Switch round →</a></aside>`
+    : "";
+
+  document.getElementById("view").innerHTML = `
+    <section><h2>Build eval set ${s.gold ? goldBadgeHtml() : ""}</h2></section>
+    ${evalHeader()}
+    ${readOnlyBanner}
+    <div class="split">
+      <div class="split-media">${imagesHtml(s, "media")}</div>
+      <div class="split-content">
+        ${note ? `<p class="muted"><strong>Reviewer note:</strong> ${escapeHtml(note)}</p>` : ""}
+        <form id="editor">${fields}</form>
+        <div class="controls">
+          <button id="ev-prev" ${atFirst ? "disabled" : ""}>← Previous</button>
+          <button id="ev-clear" class="outline" ${s.gold ? "" : "disabled"}>Clear correction</button>
+          ${
+            atLast
+              ? `<a href="#/stats" class="button primary">Done — see stats →</a>`
+              : `<button id="ev-next" class="primary">Save &amp; next →</button>`
+          }
+        </div>
+      </div>
+    </div>`;
+
+  const editor = document.getElementById("editor");
+  if (state.readOnly) {
+    editor.querySelectorAll("input, textarea, select, button").forEach((el) => (el.disabled = true));
+  } else {
+    wireEditor(editor);
+  }
+  document.getElementById("ev-prev").addEventListener("click", () => navigate(-1));
+  document.getElementById("ev-next")?.addEventListener("click", () => navigate(1));
+  document.getElementById("ev-clear").addEventListener("click", clearGold);
+}
+
+function goldBadgeHtml() {
+  return `<span class="gold-badge">✓ saved as gold</span>`;
+}
+
+function wireEditor(editor) {
+  editor.addEventListener("click", (e) => {
+    const add = e.target.closest("[data-add-entry]");
+    const del = e.target.closest("[data-del-entry]");
+    if (add) {
+      const wrap = add.closest(".edit-field");
+      wrap.querySelector(".entry-rows").insertAdjacentHTML(
+        "beforeend",
+        entryRow(fieldSpec(wrap.dataset.key), {}),
+      );
+      markDirty();
+    } else if (del) {
+      del.closest(".entry-row").remove();
+      markDirty();
+    }
+  });
+  editor.addEventListener("input", () => {
+    markDirty();
+    clearTimeout(state.evalTimer);
+    state.evalTimer = setTimeout(saveGold, 500);
+  });
+}
+
+function markDirty() {
+  state.evalDirty = true;
+}
+
+function readControl(el) {
+  const t = el.dataset.type;
+  if (t === "bool") return el.value === "true";
+  if (t === "enum") return el.value === "" ? null : el.value;
+  if (t === "number") return el.value === "" ? null : Number(el.value);
+  if (t === "list") return el.value.split("\n").map((x) => x.trim()).filter(Boolean);
+  return el.value.trim() === "" ? null : el.value; // string
+}
+
+// Read the editor form back into a full output object (all schema fields).
+function collectEdits() {
+  const editor = document.getElementById("editor");
+  const out = {};
+  editor.querySelectorAll(":scope > .edit-field").forEach((wrap) => {
+    const key = wrap.dataset.key;
+    if (wrap.dataset.type === "entries") {
+      out[key] = [...wrap.querySelectorAll(".entry-row")].map((row) => {
+        const obj = {};
+        row.querySelectorAll("[data-field]").forEach((ctl) => {
+          obj[ctl.dataset.field] = readControl(ctl);
+        });
+        return obj;
+      });
+    } else {
+      const ctl = wrap.querySelector("[data-field]");
+      out[key] = ctl ? readControl(ctl) : null;
+    }
+  });
+  return out;
+}
+
+// Stable stringify (sorted keys) so change detection ignores key order.
+function canon(v) {
+  if (Array.isArray(v)) return "[" + v.map(canon).join(",") + "]";
+  if (v && typeof v === "object")
+    return (
+      "{" +
+      Object.keys(v)
+        .sort()
+        .map((k) => JSON.stringify(k) + ":" + canon(v[k]))
+        .join(",") +
+      "}"
+    );
+  return JSON.stringify(v ?? null);
+}
+
+async function saveGold() {
+  if (state.readOnly || !state.current || !document.getElementById("editor")) return;
+  const output = collectEdits();
+  const base = state.current.model_output ?? {};
+  const fields = Object.keys(output).filter((k) => canon(output[k]) !== canon(base[k]));
+  const res = await fetch(api(`api/gold/${state.current.id}`), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ output, fields }),
+  });
+  state.current.gold = await res.json();
+  state.evalDirty = false;
+  for (const list of [state.samples, state.allSamples]) {
+    const q = list.find((x) => String(x.id) === String(state.current.id));
+    if (q) q.corrected = true;
+  }
+  reflectGoldState();
+}
+
+// Update the gold badge / header / Clear button in place (no re-render, so the
+// autosave never steals focus mid-typing).
+function reflectGoldState() {
+  const hasGold = !!state.current.gold;
+  const h2 = document.querySelector("#view h2");
+  let badge = document.querySelector(".gold-badge");
+  if (hasGold && !badge && h2) h2.insertAdjacentHTML("beforeend", " " + goldBadgeHtml());
+  if (!hasGold && badge) badge.remove();
+  const clear = document.getElementById("ev-clear");
+  if (clear) clear.disabled = !hasGold;
+  const head = document.querySelector(".eval-head");
+  if (head) head.outerHTML = evalHeader();
+}
+
+async function flushGold() {
+  clearTimeout(state.evalTimer);
+  if (state.evalDirty) await saveGold();
+}
+
+async function clearGold() {
+  if (state.readOnly || !state.current) return;
+  clearTimeout(state.evalTimer);
+  await fetch(api(`api/gold/${state.current.id}`), { method: "DELETE" });
+  state.current.gold = null;
+  state.evalDirty = false;
+  for (const list of [state.samples, state.allSamples]) {
+    const q = list.find((x) => String(x.id) === String(state.current.id));
+    if (q) q.corrected = false;
+  }
+  renderEditor();
+}
 
 // ── Stats view ────────────────────────────────────────────────────────
 // LCS-based line diff. ~100 lines × 100 lines is trivial; no need for
@@ -685,6 +1005,9 @@ async function renderStats() {
       <div class="field-row"><dt>Needs tweaks</dt><dd class="warn">${s.model.needs_tweaks}</dd></div>
       <div class="field-row"><dt>Not accurate</dt><dd class="bad">${s.model.not_accurate}</dd></div>
       ${hasFlag ? `<div class="field-row"><dt>Flagged</dt><dd>${s.flagged_marc}</dd></div>` : ""}
+      <div class="field-row"><dt>Eval gold set</dt><dd><strong>${s.eval_gold ?? s.model.good_enough}</strong>
+        <small class="muted">(${s.model.good_enough} good-enough + ${s.corrected ?? 0} human-corrected ·
+        <a href="#/eval">build →</a>)</small></dd></div>
     </dl>
 
     ${renderPromptsPanel(promptsData.prompts ?? [])}
@@ -753,7 +1076,12 @@ async function renderStats() {
 function currentRoute() {
   if (location.hash === "#/select") return "select";
   if (location.hash === "#/stats") return "stats";
+  if (location.hash === "#/eval" || location.hash.startsWith("#/eval/")) return "eval";
   return "review";
+}
+
+function isEval() {
+  return currentRoute() === "eval";
 }
 
 async function route() {
@@ -783,9 +1111,28 @@ async function route() {
     return;
   }
 
+  if (currentRoute() === "eval") {
+    const m = location.hash.match(/^#\/eval\/(.+)$/);
+    const targetId = m ? m[1] : null;
+    if (state.samplesMode !== "eval") {
+      await loadEvalList(targetId);
+    } else if (targetId) {
+      const idx = state.samples.findIndex((s) => String(s.id) === String(targetId));
+      if (idx !== -1) {
+        state.index = idx;
+        await loadSample();
+      } else renderEditor();
+    } else if (state.current) {
+      renderEditor();
+    } else {
+      await loadEvalList(null);
+    }
+    return;
+  }
+
   const match = location.hash.match(/^#\/review\/(.+)$/);
   const targetId = match ? match[1] : null;
-  if (!state.samples.length) {
+  if (state.samplesMode !== "review" || !state.samples.length) {
     await loadList(targetId);
   } else if (targetId) {
     const idx = state.samples.findIndex((s) => String(s.id) === String(targetId));

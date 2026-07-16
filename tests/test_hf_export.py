@@ -68,11 +68,18 @@ def _mk_dataset(tmp_path, images_per_sample=1):
     return d
 
 
+def _rows_of(out_dir):
+    lines = (out_dir / "metadata.jsonl").read_text().splitlines()
+    return {json.loads(x)["_sample_id"]: json.loads(x) for x in lines}
+
+
 def test_gold_is_good_enough_only(tmp_path):
+    # No gold_labels rows → export behaves exactly as before (graceful degradation).
     d = _mk_dataset(tmp_path)
     cfg = hf_export.ExportConfig()
     summary = hf_export.build(d, "cards", cfg, tmp_path / "out")
     assert summary.gold == 1
+    assert summary.corrected == 0
     assert summary.negatives == 0
     assert summary.excluded == {"not_accurate": 1, "unreviewed": 1}
 
@@ -83,6 +90,44 @@ def test_gold_is_good_enough_only(tmp_path):
     assert r["heading"] == "H-a"  # model output becomes the gold label
     assert r["_model"] == "test-vlm" and r["_schema_version"] == "v9"
     assert (tmp_path / "out" / r["file_name"]).is_file()  # image copied
+
+
+def test_corrected_row_becomes_gold(tmp_path):
+    d = _mk_dataset(tmp_path)
+    # A human corrects the not_accurate sample "b" into a gold answer.
+    store = Store(d / "annotations.db")
+    store.upsert_gold("cards-r2", "b", {
+        "output": {"image_type": "verso", "heading": "Corrected H", "text": "t"},
+        "fields": ["image_type", "heading", "text"],
+    })
+    summary = hf_export.build(d, "cards", hf_export.ExportConfig(), tmp_path / "out")
+    # a=verified good_enough, b=corrected → 2 gold, 1 corrected, no not_accurate exclusion.
+    assert summary.gold == 2 and summary.corrected == 1 and summary.negatives == 0
+    assert summary.excluded == {"unreviewed": 1}
+
+    rows = _rows_of(tmp_path / "out")
+    b = rows["b"]
+    assert b["_label_status"] == "corrected"
+    assert b["_verdict"] == "not_accurate"  # original model verdict preserved
+    assert sorted(b["_corrected_fields"]) == ["heading", "image_type", "text"]
+    assert b["image_type"] == "verso" and b["heading"] == "Corrected H"  # gold label
+    # The good_enough row stays verified with the model output as its label.
+    assert rows["a"]["_label_status"] == "verified" and rows["a"]["heading"] == "H-a"
+
+
+def test_corrected_needs_tweaks_row(tmp_path):
+    d = _mk_dataset(tmp_path)
+    store = Store(d / "annotations.db")
+    store.upsert("cards-r2", "c", {"model_correct": "needs_tweaks"})
+    store.upsert_gold("cards-r2", "c", {
+        "output": {"image_type": "card", "heading": "Fixed"}, "fields": ["heading"]})
+    summary = hf_export.build(d, "cards", hf_export.ExportConfig(), tmp_path / "out")
+    # a good_enough + c corrected = 2 gold; b still an excluded not_accurate.
+    assert summary.gold == 2 and summary.corrected == 1
+    rows = _rows_of(tmp_path / "out")
+    assert rows["c"]["_label_status"] == "corrected" and rows["c"]["heading"] == "Fixed"
+    # Overlay falls back to model_output for fields the human didn't set.
+    assert rows["c"]["text"] is None
 
 
 def test_include_negatives(tmp_path):

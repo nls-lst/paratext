@@ -147,6 +147,20 @@ and `GET /api/export/<id>` returns a CSV of scored/flagged samples with notes.
 Query the db (or those endpoints), see where the model struggles, and tighten
 those parts of `prompt.md` before the next round.
 
+### Build eval set — correcting rows into gold
+
+Scoring alone yields gold only from the rows the model already got right
+(*good enough*). The **Build eval set** tab turns the rest into gold too: it
+surfaces just the *needs tweaks* / *not accurate* rows and lets you edit the
+fields (text, enums as dropdowns, list values, and structured sub-entries with
+add/remove) into the correct answer. A saved edit is stored as a **gold label**
+in a separate `gold_labels` table — it never changes the model verdict (accuracy
+still reflects the model) and never touches the `annotations` table. The editor
+edits the fields your project's View shows; fields the View hides keep their model
+value. `paratext export` then ships these corrected rows **alongside** the
+*good enough* ones as one gold set (see below). The Stats tab reports the eval-set
+size (good-enough + corrected).
+
 ## Export to Hugging Face
 
 Once a round is reviewed, `paratext export -p <project>` turns the
@@ -167,11 +181,13 @@ paratext export -p index-cards --public      # public (see licence steer below)
   sharing**, or set your own, or leave it blank. Leaving it blank no longer blocks
   publishing; the dataset card just records `license: other`. Image rights remain
   the publisher's call.
-- **Gold = approved items.** Only items a reviewer marked *good enough* become
-  labelled rows (the label is the verified model output); *needs tweaks* /
-  *not accurate* items carry their note but aren't labels. (Structured per-field
-  corrections, which would promote *needs tweaks* to gold, are a planned review
-  feature.)
+- **Gold = human-approved items**, of two kinds, both shipped together:
+  *verified* (a reviewer marked the model output *good enough* — the label is that
+  output) and *corrected* (a reviewer edited the fields in **Build eval set** — the
+  label is the edited output). Each row's `_label_status` says which; corrected
+  rows also carry `_corrected_fields`. `_verdict` keeps the original model verdict,
+  so accuracy still measures the model. With no corrections made, export is
+  unchanged: *good enough* only.
 - Single-image projects (index-cards) are supported; multi-image projects
   (monographs) are rejected for now.
 

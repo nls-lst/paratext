@@ -16,7 +16,11 @@ human guide.
   flags resolve from `paratext.toml`/env, so `-p <project>` is usually enough.
 - The inbuilt review (`paratext.review`) is a dependency-free stdlib
   `http.server` + `sqlite3` app serving a generic vanilla-JS frontend in
-  `review/static/`, driven entirely by each dataset's `view.json`.
+  `review/static/`, driven entirely by each dataset's `view.json`. Reviewers give
+  a verdict + free-text note (the `annotations` table); the **Build eval set** tab
+  (`#/eval`) additionally lets them edit fields into a corrected answer, stored in
+  a separate `gold_labels` table (`POST /api/gold/<id>`). The `annotations.corrections`
+  column is unrelated — handwritten corrections on the card, not reviewer edits.
 - A **project** is a plug-in package discovered via the `paratext.projects`
   entry-point group: `prompt.md` (prompt), `schema.py` (Pydantic schema), and
   `__init__.py` which wires them to a `paratext.sources` adapter
@@ -59,10 +63,12 @@ human guide.
   IP-geolocates only to *propose* one. Stdlib `urllib` only.
 - `paratext export` (`hf_export.py`) publishes a reviewed round as a HF dataset
   (imagefolder + `metadata.jsonl` + auto card) via the already-present
-  `huggingface_hub` — no `datasets` dep. v1 gold = `good_enough` rows only,
-  single-image projects only, private-by-default. A missing licence is steered
-  (interactive prompt, CC0 recommended) but never blocks publishing. Full design
-  + roadmap: `docs/hf-export-spec.md`.
+  `huggingface_hub` — no `datasets` dep. Gold = `good_enough` rows (`_label_status:
+  verified`) **plus** human-corrected rows from `gold_labels` (`corrected`), shipped
+  together; no `gold_labels` rows → good-enough-only, as before. Single-image
+  projects only, private-by-default. A missing licence is steered (interactive
+  prompt, CC0 recommended) but never blocks publishing. Full design + roadmap:
+  `docs/hf-export-spec.md`.
 - `paratext.cards` is the reusable scanned-card toolkit: the deterministic
   `is_verso` pre-filter (pure NumPy) and the optional RetinaNet
   `load_card_detector()` (weights from the Hugging Face Hub, `[cards]` extra).
@@ -86,6 +92,7 @@ rounds); re-running the same prompt updates the current round in place, keeping
 its annotations. Rounds are a linear history — reverting a prompt starts a new
 round. `--round N` forces one; `--fresh` rebuilds a round, discarding its
 annotations. To fold review feedback back into the prompt, read the round's
-`annotations.db` (SQLite; `corrections` column is per-field JSON) or, with the
-server running, `GET /api/stats` (accuracy/verdict counts) and
-`GET /api/export/<id>` (CSV) — then tighten the fields reviewers corrected most.
+`annotations.db` (SQLite: `annotations` for verdicts/notes, `gold_labels` for
+human-corrected answers) or, with the server running, `GET /api/stats`
+(accuracy/verdict counts + eval-gold size) and `GET /api/export/<id>` (CSV) — then
+tighten the fields reviewers corrected most.

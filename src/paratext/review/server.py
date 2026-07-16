@@ -89,6 +89,24 @@ class Store:
                 PRIMARY KEY (dataset, sample_id)
             )"""
         )
+        # Human-corrected gold labels, kept in their OWN table (additive: never
+        # alters `annotations`, so pointing --db at a legacy DB is safe). A row
+        # here means the reviewer built a corrected answer for that sample; it
+        # becomes gold in `paratext export`. `output` is the full corrected
+        # field->value map (the label); `fields` lists which keys the human
+        # changed (provenance). NB the `annotations.corrections` column is a
+        # different thing — handwritten corrections on the card, not this.
+        self.db.execute(
+            """CREATE TABLE IF NOT EXISTS gold_labels (
+                dataset TEXT NOT NULL,
+                sample_id TEXT NOT NULL,
+                output TEXT NOT NULL,
+                fields TEXT,
+                annotator TEXT,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (dataset, sample_id)
+            )"""
+        )
         self.db.commit()
 
     def _row(self, r: sqlite3.Row) -> dict:
@@ -157,8 +175,63 @@ class Store:
     def reset(self, dataset: str | None = None) -> None:
         if dataset is None:
             self.db.execute("DELETE FROM annotations")
+            self.db.execute("DELETE FROM gold_labels")
         else:
             self.db.execute("DELETE FROM annotations WHERE dataset = ?", (dataset,))
+            self.db.execute("DELETE FROM gold_labels WHERE dataset = ?", (dataset,))
+        self.db.commit()
+
+    # -- gold labels (human-corrected answers; see the table comment) --
+    def _gold_row(self, r: sqlite3.Row) -> dict:
+        return {
+            "sample_id": r["sample_id"],
+            "output": json.loads(r["output"]),
+            "fields": json.loads(r["fields"]) if r["fields"] else [],
+            "annotator": r["annotator"],
+            "updated_at": r["updated_at"],
+        }
+
+    def get_gold(self, dataset: str, sample_id: str) -> dict | None:
+        r = self.db.execute(
+            "SELECT * FROM gold_labels WHERE dataset = ? AND sample_id = ?",
+            (dataset, sample_id),
+        ).fetchone()
+        return self._gold_row(r) if r else None
+
+    def all_gold(self, dataset: str) -> list[dict]:
+        rows = self.db.execute(
+            "SELECT * FROM gold_labels WHERE dataset = ?", (dataset,)
+        ).fetchall()
+        return [self._gold_row(r) for r in rows]
+
+    def upsert_gold(self, dataset: str, sample_id: str, body: dict) -> dict:
+        now = datetime.now(timezone.utc).isoformat()
+        self.db.execute(
+            """INSERT INTO gold_labels (
+                dataset, sample_id, output, fields, annotator, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(dataset, sample_id) DO UPDATE SET
+                output = excluded.output,
+                fields = excluded.fields,
+                annotator = excluded.annotator,
+                updated_at = excluded.updated_at""",
+            (
+                dataset,
+                sample_id,
+                json.dumps(body.get("output") or {}),
+                json.dumps(body.get("fields") or []),
+                body.get("annotator"),
+                now,
+            ),
+        )
+        self.db.commit()
+        return self.get_gold(dataset, sample_id)
+
+    def delete_gold(self, dataset: str, sample_id: str) -> None:
+        self.db.execute(
+            "DELETE FROM gold_labels WHERE dataset = ? AND sample_id = ?",
+            (dataset, sample_id),
+        )
         self.db.commit()
 
 
@@ -303,16 +376,26 @@ def load_view(dataset: dict, samples: list[dict]) -> dict:
     return synthesise_view(dataset, samples)
 
 
-def review_stats(total: int, annotations: list[dict]) -> dict:
+def review_stats(
+    total: int, annotations: list[dict], gold_ids: set[str] | None = None
+) -> dict:
     """Verdict counts + accuracy for a round. `needs_tweaks` counts as half
-    credit. Shared by the `/api/stats` endpoint and `paratext export`."""
+    credit. Shared by the `/api/stats` endpoint and `paratext export`.
+
+    `gold_ids` (sample ids with a human-corrected gold label) drives the eval-set
+    figures: `corrected` = how many, `eval_gold` = distinct samples that are
+    `good_enough` OR corrected (the full gold set `paratext export` would ship)."""
+    gold_ids = gold_ids or set()
     n = lambda v: sum(1 for a in annotations if a["model_correct"] == v)  # noqa: E731
     good, tweaks, bad = n("good_enough"), n("needs_tweaks"), n("not_accurate")
     scored = good + tweaks + bad
+    good_ids = {a["sample_id"] for a in annotations if a["model_correct"] == "good_enough"}
     return {
         "total": total,
         "annotated": sum(1 for a in annotations if a["model_correct"] is not None),
         "flagged_marc": sum(1 for a in annotations if a["catalogue_correct"] == "flagged"),
+        "corrected": len(gold_ids),
+        "eval_gold": len(good_ids | gold_ids),
         "model": {
             "good_enough": good,
             "needs_tweaks": tweaks,
@@ -408,6 +491,10 @@ class Handler(BaseHTTPRequestHandler):
             ds = self._dataset(qs)
             sid = unquote(u.path.split("/api/annotations/", 1)[1])
             return self._json(self.store.upsert(ds["name"], sid, self._body()))
+        if u.path.startswith("/api/gold/"):
+            ds = self._dataset(qs)
+            sid = unquote(u.path.split("/api/gold/", 1)[1])
+            return self._json(self.store.upsert_gold(ds["name"], sid, self._body()))
         self._json({"error": "not found"}, 404)
 
     def do_DELETE(self):
@@ -417,6 +504,11 @@ class Handler(BaseHTTPRequestHandler):
             if self._body().get("confirm") is not True:
                 return self._json({"error": "Pass {confirm: true} to reset."}, 400)
             self.store.reset((qs.get("dataset") or [None])[0])
+            return self._json({"ok": True})
+        if u.path.startswith("/api/gold/"):
+            ds = self._dataset(qs)
+            sid = unquote(u.path.split("/api/gold/", 1)[1])
+            self.store.delete_gold(ds["name"], sid)
             return self._json({"ok": True})
         self._json({"error": "not found"}, 404)
 
@@ -440,12 +532,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def _api_samples(self, ds):
         ann = {a["sample_id"]: a for a in self.store.all(ds["name"])}
+        gold = {g["sample_id"] for g in self.store.all_gold(ds["name"])}
         self._json(
             [
                 {
                     "id": s["id"],
                     "document_id": s.get("document_id"),
                     "annotated": (ann.get(str(s["id"]), {}).get("model_correct")) is not None,
+                    "model_correct": ann.get(str(s["id"]), {}).get("model_correct"),
+                    "corrected": str(s["id"]) in gold,
                 }
                 for s in load_samples(ds)
             ]
@@ -459,11 +554,13 @@ class Handler(BaseHTTPRequestHandler):
             **sample,
             "schema": sample.get("schema") or ds["schema"],
             "annotation": self.store.get(ds["name"], sid),
+            "gold": self.store.get_gold(ds["name"], sid),
         }
         self._json(sample)
 
     def _api_stats(self, ds):
-        stats = review_stats(len(load_samples(ds)), self.store.all(ds["name"]))
+        gold_ids = {g["sample_id"] for g in self.store.all_gold(ds["name"])}
+        stats = review_stats(len(load_samples(ds)), self.store.all(ds["name"]), gold_ids)
         self._json({"dataset": ds["name"], "schema": ds["schema"], **stats})
 
     def _api_table(self, ds):

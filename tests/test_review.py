@@ -23,6 +23,48 @@ def test_store_roundtrip(tmp_path):
     assert store.get("ds", "x") is None
 
 
+def test_gold_labels_roundtrip(tmp_path):
+    store = Store(tmp_path / "a.db")
+    assert store.get_gold("ds", "x") is None
+    assert store.all_gold("ds") == []
+    store.upsert_gold("ds", "x", {"output": {"heading": "Fixed", "entries": []},
+                                  "fields": ["heading"], "annotator": "sam"})
+    g = store.get_gold("ds", "x")
+    assert g["output"] == {"heading": "Fixed", "entries": []}
+    assert g["fields"] == ["heading"] and g["annotator"] == "sam" and g["updated_at"]
+    assert [r["sample_id"] for r in store.all_gold("ds")] == ["x"]
+    # Upsert replaces; delete removes; the corrections column is untouched.
+    store.upsert_gold("ds", "x", {"output": {"heading": "Again"}, "fields": ["heading"]})
+    assert store.get_gold("ds", "x")["output"] == {"heading": "Again"}
+    store.delete_gold("ds", "x")
+    assert store.get_gold("ds", "x") is None
+
+
+def test_gold_survives_reset_scope(tmp_path):
+    store = Store(tmp_path / "a.db")
+    store.upsert_gold("ds", "x", {"output": {"a": 1}})
+    store.reset("other")  # different dataset — gold stays
+    assert store.get_gold("ds", "x") is not None
+    store.reset("ds")  # same dataset — gold cleared too
+    assert store.get_gold("ds", "x") is None
+
+
+def test_review_stats_counts_corrected_and_eval_gold():
+    from paratext.review.server import review_stats
+
+    anns = [
+        {"sample_id": "1", "model_correct": "good_enough", "catalogue_correct": None},
+        {"sample_id": "2", "model_correct": "not_accurate", "catalogue_correct": None},
+        {"sample_id": "3", "model_correct": "needs_tweaks", "catalogue_correct": None},
+    ]
+    stats = review_stats(5, anns, gold_ids={"2", "3"})
+    assert stats["corrected"] == 2
+    # eval gold = good_enough (1) ∪ corrected (2,3) = 3 distinct samples
+    assert stats["eval_gold"] == 3
+    # Back-compat: no gold_ids → corrected 0, eval_gold = good_enough count.
+    assert review_stats(5, anns)["eval_gold"] == 1
+
+
 def _write_dataset(d, name, records, view=None):
     sub = d / name
     sub.mkdir(parents=True)

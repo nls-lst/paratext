@@ -1,6 +1,8 @@
 """audit_project links a project's schema, prompt, and view, so a field rename in
 one can't silently drift from the others (paratext.projects.audit_project)."""
 
+from typing import Literal, Optional
+
 import pytest
 from pydantic import BaseModel
 
@@ -8,6 +10,7 @@ from paratext.projects import (
     Panel,
     Project,
     View,
+    _field_spec,
     audit_project,
     get_project,
     project_names,
@@ -18,6 +21,21 @@ from paratext.projects import (
 def test_installed_projects_are_consistent(name):
     problems = audit_project(get_project(name))
     assert not problems, f"{name}: " + "; ".join(problems)
+
+
+def test_field_spec_emits_enum_options_for_literal():
+    class M(BaseModel):
+        kind: Literal["a", "b", "c"]
+        opt_kind: Optional[Literal["x", "y"]] = None
+        name: Optional[str] = None
+
+    assert _field_spec("kind", M, {}) == {
+        "key": "kind", "label": "Kind", "type": "enum", "options": ["a", "b", "c"]}
+    # Optional[Literal] is unwrapped to the same enum spec.
+    assert _field_spec("opt_kind", M, {})["type"] == "enum"
+    assert _field_spec("opt_kind", M, {})["options"] == ["x", "y"]
+    # Plain strings stay strings.
+    assert _field_spec("name", M, {})["type"] == "string"
 
 
 class _Schema(BaseModel):

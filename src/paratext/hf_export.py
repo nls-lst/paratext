@@ -99,6 +99,7 @@ class ExportSummary:
     dataset: str
     gold: int
     negatives: int
+    corrected: int = 0
     excluded: dict[str, int] = field(default_factory=dict)
     build_dir: Path | None = None
     repo: str | None = None
@@ -144,17 +145,23 @@ def _rows(dataset_dir: Path, project: str, cfg: ExportConfig):
     for s in samples:
         sid = str(s["id"])
         ann = store.get(name, sid) or {}
+        gold = store.get_gold(name, sid)
         verdict = ann.get("model_correct")
         note = ann.get("notes") or ""
         imgs = s.get("images") or []
         model_output = s.get("model_output") or {}
 
-        if verdict is None:
+        # A human-corrected row is gold regardless of its (original) verdict — that
+        # verdict measured the *model*, which was wrong; the human supplied the
+        # right answer. With no gold rows at all, this path never fires and export
+        # behaves exactly as before (good_enough only).
+        is_corrected = gold is not None
+        if not is_corrected and verdict is None:
             excluded["unreviewed"] = excluded.get("unreviewed", 0) + 1
             continue
 
-        is_gold = _VERDICT_ORDER.get(verdict, -1) >= threshold
-        is_negative = verdict == "not_accurate" and cfg.include_negatives
+        is_gold = is_corrected or _VERDICT_ORDER.get(verdict, -1) >= threshold
+        is_negative = not is_corrected and verdict == "not_accurate" and cfg.include_negatives
         if not (is_gold or is_negative):
             excluded[verdict] = excluded.get(verdict, 0) + 1
             continue
@@ -174,10 +181,21 @@ def _rows(dataset_dir: Path, project: str, cfg: ExportConfig):
         file_name = f"images/{sid}{ext}"
 
         row = {"file_name": file_name}
-        # Gold rows carry the model output as the label; negatives carry nulls.
+        # Label source: corrected rows use the human's gold output; plain gold uses
+        # the model output; negatives carry nulls.
+        gold_output = (gold or {}).get("output") or {}
         for f in schema_fields:
-            row[f] = None if is_negative else model_output.get(f)
-        row["_label_status"] = "rejected" if is_negative else "verified"
+            if is_negative:
+                row[f] = None
+            elif is_corrected:
+                row[f] = gold_output.get(f, model_output.get(f))
+            else:
+                row[f] = model_output.get(f)
+        row["_label_status"] = (
+            "corrected" if is_corrected else "rejected" if is_negative else "verified"
+        )
+        if is_corrected:
+            row["_corrected_fields"] = gold.get("fields") or []
         row["_verdict"] = verdict
         row["_review_note"] = note
         row["_sample_id"] = sid
@@ -213,7 +231,8 @@ def _size_category(n: int) -> str:
 
 
 def _dataset_card(
-    project: str, cfg: ExportConfig, provenance: dict, stats: dict, n_gold: int
+    project: str, cfg: ExportConfig, provenance: dict, stats: dict, n_gold: int,
+    n_verified: int = 0, n_corrected: int = 0,
 ) -> str:
     proj = get_project(project)
     pretty = project.replace("-", " ").replace("_", " ").title()
@@ -289,12 +308,16 @@ and human-reviewed, produced with [paratext](https://github.com/nls-lst/paratext
 - **Prompt hash:** `{provenance.get("prompt_hash", "unknown")}`
 - **Schema version:** `{provenance.get("schema_version", "unknown")}`
 - **Review:** each item was shown to a human reviewer who gave a verdict and an
-  optional free-text note. **Only items marked _good enough_ are included as gold
-  labels** (the label is the model output a reviewer verified as correct).
+  optional free-text note. **Gold labels are the {n_gold} items a human signed
+  off:** {n_verified} _verified_ (model output a reviewer marked good enough) and
+  {n_corrected} _corrected_ (a reviewer edited the fields into the right answer).
+  Each row's `_label_status` (`verified` / `corrected`) and, for corrected rows,
+  `_corrected_fields` record which is which.
 - **Review accuracy (this round):** {acc_str} over {stats["model"]["scored"]}
   scored items (good_enough={stats["model"]["good_enough"]},
   needs_tweaks={stats["model"]["needs_tweaks"]},
-  not_accurate={stats["model"]["not_accurate"]}).
+  not_accurate={stats["model"]["not_accurate"]}). Accuracy measures the **model**;
+  corrected rows still count as model errors here even though they are gold.
 
 <details>
 <summary>Extraction prompt</summary>
@@ -307,8 +330,9 @@ and human-reviewed, produced with [paratext](https://github.com/nls-lst/paratext
 
 ## Provenance
 
-Produced by paratext. Each row carries `_prompt_hash`, `_schema_version`,
-`_round`, `_model`, and the reviewer's `_review_note`.
+Produced by paratext. Each row carries `_label_status`, `_verdict`,
+`_prompt_hash`, `_schema_version`, `_round`, `_model`, and the reviewer's
+`_review_note` (plus `_corrected_fields` on corrected rows).
 {energy_section}
 ## Rights & license
 
@@ -337,13 +361,19 @@ def build(dataset_dir: Path, project: str, cfg: ExportConfig, dest: Path) -> Exp
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    stats = review_stats(len(samples), store.all(name))
-    gold = sum(1 for r in rows if r["_label_status"] == "verified")
+    gold_ids = {g["sample_id"] for g in store.all_gold(name)}
+    stats = review_stats(len(samples), store.all(name), gold_ids)
+    verified = sum(1 for r in rows if r["_label_status"] == "verified")
+    corrected = sum(1 for r in rows if r["_label_status"] == "corrected")
     negatives = sum(1 for r in rows if r["_label_status"] == "rejected")
-    (dest / "README.md").write_text(_dataset_card(project, cfg, provenance, stats, gold))
+    gold = verified + corrected
+    (dest / "README.md").write_text(
+        _dataset_card(project, cfg, provenance, stats, gold, verified, corrected)
+    )
 
     return ExportSummary(
-        dataset=name, gold=gold, negatives=negatives, excluded=excluded, build_dir=dest
+        dataset=name, gold=gold, corrected=corrected, negatives=negatives,
+        excluded=excluded, build_dir=dest,
     )
 
 

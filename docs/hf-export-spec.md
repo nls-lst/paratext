@@ -85,24 +85,30 @@ For each sample in the round, read its annotation from `annotations.db` (keyed b
   (unreviewed) — the reviewer's verdict.
 - `notes` — a **free-text general comment** (this is how staff actually interact
   today; a streamlined single box, not per-field edits).
-- `corrections` — a JSON-blob column keyed by field name that *exists* in the
-  store but is **not populated by the current review UI** (there is no
-  structured per-field correction control yet). Treat it as future-only.
+- **Human-corrected gold** lives in a **separate `gold_labels` table** (keyed by
+  `(dataset, sample_id)`; `output` = the full corrected field map, `fields` = which
+  keys the human changed). Written by the review UI's **Build eval set** editor.
+  A row here is gold **regardless of the model verdict** — the human supplied the
+  right answer. (NB: the `annotations.corrections` column is a *different* thing —
+  handwritten corrections on the card, not reviewer edits — and is left untouched.)
 
-**v1 reality (no structured corrections):** we cannot synthesise a corrected
-label from a free-text note, so the clean gold set is the **`good_enough`** rows
-— model output a human verified as correct as-is. `needs_tweaks`/`not_accurate`
-have a note saying *something* is off but not *what the right answer is*, so they
-are not labelled examples.
+Two gold kinds ship together, so an eval set covers both the model's hits and its
+misses. **With no `gold_labels` rows, export is exactly the old behaviour**
+(`good_enough` only) — the corrected path simply never fires.
 
-Inclusion policy (v1):
+Inclusion policy (gold wins over verdict):
 
-| Verdict | Action | `_label_status` |
+| Condition | Action | `_label_status` |
 |---|---|---|
-| `good_enough` | include; gold = model output as-is | `verified` |
-| `needs_tweaks` | exclude from gold; optionally emit to a **review queue** with its note | — |
-| `not_accurate` | exclude; with `include-negatives`, emit as a hard negative (gold = null) + note | `rejected` |
-| unreviewed (`None`) | exclude (only human-checked rows ship) | — |
+| has a `gold_labels` row | include; gold = corrected `output` (missing fields fall back to model output); `_corrected_fields` set | `corrected` |
+| else `good_enough` | include; gold = model output as-is | `verified` |
+| else `not_accurate` + `include-negatives` | emit as a hard negative (gold = null) + note | `rejected` |
+| else `needs_tweaks` / `not_accurate` | exclude from gold; note rides in the review CSV | — |
+| unreviewed (`None`) with no gold | exclude (only human-checked rows ship) | — |
+
+`_verdict` always records the **original** model verdict (a corrected row keeps
+`not_accurate`/`needs_tweaks`), so review accuracy still measures the model even
+though the row is gold.
 
 So `min-verdict` effectively defaults to `good_enough` in v1. The reviewer's
 `notes` ride along on every exported/queued row as `_review_note` — useful
