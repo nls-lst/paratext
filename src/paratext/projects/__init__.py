@@ -196,6 +196,8 @@ class View:
     notes_placeholder: str = "Describe what's wrong or what should change…"
     table_label: tuple[str, str] | None = None  # (source, field key) for the stats table
     exports: list[dict] = field(default_factory=list)
+    # Field keys rendered as a <details>, omitted entirely when empty.
+    collapsed: list[str] = field(default_factory=list)
 
 
 def _humanize(key: str) -> str:
@@ -268,6 +270,9 @@ def build_view(project: Project) -> dict:
     panels: list[dict] = []
     for p in v.panels:
         fields = [_field_spec(k, project.schema, v.labels) for k in p.fields]
+        for f in fields:
+            if f["key"] in v.collapsed:
+                f["collapsed"] = True
         panel: dict = {"source": p.source, "title": p.title, "fields": fields}
         if p.flag:
             panel["flag"] = {"value": p.flag, "label": p.flag_label or "Flag"}
@@ -314,7 +319,7 @@ def audit_project(project: Project) -> list[str]:
     fields = set(project.schema.model_fields)
     view = project.view or default_view(project)
 
-    referenced = {k for p in view.panels for k in p.fields} | set(view.labels)
+    referenced = {k for p in view.panels for k in p.fields} | set(view.labels) | set(view.collapsed)
     if view.table_label:
         referenced.add(view.table_label[1])
     for key in sorted(referenced - fields):

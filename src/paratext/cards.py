@@ -66,6 +66,41 @@ def is_verso(
     return bool(cr_std < texture_max and dark_frac < darktext_max)
 
 
+# ── Show-through suppression ───────────────────────────────────────────────
+# Calibrated on NLS cards 0255/0269/0291 against cataloguer-confirmed ground
+# truth. Reduces show-through, does not eliminate it: darker ghosts survive, so
+# the prompt's structural checks still matter.
+SHOW_THROUGH_KEEP = 0.70  # cutoff, as a fraction of the ink→paper range
+
+
+def suppress_show_through(
+    image: Image.Image, *, keep: float = SHOW_THROUGH_KEEP
+) -> Image.Image:
+    """Flatten faint show-through from stacked cards to paper-white, leaving the
+    card's own ink untouched.
+
+    ``keep`` sets the cutoff between the darkest ink (0.0) and paper (1.0);
+    anything lighter is whitened. LOWER removes more show-through but risks
+    erasing genuinely faint print, which is the costlier error. Recalibrate per
+    collection — see ``tests/test_show_through.py``."""
+    a = np.asarray(image.convert("L"), dtype=np.float32)
+    # Levels come from the card, not the frame: the dark desk and binding would
+    # drag the ink level down and leave the cutoff too low to suppress anything.
+    h, w = a.shape
+    centre = a[int(0.30 * h) : int(0.72 * h), int(0.18 * w) : int(0.82 * w)]
+    paper = float(np.percentile(centre, 85))
+    ink = float(np.percentile(centre, 2))
+    if paper - ink < 1.0:  # near-uniform (blank/verso): leave alone
+        return image
+    # Soft threshold, not a contrast stretch: a stretch darkens the ghost and
+    # amplifies paper grain, making show-through easier for the model to read.
+    cutoff = ink + (paper - ink) * keep
+    ramp = max((paper - ink) * 0.08, 6.0)  # floor stops low-contrast cards speckling
+    t = np.clip((a - cutoff) / max(ramp, 1e-6), 0.0, 1.0)
+    out = a * (1.0 - t) + 255.0 * t
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), mode="L")
+
+
 # ── Crop helpers ───────────────────────────────────────────────────────────
 def crop_uniform(img: Image.Image, margin_pct: float = 0.08) -> Image.Image:
     """Fallback crop when no detector is available: trim a uniform margin."""

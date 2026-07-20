@@ -131,14 +131,27 @@ function fieldRow(obj, f) {
     </div>`;
 }
 
+// A <details> the reviewer opens on demand; omitted entirely when empty.
+function collapsedBlock(obj, f) {
+  const v = obj?.[f.key];
+  if (v === null || v === undefined || v === "") return "";
+  return `
+    <details class="field-collapsed" style="margin:.5rem 0;">
+      <summary>${escapeHtml(f.label)}</summary>
+      <div style="margin:.4rem 0 .2rem .5rem; white-space:pre-wrap;">${escapeHtml(fmt(v))}</div>
+    </details>`;
+}
+
 // Render a panel's body: scalar fields in a <dl>, then any "entries"
-// (list-of-objects) fields as their own blocks.
+// (list-of-objects) fields as their own blocks, then any collapsed fields.
 function panelBody(obj, fields) {
-  const scalar = fields.filter((f) => f.type !== "entries");
-  const entries = fields.filter((f) => f.type === "entries");
+  const shown = fields.filter((f) => !f.collapsed);
+  const scalar = shown.filter((f) => f.type !== "entries");
+  const entries = shown.filter((f) => f.type === "entries");
   return `
     <dl>${scalar.map((f) => fieldRow(obj, f)).join("")}</dl>
-    ${entries.map((f) => entriesBlock(f, obj?.[f.key])).join("")}`;
+    ${entries.map((f) => entriesBlock(f, obj?.[f.key])).join("")}
+    ${fields.filter((f) => f.collapsed).map((f) => collapsedBlock(obj, f)).join("")}`;
 }
 
 function entriesBlock(field, entries) {

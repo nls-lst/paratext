@@ -41,6 +41,7 @@ def image_source(
     *,
     verso_filter: bool = False,
     crop: bool = False,
+    suppress_show_through: bool = False,
     exts: tuple[str, ...] = IMAGE_EXTS,
 ) -> Source:
     """A flat directory of images, one Sample per file.
@@ -48,7 +49,9 @@ def image_source(
     ``verso_filter`` drops blank card backs before the model (pre-classifies them
     as ``image_type="verso"`` — the project's ``curate`` decides to drop them).
     ``crop`` crops each scan to the detected card region (needs the ``[cards]``
-    extra; falls back to a uniform crop). Both come from ``paratext.cards``.
+    extra; falls back to a uniform crop). ``suppress_show_through`` flattens
+    faint ink bleeding through from stacked cards, so the model is less likely
+    to transcribe it as a real entry. All three come from ``paratext.cards``.
     """
 
     def _iter(source: Path, limit: int | None) -> Iterator[Sample]:
@@ -81,6 +84,12 @@ def image_source(
                 if bbox is not None:
                     img = detector.crop(img, bbox=bbox, padding_pct=0.10)
                 meta["detected"] = bbox is not None
+            if suppress_show_through:
+                # After cropping, so levels are measured on the card not the desk.
+                from .cards import suppress_show_through as _suppress
+
+                img = _suppress(img)
+                meta["show_through_suppressed"] = True
             yield Sample(id=path.stem, images=[img], metadata=meta)
 
     def _materialise(rec: dict, out: Path, max_size: int) -> list[str]:
