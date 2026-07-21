@@ -115,7 +115,13 @@
       <a href="#/review" id="nav-review" class="button outline small">Review</a>
       <a href="#/stats" id="nav-stats" class="button outline small">Stats</a>
       <span id="progress" style="margin-left:auto; font-size:.875rem;"></span>
-      <button id="theme-toggle" class="outline small" title="Toggle dark/light mode">&#9789;</button>
+      <!-- aria-label, NOT title: Oat converts every [title] into a data-tooltip
+           whose ::after is absolutely positioned and centred on the element. On
+           the right-most nav item that tooltip runs past the viewport, and since
+           it is visibility:hidden rather than display:none it still counts
+           toward scrollWidth — a permanent horizontal scrollbar at every window
+           size. Same applies to anything else placed at the right edge. -->
+      <button id="theme-toggle" class="outline small" aria-label="Toggle dark/light mode">&#9789;</button>
     </nav>
     <main>
       <div class="container">

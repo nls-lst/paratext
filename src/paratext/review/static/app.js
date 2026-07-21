@@ -1064,6 +1064,7 @@ async function renderStats() {
 
     ${exportLinks ? `<div class="controls">${exportLinks}</div>` : ""}
 
+    <div class="table">
     <table>
       <thead>
         <tr>
@@ -1087,6 +1088,7 @@ async function renderStats() {
           .join("")}
       </tbody>
     </table>
+    </div>
   `;
 
   // Wire up "Diff vs latest" toggles in the prompt history panel.
@@ -1207,8 +1209,8 @@ function projectCard(p) {
       ${auditPill(p.audit)}</h3>
     <p class="proj-meta text-light">${meta}</p>
     ${drift}
-    <table class="table"><thead><tr><th>Field</th><th>Type</th><th></th></tr></thead>
-      <tbody>${fields}</tbody></table>
+    <div class="table"><table><thead><tr><th>Field</th><th>Type</th><th></th></tr></thead>
+      <tbody>${fields}</tbody></table></div>
     <details class="mt-4"><summary>Prompt</summary>
       <pre class="box prompt-text">${escapeHtml(p.prompt)}</pre></details>
   </article>`;
