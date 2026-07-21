@@ -280,8 +280,8 @@ function renderPicker() {
       `<p>No datasets found. Run <code>paratext run -p &lt;project&gt;</code> to create a
          review round under <code>review/</code>, then reload — or point
          <code>paratext review</code> at a directory that contains one.</p>
-       <p class="text-light">Meanwhile, <a href="#/projects">Projects</a> shows which
-         projects are installed and how each one is configured.</p>`;
+       <p class="text-light">Meanwhile, <a href="#/projects">Project configuration</a> shows
+         which projects are installed and how each one is set up.</p>`;
     return;
   }
 
@@ -332,8 +332,8 @@ function renderPicker() {
     <h2>Choose a dataset to review</h2>
     <div style="max-width:32rem;">${cards}</div>
     <p class="mt-6 text-light">
-      <a href="#/projects">Projects</a> — how each project is configured:
-      fields, prompt, and source options.
+      <a href="#/projects">Project configuration</a> — the fields, prompt and
+      source options each project runs with. Reference, not part of reviewing.
     </p>
   `;
   document.querySelectorAll("[data-dataset]").forEach((btn) => {
@@ -1232,12 +1232,12 @@ async function renderProjects() {
   }
 
   if (!projects.length) {
-    el.innerHTML = `<h2>Projects</h2>
+    el.innerHTML = `<h2>Project configuration</h2>
       <p>No projects installed. Scaffold one with <code>paratext new</code>.</p>`;
     return;
   }
 
-  el.innerHTML = `<h2>Projects</h2>
+  el.innerHTML = `<h2>Project configuration</h2>
     ${projects.map(projectCard).join("")}
     <p class="mt-4"><a href="#/select" class="button outline small">← Back to datasets</a></p>`;
 }

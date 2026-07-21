@@ -68,8 +68,9 @@ UI automatically when the run finishes.
 
 `inspect` prints the fields and types the model is asked for, the prompt, the
 preprocessing the source adapter applies, and whether schema, prompt and view
-still agree — the same information as the review UI's **Projects** page. It
-describes what is *installed*, so if it disagrees with the files you're editing,
+still agree — the same information as the review UI's **Project configuration**
+page. It describes what is *installed*, so if it disagrees with the files you're
+editing,
 the package needs reinstalling (`uv sync`). That mismatch is the most common
 cause of "my change did nothing".
 
@@ -135,8 +136,9 @@ new `run` appears on reload without restarting the server.
 Once a project is configured, `run`/`extract` need only `-p <project>` —
 everything else resolves from config.
 
-The homepage also links to **Projects**, a read-only view of every installed
-project: its fields and types, its prompt, the preprocessing its source applies,
+The homepage also links to **Project configuration**, a read-only view of every
+installed project: its fields and types, its prompt, the preprocessing its source
+applies,
 and its audit status. Where a project has already been run, it compares the
 installed prompt against the one that produced the latest packaged round and
 diffs them if they differ — so you can see at a glance whether a new run would

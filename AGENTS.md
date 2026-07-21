@@ -82,9 +82,10 @@ human guide.
   project via `image_source(verso_filter=…, crop=…)`, and the detector repo is
   configurable via the `[detector]` table in paratext.toml. Never assume they
   transfer to another collection unchanged.
-- `paratext inspect [-p <name>]` (and the review UI's **Projects** page, backed by
-  `paratext.inspect`) describes the **installed** projects: derived field types,
-  prompt hash, source options, and the `audit_project` result. Both are
+- `paratext inspect [-p <name>]` (and the review UI's **Project configuration**
+  page, backed by `paratext.inspect`) describes the **installed** projects:
+  derived field types, prompt hash, source options, and the `audit_project`
+  result. Both are
   read-only. Start here when a project's behaviour doesn't match its source —
   a mismatch usually means the package needs reinstalling, not that the code is
   wrong.
