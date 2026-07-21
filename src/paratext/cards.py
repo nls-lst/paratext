@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 # cards will likely need their own weights. Override with `detector-repo` /
 # `detector-file` in paratext.toml, the PARATEXT_CARD_DETECTOR env var (a local
 # weights path), or the `weights=` argument.
-DEFAULT_DETECTOR_REPO = "nls-lst/card-detector-retinanet"
+DEFAULT_DETECTOR_REPO = "NationalLibraryOfScotland/card-detector-retinanet"
 DEFAULT_DETECTOR_FILE = "card_detector_retinanet.pt"
 
 
