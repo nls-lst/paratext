@@ -16,6 +16,17 @@
     </script>
     <style>
       /* Layout-only — let Oat style everything else. */
+      /* Oat's top nav is a single non-wrapping flex row, so a long sample id
+         plus the buttons pushed it past the viewport and scrolled the page
+         sideways. Let it wrap, and let the sample label shrink. */
+      nav[data-topnav] { flex-wrap: wrap; row-gap: .375rem; max-width: 100%; }
+      #progress { min-width: 0; display: inline-flex; align-items: center; gap: .5rem; }
+      /* The id truncates; the button beside it must not. */
+      #progress .sample-label { min-width: 0; overflow: hidden;
+        text-overflow: ellipsis; white-space: nowrap; }
+      #progress button { flex-shrink: 0; }
+      #theme-toggle { flex-shrink: 0; }
+      #dataset-picker-host { min-width: 0; }
       .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
       .thumbs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
       .thumbs a { display: inline-block; }

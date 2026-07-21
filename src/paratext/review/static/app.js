@@ -359,8 +359,9 @@ function render() {
   const view = state.view;
   const remaining = state.samples.filter((x) => !x.annotated).length;
   document.getElementById("progress").innerHTML = `
-    Sample ${state.index + 1} / ${state.samples.length} —
-    ${escapeHtml(String(s.document_id ?? s.id))}
+    <span class="sample-label" title="${escapeHtml(String(s.document_id ?? s.id))}"
+      >Sample ${state.index + 1} / ${state.samples.length} —
+      ${escapeHtml(String(s.document_id ?? s.id))}</span>
     <button id="jump-next" class="outline small"
             ${remaining === 0 ? "disabled" : ""}>
       Next unchecked${remaining ? ` (${remaining})` : ""}
@@ -714,9 +715,11 @@ function renderEditor() {
   const prefill = s.gold?.output ?? base;
   const note = s.annotation?.notes;
   const total = state.samples.length;
-  document.getElementById("progress").innerHTML = `Correcting ${state.index + 1} / ${total} — ${escapeHtml(
-    String(s.document_id ?? s.id),
-  )}`;
+  document.getElementById("progress").innerHTML =
+    `<span class="sample-label" title="${escapeHtml(String(s.document_id ?? s.id))}"
+      >Correcting ${state.index + 1} / ${total} — ${escapeHtml(
+        String(s.document_id ?? s.id),
+      )}</span>`;
 
   const fields = modelPanelOf(state.view)
     .fields.map((f) => {
