@@ -20,7 +20,7 @@ def test_cards_keeps_cards_drops_non_cards(tmp_path):
     jsonl = tmp_path / "run.jsonl"
     meta = {"image_path": str(img)}
     lines = [
-        {"_provenance": {"project": "cards", "prompt": "P", "prompt_hash": "h"}},
+        {"_provenance": {"project": "card-template", "prompt": "P", "prompt_hash": "h"}},
         {"id": "a", "extraction": {"image_type": "card"}, "metadata": meta},
         {"id": "b", "extraction": {"image_type": "verso"}, "metadata": meta},
         {"id": "c", "extraction": {"image_type": "blank"}, "metadata": meta},
@@ -28,7 +28,7 @@ def test_cards_keeps_cards_drops_non_cards(tmp_path):
     jsonl.write_text("\n".join(json.dumps(x) for x in lines) + "\n")
 
     out = tmp_path / "ds"
-    kept, skipped = package(jsonl, out, "cards", fresh=True)
+    kept, skipped = package(jsonl, out, "card-template", fresh=True)
 
     assert kept == 1  # only the `card` is kept
     assert skipped == {"verso": 1, "blank": 1}
@@ -39,7 +39,7 @@ def test_cards_keeps_cards_drops_non_cards(tmp_path):
 
     # packaging also emits the display/review contract
     view = json.loads((out / "view.json").read_text())
-    assert view["schema"] == "cards" and view["layout"] == "split"
+    assert view["schema"] == "card-template" and view["layout"] == "split"
 
 
 class _Out(BaseModel):

@@ -1,12 +1,17 @@
-"""Generic index-cards starter project.
+"""Index-card template project — a worked example to copy and edit.
 
-A worked, collection-agnostic example: classify and transcribe scanned
-catalogue cards. The schema is in ``schema.py``, the prompt in ``prompt.md``;
-this file just wires them to an image source (verso filter + optional crop) and
-keeps only the cards.
+A collection-agnostic starting point: classify and transcribe scanned catalogue
+cards. The schema is in ``schema.py``, the prompt in ``prompt.md``; this file
+wires them to an image source and keeps only the cards.
 
-Run with ``paratext run -p cards`` after pointing ``[project.cards]`` at a flat
-directory of card images. For cropping, ``pip install paratext[cards]``.
+Run with ``paratext run -p card-template`` after pointing
+``[project.card-template]`` at a flat directory of card images.
+
+The card-specific preprocessing (``crop``, ``verso_filter``) is left **off**
+here. Both are tuned to one collection's scans — the bundled detector is
+trained on National Library of Scotland cards — so they need calibrating
+against your own material before they help. See the Scanned cards section of
+the README.
 """
 
 from __future__ import annotations
@@ -28,11 +33,11 @@ def _curate(rec: dict) -> Curation:
 
 
 PROJECT = Project(
-    name="cards",
+    name="card-template",
     schema_version="v1",
     prompt=load_prompt(__file__),
     schema=CardExtraction,
-    source=image_source(verso_filter=True, crop=True),
+    source=image_source(),
     curate=_curate,
     # Show just the transcription fields; image_type is internal triage.
     view=View(

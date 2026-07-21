@@ -19,8 +19,10 @@ def test_guide_prints_guide_and_projects(capsys):
     assert rc == 0
     assert "# paratext — agent guide" in out
     assert "## Installed projects" in out
-    # The bundled `cards` starter registers via the paratext.projects group.
-    assert "cards" in out
+    # The bundled `card-template` example registers via the paratext.projects
+    # group. Match the run line, not the bare name — the guide prose mentions
+    # "cards" independently, so a loose check passes even when discovery breaks.
+    assert "paratext run -p card-template" in out
 
 
 def test_help_points_agents_at_guide(capsys):

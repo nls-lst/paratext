@@ -147,3 +147,7 @@ def run(
             "elapsed_s": round(elapsed, 3),
         }
         append_jsonl(output, record)
+
+    for notice in getattr(project.source, "notices", []):
+        logger.warning("%s", notice)
+        print(f"\n!  {notice}")

@@ -9,12 +9,18 @@ Two independent, opt-in tools that any card project can use:
 
   - ``load_card_detector()`` — a torchvision **RetinaNet** (BSD-licensed) that
     crops a scan to the card region. The weights download from the Hugging Face
-    Hub on first use (cached); the runtime needs the ``[cards]`` extra
+    Hub on first use (cached); the runtime needs the ``[detector]`` extra
     (``torch`` + ``torchvision``). If either is unavailable the loader returns
     ``None`` so callers fall back to a uniform-margin crop.
 
 Both are deliberately schema-agnostic — they know nothing about any project's
 prompt or output fields.
+
+Both are also **calibrated to one collection**: the default weights are trained
+on National Library of Scotland catalogue cards, and the verso thresholds come
+from that same material. Neither is expected to transfer unchanged to another
+library's scans — point ``detector-repo`` at your own weights and recalibrate
+the thresholds before relying on them.
 """
 
 from __future__ import annotations
@@ -28,8 +34,11 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-# Default Hugging Face model repo for the card detector. Override per-call or
-# via the PARATEXT_CARD_DETECTOR env var (a local weights path).
+# Reference weights for the card detector, trained on NLS catalogue cards. This
+# is a starting point, not a general-purpose card detector: another collection's
+# cards will likely need their own weights. Override with `detector-repo` /
+# `detector-file` in paratext.toml, the PARATEXT_CARD_DETECTOR env var (a local
+# weights path), or the `weights=` argument.
 DEFAULT_DETECTOR_REPO = "nls-lst/card-detector-retinanet"
 DEFAULT_DETECTOR_FILE = "card_detector_retinanet.pt"
 
@@ -183,8 +192,8 @@ class CardDetector:
 
 def load_card_detector(
     *,
-    repo_id: str = DEFAULT_DETECTOR_REPO,
-    filename: str = DEFAULT_DETECTOR_FILE,
+    repo_id: str | None = None,
+    filename: str | None = None,
     weights: str | Path | None = None,
     device: str = "cpu",
     conf: float = 0.5,
@@ -194,8 +203,17 @@ def load_card_detector(
 
     Weights resolution: ``weights`` arg → ``PARATEXT_CARD_DETECTOR`` env var →
     download ``filename`` from the ``repo_id`` Hugging Face repo (cached). Any
-    failure (missing ``[cards]`` runtime, offline, bad weights) is logged and
-    yields ``None`` rather than raising, so the pipeline still runs."""
+    failure (missing ``[detector]`` runtime, offline, bad weights) is logged and
+    yields ``None`` rather than raising, so the pipeline still runs.
+
+    ``repo_id``/``filename`` fall back to the ``[detector]`` table in
+    paratext.toml (``repo`` / ``file``), then to the NLS reference weights."""
+    if repo_id is None or filename is None:
+        from .config import load_table
+
+        cfg = load_table("detector")
+        repo_id = repo_id or cfg.get("repo") or DEFAULT_DETECTOR_REPO
+        filename = filename or cfg.get("file") or DEFAULT_DETECTOR_FILE
     path = weights or os.environ.get("PARATEXT_CARD_DETECTOR")
     if path is None:
         try:

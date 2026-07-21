@@ -716,7 +716,7 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-cards = [
+detector = [
     { name = "torch" },
     { name = "torchvision" },
 ]
@@ -737,11 +737,11 @@ requires-dist = [
     { name = "rich", specifier = ">=14.3.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
     { name = "stamina", specifier = "~=25.2" },
-    { name = "torch", marker = "extra == 'cards'", specifier = ">=2.4" },
-    { name = "torchvision", marker = "extra == 'cards'", specifier = ">=0.19" },
+    { name = "torch", marker = "extra == 'detector'", specifier = ">=2.4" },
+    { name = "torchvision", marker = "extra == 'detector'", specifier = ">=0.19" },
     { name = "tqdm", specifier = "~=4.67" },
 ]
-provides-extras = ["dev", "cards"]
+provides-extras = ["dev", "detector"]
 
 [[package]]
 name = "pillow"

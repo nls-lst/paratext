@@ -14,7 +14,7 @@ card crop) and ``pdf_source`` (PDFs rendered to page images).
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterator
 
@@ -30,10 +30,20 @@ IMAGE_EXTS = (".jpg", ".jpeg", ".png")
 
 @dataclass
 class Source:
-    """An extraction iterator paired with its packaging image-materialiser."""
+    """An extraction iterator paired with its packaging image-materialiser.
+
+    ``notices`` collects human-readable degradations noticed during iteration
+    (e.g. a requested crop that fell back). `extract` drains it into the run
+    summary so a silently-degraded run can't look like a clean one.
+    """
 
     iter_samples: Callable[[Path, int | None], Iterator[Sample]]
     materialise: Callable[[dict, Path, int], list[str]]
+    notices: list[str] = field(default_factory=list)
+    # What this adapter was constructed with, for `paratext inspect` — the
+    # preprocessing a project applies is otherwise invisible without reading its
+    # source. Descriptive only; nothing reads it back to make decisions.
+    config: dict = field(default_factory=dict)
 
 
 # ── Images ──────────────────────────────────────────────────────────────────
@@ -48,11 +58,15 @@ def image_source(
 
     ``verso_filter`` drops blank card backs before the model (pre-classifies them
     as ``image_type="verso"`` — the project's ``curate`` decides to drop them).
-    ``crop`` crops each scan to the detected card region (needs the ``[cards]``
-    extra; falls back to a uniform crop). ``suppress_show_through`` flattens
+    ``crop`` crops each scan to the detected card region (needs the
+    ``[detector]`` extra; falls back to a uniform crop). ``suppress_show_through`` flattens
     faint ink bleeding through from stacked cards, so the model is less likely
     to transcribe it as a real entry. All three come from ``paratext.cards``.
+
+    All three default to off: they are card-specific, and the bundled detector
+    and verso thresholds are tuned to one collection's scans.
     """
+    notices: list[str] = []
 
     def _iter(source: Path, limit: int | None) -> Iterator[Sample]:
         if not source.is_dir():
@@ -65,7 +79,16 @@ def image_source(
         if crop:
             from .cards import load_card_detector
 
-            detector = load_card_detector()  # None → no crop
+            detector = load_card_detector()
+            if detector is None:
+                # Documented behaviour is a uniform crop, not "no crop at all" —
+                # and the failure must reach the run summary, not just the log.
+                notices.append(
+                    "crop: card detector unavailable — fell back to a uniform crop. "
+                    "Install the `detector` extra (paratext[detector]), then point "
+                    "the [detector] config table or PARATEXT_CARD_DETECTOR at "
+                    "weights trained on your own cards."
+                )
         check_verso = None
         if verso_filter:
             from .cards import is_verso
@@ -79,11 +102,18 @@ def image_source(
                 meta["preclassified"] = {"image_type": "verso"}
                 yield Sample(id=path.stem, images=[], metadata=meta)
                 continue
-            if detector is not None:
-                bbox = detector.detect(img)
-                if bbox is not None:
-                    img = detector.crop(img, bbox=bbox, padding_pct=0.10)
-                meta["detected"] = bbox is not None
+            if crop:
+                if detector is not None:
+                    bbox = detector.detect(img)
+                    if bbox is not None:
+                        img = detector.crop(img, bbox=bbox, padding_pct=0.10)
+                    meta["detected"] = bbox is not None
+                else:
+                    from .cards import crop_uniform
+
+                    img = crop_uniform(img)
+                    meta["detected"] = False
+                    meta["crop"] = "uniform"
             if suppress_show_through:
                 # After cropping, so levels are measured on the card not the desk.
                 from .cards import suppress_show_through as _suppress
@@ -100,7 +130,18 @@ def image_source(
             return [rel]
         return []
 
-    return Source(_iter, _materialise)
+    return Source(
+        _iter,
+        _materialise,
+        notices,
+        {
+            "kind": "images",
+            "verso_filter": verso_filter,
+            "crop": crop,
+            "suppress_show_through": suppress_show_through,
+            "exts": list(exts),
+        },
+    )
 
 
 # ── PDFs ────────────────────────────────────────────────────────────────────
@@ -182,4 +223,8 @@ def pdf_source(
             rels.append(rel)
         return rels
 
-    return Source(_iter, _materialise)
+    return Source(
+        _iter,
+        _materialise,
+        config={"kind": "pdf", "scale": scale, "pages": getattr(pages, "__name__", str(pages))},
+    )

@@ -160,8 +160,16 @@ def init(name: str | None = None, *, install: bool = True) -> int:
     kind = "pdf" if is_pdf else "images"
     verso = crop = False
     if kind == "images":
-        verso = _ask("Filter blank versos (backs of cards) before the model?", default=True)
-        crop = _ask("Crop each scan to the card region (RetinaNet from HF)?", default=False)
+        # Both default to off: they are card-specific and calibrated to one
+        # collection's scans, so they need checking against your own material.
+        cards = _ask("Is the source scanned index cards?", default=False)
+        if cards:
+            print("    Note: both options below are calibrated on NLS cards —"
+                  " check them against your own scans before trusting them.")
+            verso = _ask("    Filter blank versos (backs of cards) before the model?",
+                         default=False)
+            crop = _ask("    Crop each scan to the card region"
+                        " (needs the [detector] extra)?", default=False)
 
     raw = input("Metadata fields, comma-separated (e.g. title, author, date) [title]: ")
     fields = [f.strip() for f in raw.split(",") if f.strip()] or ["title"]

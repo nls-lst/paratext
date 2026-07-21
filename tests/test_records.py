@@ -31,7 +31,7 @@ def _mk_round(tmp_path, *, multi_image=False):
 
 def test_select_verified_only(tmp_path):
     d, _ = _mk_round(tmp_path)
-    sel = select_records(d, "cards")
+    sel = select_records(d, "card-template")
     assert [r.sid for r in sel.records] == ["a"]  # good_enough only
     rec = sel.records[0]
     assert rec.status == "verified" and rec.label["heading"] == "H-a"
@@ -42,7 +42,7 @@ def test_select_verified_only(tmp_path):
 def test_select_corrected_overlay(tmp_path):
     d, store = _mk_round(tmp_path)
     store.upsert_gold("cards-r1", "b", {"output": {"heading": "Fixed"}, "fields": ["heading"]})
-    sel = select_records(d, "cards")
+    sel = select_records(d, "card-template")
     by = {r.sid: r for r in sel.records}
     assert set(by) == {"a", "b"}  # b promoted from not_accurate to corrected gold
     assert by["b"].status == "corrected" and by["b"].label["heading"] == "Fixed"
@@ -53,5 +53,5 @@ def test_select_corrected_overlay(tmp_path):
 def test_select_keeps_multi_image(tmp_path):
     # Unlike HF export, the shared selector does NOT reject multi-image records.
     d, _ = _mk_round(tmp_path, multi_image=True)
-    sel = select_records(d, "cards")
+    sel = select_records(d, "card-template")
     assert len(sel.records[0].images) == 2

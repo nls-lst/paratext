@@ -21,18 +21,19 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["ruff>=0.8", "pytest>=8.0"]
-# Scanned-card cropping: the permissive (BSD) torchvision RetinaNet detector in
-# paratext.cards. Heavy (torch is hundreds of MB) so it stays opt-in.
-# CPU inference is fine (~0.5s/image). `pip install paratext[cards]`.
-cards = ["torch>=2.4", "torchvision>=0.19"]
+# Object-detection runtime for the card cropper (paratext.cards): the permissive
+# (BSD) torchvision RetinaNet. Heavy (torch is hundreds of MB) and card-specific,
+# so it stays opt-in. CPU inference is fine (~0.5s/image).
+# `pip install paratext[detector]`.
+detector = ["torch>=2.4", "torchvision>=0.19"]
 
 [project.scripts]
 paratext = "paratext.cli:main"
 
 # Projects are discovered via this entry-point group, so downstream packages can
-# register their own. The bundled generic starter is `cards`.
+# register their own. The bundled worked example is `card-template`.
 [project.entry-points."paratext.projects"]
-cards = "paratext.projects.cards:PROJECT"
+card-template = "paratext.projects.card_template:PROJECT"
 
 [build-system]
 requires = ["hatchling"]

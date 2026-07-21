@@ -30,14 +30,14 @@ def test_resolve_mapping_config_precedence_and_skip(monkeypatch):
     monkeypatch.setattr(catalogue, "load_project_section",
                         lambda p, s: {"marc": {"heading": "245$a", "text": "500$a",
                                                "image_type": ""}})
-    mapping, unmapped = catalogue.resolve_mapping("cards", "marc")
+    mapping, unmapped = catalogue.resolve_mapping("card-template", "marc")
     assert mapping == {"heading": "245$a", "text": "500$a"}  # image_type "" = explicit skip
     assert unmapped == []
 
 
 def test_resolve_mapping_unmapped_when_no_config(monkeypatch):
     monkeypatch.setattr(catalogue, "load_project_section", lambda p, s: {})
-    mapping, unmapped = catalogue.resolve_mapping("cards", "marc")
+    mapping, unmapped = catalogue.resolve_mapping("card-template", "marc")
     assert mapping == {}  # cards fields have no standard names
     assert set(unmapped) == {"image_type", "heading", "text"}
 
@@ -81,23 +81,23 @@ def test_dc_serialization_repeats_and_isbn_prefix():
 
 def test_wizard_non_interactive_returns_empty(monkeypatch):
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
-    assert catalogue.run_wizard("cards", "marc", ["heading"]) == {}
+    assert catalogue.run_wizard("card-template", "marc", ["heading"]) == {}
 
 
 def test_wizard_interactive_collects_answers(monkeypatch):
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     answers = iter(["245$a", ""])  # heading → 245$a; notes → Enter = skip
     monkeypatch.setattr("builtins.input", lambda *a: next(answers))
-    assert catalogue.run_wizard("cards", "marc", ["heading", "notes"]) == {
+    assert catalogue.run_wizard("card-template", "marc", ["heading", "notes"]) == {
         "heading": "245$a", "notes": ""}
 
 
 def test_persist_mapping_writes_block(tmp_path, monkeypatch):
     toml = tmp_path / "paratext.toml"
     monkeypatch.setattr(catalogue, "local_config_path", lambda: toml)
-    catalogue.persist_mapping("cards", "marc", {"heading": "245$a", "image_type": ""})
+    catalogue.persist_mapping("card-template", "marc", {"heading": "245$a", "image_type": ""})
     text = toml.read_text()
-    assert "[project.cards.export.marc]" in text
+    assert "[project.card-template.export.marc]" in text
     assert 'heading = "245$a"' in text and 'image_type = ""' in text
 
 
@@ -123,7 +123,7 @@ def test_run_writes_marcxml(tmp_path, monkeypatch):
     monkeypatch.setattr(catalogue, "load_project_section",
                         lambda p, s: {"marc": {"heading": "245$a", "text": "500$a",
                                                "image_type": ""}})
-    summary = catalogue.run(d, "cards", "marc", no_wizard=True)
+    summary = catalogue.run(d, "card-template", "marc", no_wizard=True)
     assert summary.records == 2 and summary.path.exists()
     assert summary.path.name == "cards-r1.marcxml"
     root = ET.parse(summary.path).getroot()

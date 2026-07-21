@@ -39,3 +39,27 @@ def test_image_source_limit_and_materialise(tmp_path):
     rels = src.materialise(rec, out, 256)
     assert rels == ["images/a/image.jpg"]
     assert (out / "images/a/image.jpg").is_file()
+
+
+def test_crop_falls_back_to_uniform_when_detector_unavailable(tmp_path, monkeypatch):
+    """crop=True with no detector must still crop (uniformly) and say so — the
+    documented fallback, and a notice so the run summary can't look clean."""
+    import paratext.cards as cards
+
+    monkeypatch.setattr(cards, "load_card_detector", lambda **kw: None)
+    _save(tmp_path / "a.jpg", textured=True)
+
+    src = image_source(crop=True)
+    samples = list(src.iter_samples(tmp_path, None))
+
+    assert samples[0].metadata["crop"] == "uniform"
+    assert samples[0].metadata["detected"] is False
+    assert samples[0].images[0].size < (600, 400)  # actually cropped
+    assert any("detector unavailable" in n for n in src.notices)
+
+
+def test_no_notices_when_crop_not_requested(tmp_path):
+    _save(tmp_path / "a.jpg", textured=True)
+    src = image_source()
+    list(src.iter_samples(tmp_path, None))
+    assert src.notices == []
