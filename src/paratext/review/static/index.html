@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>paratext review</title>
     <link rel="stylesheet" href="oat.min.css" />
+    <!-- Apply the stored theme before first paint, so a dark-mode user doesn't
+         get a flash of light. Mirrors lst.nls.uk/conservation. -->
+    <script>
+      var t = localStorage.getItem("theme");
+      if (t) {
+        document.documentElement.style.colorScheme = t;
+        document.documentElement.setAttribute("data-theme", t);
+      }
+    </script>
     <style>
       /* Layout-only — let Oat style everything else. */
       .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -27,8 +36,8 @@
       .field-row dt { font-weight: 600; }
       .field-row dd { margin: 0; word-break: break-word; }
       .controls { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; margin-bottom: 2rem; }
-      button.selected { outline: 3px solid #22c55e; outline-offset: 2px; }
-      button.selected.no { outline-color: #ef4444; }
+      button.selected { outline: 3px solid var(--success); outline-offset: 2px; }
+      button.selected.no { outline-color: var(--danger); }
       .kbd {
         display: inline-block;
         font-family: monospace;
@@ -40,10 +49,12 @@
         opacity: .65;
         vertical-align: .1em;
       }
-      /* Verdict / status colours (used in panes and the stats table). */
-      .ok { color: #22c55e; }
-      .warn { color: #f59e0b; }
-      .bad { color: #ef4444; }
+      /* Verdict / status colours (used in panes and the stats table). Oat's
+         semantic tokens rather than fixed hex — they're light-dark() pairs, so
+         these follow the theme. */
+      .ok { color: var(--success); }
+      .warn { color: var(--warning); }
+      .bad { color: var(--danger); }
       .muted { color: var(--muted-foreground); }
       .score-col { min-width: 9rem; }
       .row-link { cursor: pointer; }
@@ -69,15 +80,22 @@
       .edit-field .hint { display: block; font-size: .75rem; color: var(--muted-foreground);
         margin-top: .2rem; word-break: break-word; }
       .edit-field input, .edit-field textarea, .edit-field select { width: 100%; box-sizing: border-box; }
-      .edit-field.changed > label.k::after { content: " ●"; color: #f59e0b; }
+      .edit-field.changed > label.k::after { content: " ●"; color: var(--warning); }
       .entries-editor .entry-row { border: 1px solid var(--muted); border-radius: .25rem;
         padding: .5rem .625rem; margin-bottom: .5rem; }
       .entry-grid { display: grid; gap: .375rem; }
       .entry-field { display: grid; grid-template-columns: 7rem 1fr; gap: .5rem; align-items: center; }
       .entry-field > span { font-size: .8125rem; color: var(--muted-foreground); }
-      .gold-badge { color: #22c55e; font-weight: 600; }
+      .gold-badge { color: var(--success); font-weight: 600; }
       .eval-note { margin-top: .625rem; padding: .5rem .625rem; border-left: 3px solid var(--muted);
         background: var(--muted); border-radius: .25rem; font-size: .875rem; }
+      /* Projects (read-only inspector) — Oat's .card/.badge/.table do the
+         styling; these are layout-only. */
+      .proj h3 { margin-top: 0; }
+      .proj h3 .badge { vertical-align: middle; margin-left: .25rem; font-weight: 500; }
+      .proj-meta { margin: .25rem 0 .75rem; font-size: .8125rem; word-break: break-word; }
+      .prompt-text { white-space: pre-wrap; font-size: .8125rem; max-height: 30rem;
+        overflow-y: auto; }
     </style>
   </head>
   <body>
@@ -86,6 +104,7 @@
       <a href="#/review" id="nav-review" class="button outline small">Review</a>
       <a href="#/stats" id="nav-stats" class="button outline small">Stats</a>
       <span id="progress" style="margin-left:auto; font-size:.875rem;"></span>
+      <button id="theme-toggle" class="outline small" title="Toggle dark/light mode">&#9789;</button>
     </nav>
     <main>
       <div class="container">

@@ -366,7 +366,64 @@ def _cmd_review(args: argparse.Namespace) -> int:
         open_browser=not args.no_open,
         host=args.host,
         db_path=args.db,
+        # A missing default root means "nothing run yet", not a mistake — serve
+        # anyway so Projects and the homepage guidance are reachable.
+        allow_empty=args.data_dir == REVIEW_ROOT,
     )
+    return 0
+
+
+# ── Inspect ───────────────────────────────────────────────────────────────
+def _cmd_inspect(args: argparse.Namespace) -> int:
+    """Print what an installed project actually does — the installed state, not
+    the working tree. A mismatch with your editor means it needs reinstalling."""
+    import json as _json
+
+    from .inspect import describe, describe_all
+
+    if args.json:
+        payload = [describe(get_project(args.project))] if args.project else describe_all()
+        print(_json.dumps(payload, indent=2))
+        return 0
+
+    projects = [describe(get_project(args.project))] if args.project else describe_all()
+    if not projects:
+        print("No projects installed. Scaffold one with `paratext new`.")
+        return 0
+
+    for p in projects:
+        print(f"\n{p['name']}")
+        if p.get("error"):
+            print(f"  ! failed to load: {p['error']}")
+            continue
+        ep = p["entry_point"]
+        pkg = f"{ep.get('package')} {ep.get('version')}".strip()
+        print(f"  schema     {p['schema_version']}  ({p['schema_class']})")
+        print(f"  from       {ep.get('value')}  [{pkg}]")
+        src = p["source"]
+        opts = ", ".join(f"{k}={v}" for k, v in src.items() if k not in ("kind", "exts"))
+        print(f"  source     {src.get('kind')}" + (f"  ({opts})" if opts else ""))
+        print(f"  images     max_size={p['images']['max_size']} quality={p['images']['quality']}")
+        print(f"  prompt     {p['prompt_hash']}  ({len(p['prompt'].splitlines())} lines)")
+
+        print("  fields")
+        for panel in p["view"]["panels"]:
+            for f in panel["fields"]:
+                extra = ""
+                if f.get("options"):
+                    extra = "  {" + " | ".join(f["options"]) + "}"
+                elif f.get("item_fields"):
+                    extra = "  [" + ", ".join(i["key"] for i in f["item_fields"]) + "]"
+                flags = " (collapsed)" if f.get("collapsed") else ""
+                print(f"    {f['key']:<28} {f['type']}{extra}{flags}")
+
+        problems = p["audit"]
+        if problems:
+            print("  audit      FAILED")
+            for prob in problems:
+                print(f"    ! {prob}")
+        else:
+            print("  audit      ok — schema, prompt and view agree")
     return 0
 
 
@@ -612,6 +669,13 @@ def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentPars
                     help="Annotations SQLite path (default: <data_dir>/annotations.db)")
     rv.add_argument("--no-open", action="store_true", help="Don't open a browser")
     rv.set_defaults(func=_cmd_review)
+
+    ins = sub.add_parser("inspect", help="Show what an installed project does (schema, prompt, "
+                                         "source, audit)")
+    ins.add_argument("-p", "--project", choices=choices, default=None,
+                     help="Project to describe (default: all installed)")
+    ins.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary")
+    ins.set_defaults(func=_cmd_inspect)
 
     cb = sub.add_parser("carbon", help="Show current grid carbon/renewables (see [carbon] config)")
     cb.add_argument("--window", action="store_true",

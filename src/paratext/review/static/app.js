@@ -6,6 +6,29 @@
 // Keyboard: [f] flag (when a flag control exists), verdict hotkeys (1/2/3 by
 //   default), [→] next, [←] previous, [Ctrl+s] save.
 
+// ── Theme toggle ──────────────────────────────────────────────────────
+// Oat sets `color-scheme: light dark`, so forcing colorScheme on the root
+// switches every light-dark() token. Unset = follow the OS. The pre-paint
+// script in index.html applies the stored value; this wires the button.
+const themeToggle = document.getElementById("theme-toggle");
+if (themeToggle) {
+  const getTheme = () =>
+    localStorage.getItem("theme") ||
+    (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+
+  const applyTheme = (t) => {
+    document.documentElement.style.colorScheme = t;
+    document.documentElement.setAttribute("data-theme", t);
+    localStorage.setItem("theme", t);
+    themeToggle.textContent = t === "dark" ? "☀" : "☽";
+  };
+
+  applyTheme(getTheme());
+  themeToggle.addEventListener("click", () => {
+    applyTheme(getTheme() === "dark" ? "light" : "dark");
+  });
+}
+
 const state = {
   datasets: [], // [{name, schema, count, base, round, active}]
   dataset: null, // current dataset name
@@ -256,7 +279,9 @@ function renderPicker() {
     document.getElementById("view").innerHTML =
       `<p>No datasets found. Run <code>paratext run -p &lt;project&gt;</code> to create a
          review round under <code>review/</code>, then reload — or point
-         <code>paratext review</code> at a directory that contains one.</p>`;
+         <code>paratext review</code> at a directory that contains one.</p>
+       <p class="text-light">Meanwhile, <a href="#/projects">Projects</a> shows which
+         projects are installed and how each one is configured.</p>`;
     return;
   }
 
@@ -300,9 +325,16 @@ function renderPicker() {
     })
     .join("");
 
+  // Projects lives here, not in the top nav: it's an orientation surface, not
+  // part of the review loop, and a reviewer mid-round shouldn't be one stray
+  // click from a page of schema internals.
   document.getElementById("view").innerHTML = `
     <h2>Choose a dataset to review</h2>
     <div style="max-width:32rem;">${cards}</div>
+    <p class="mt-6 text-light">
+      <a href="#/projects">Projects</a> — how each project is configured:
+      fields, prompt, and source options.
+    </p>
   `;
   document.querySelectorAll("[data-dataset]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -907,8 +939,8 @@ function lineDiff(oldText, newText) {
 function renderDiff(oldText, newText) {
   const lines = lineDiff(oldText, newText);
   const styles = {
-    "+": "color:#22c55e; background:rgba(34,197,94,.08);",
-    "-": "color:#ef4444; background:rgba(239,68,68,.08);",
+    "+": "color:var(--success); background:color-mix(in srgb, var(--success) 10%, transparent);",
+    "-": "color:var(--danger); background:color-mix(in srgb, var(--danger) 10%, transparent);",
     "=": "color:var(--muted-foreground);",
   };
   return lines
@@ -1087,10 +1119,129 @@ async function renderStats() {
   });
 }
 
+// ── Projects (read-only inspector) ────────────────────────────────────
+// Describes the *installed* projects. Read-only: editing a project means
+// editing a Python package, and this server may be shared.
+// Styling is Oat's (.card / .badge / .table); only grid layout is local.
+function fieldTypeDetail(f) {
+  if (f.options)
+    return `<span class="text-light">{ ${f.options.map(escapeHtml).join(" | ")} }</span>`;
+  if (f.item_fields)
+    return `<span class="text-light">[ ${f.item_fields
+      .map((i) => escapeHtml(i.key))
+      .join(", ")} ]</span>`;
+  return "";
+}
+
+// Audit is green almost always, so it reads as a pill. Only a failure earns
+// detail — and then it earns all of it.
+function auditPill(problems) {
+  if (!problems.length) return `<span class="badge" data-variant="success">Audit ok</span>`;
+  return `<span class="badge" data-variant="danger">Audit failed</span>
+    <ul class="mt-2">${problems.map((a) => `<li class="bad">${escapeHtml(a)}</li>`).join("")}</ul>`;
+}
+
+function projectCard(p) {
+  if (p.error) {
+    return `<article class="card proj mb-4">
+      <h3>${escapeHtml(p.name)}</h3>
+      <p class="bad">Failed to load: ${escapeHtml(p.error)}</p>
+    </article>`;
+  }
+  const ep = p.entry_point || {};
+  const src = p.source || {};
+  const srcOpts = Object.entries(src)
+    .filter(([k]) => k !== "kind" && k !== "exts")
+    .map(([k, v]) => `${escapeHtml(k)}=${escapeHtml(String(v))}`)
+    .join(", ");
+
+  const fields = (p.view.panels || [])
+    .flatMap((panel) => panel.fields || [])
+    .map(
+      (f) => `<tr>
+        <td><code>${escapeHtml(f.key)}</code></td>
+        <td>${escapeHtml(f.type)} ${fieldTypeDetail(f)}</td>
+        <td class="text-light">${f.collapsed ? "collapsed" : ""}</td>
+      </tr>`,
+    )
+    .join("");
+
+  // One line per fact rather than a label/value grid — the labels were doing
+  // less work than the space they took.
+  const meta = [
+    `<code>${escapeHtml(ep.value || "?")}</code>`,
+    `${escapeHtml(ep.package || "")} ${escapeHtml(ep.version || "")}`.trim(),
+    `${escapeHtml(src.kind || "custom")}${srcOpts ? ` (${srcOpts})` : ""}`,
+    `images ${escapeHtml(String(p.images.max_size))}px q${escapeHtml(
+      String(p.images.quality),
+    )}`,
+    `prompt <code>${escapeHtml(p.prompt_hash)}</code> · ${p.prompt.split("\n").length} lines`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const lr = p.latest_round;
+  const roundLabel = (r) =>
+    `round ${escapeHtml(String(r.round))}` +
+    (r.prompt_hash ? ` <code>${escapeHtml(r.prompt_hash)}</code>` : "");
+  let drift = "";
+  if (lr && !lr.matches_installed) {
+    drift = `<p class="bad mt-2"><strong>Prompt differs</strong> from ${roundLabel(lr)}
+        (<code>${escapeHtml(lr.dataset)}</code>) — a new run will not reproduce it.</p>
+      <details class="mt-2"><summary>Diff — ${roundLabel(lr)} → installed</summary>
+        <div class="box mt-2" style="font-size:.8125rem;">${renderDiff(
+          lr.prompt,
+          p.prompt,
+        )}</div>
+      </details>`;
+  } else if (lr) {
+    drift = `<p class="text-light mt-2">Prompt matches ${roundLabel(lr)}.</p>`;
+  }
+
+  return `<article class="card proj mb-4">
+    <h3>${escapeHtml(p.name)}
+      <span class="badge outline">${escapeHtml(p.schema_version)}</span>
+      ${auditPill(p.audit)}</h3>
+    <p class="proj-meta text-light">${meta}</p>
+    ${drift}
+    <table class="table"><thead><tr><th>Field</th><th>Type</th><th></th></tr></thead>
+      <tbody>${fields}</tbody></table>
+    <details class="mt-4"><summary>Prompt</summary>
+      <pre class="box prompt-text">${escapeHtml(p.prompt)}</pre></details>
+  </article>`;
+}
+
+async function renderProjects() {
+  const el = document.getElementById("view");
+  el.innerHTML = `<p class="text-light">Loading projects…</p>`;
+  let projects;
+  try {
+    // Relative path, no dataset param: this endpoint is about what's installed,
+    // and the prefix must survive being served behind /verify/.
+    const res = await fetch("api/projects");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    projects = await res.json();
+  } catch (e) {
+    el.innerHTML = `<p class="bad">Could not load projects: ${escapeHtml(String(e))}</p>`;
+    return;
+  }
+
+  if (!projects.length) {
+    el.innerHTML = `<h2>Projects</h2>
+      <p>No projects installed. Scaffold one with <code>paratext new</code>.</p>`;
+    return;
+  }
+
+  el.innerHTML = `<h2>Projects</h2>
+    ${projects.map(projectCard).join("")}
+    <p class="mt-4"><a href="#/select" class="button outline small">← Back to datasets</a></p>`;
+}
+
 // ── Routing ───────────────────────────────────────────────────────────
 function currentRoute() {
   if (location.hash === "#/select") return "select";
   if (location.hash === "#/stats") return "stats";
+  if (location.hash === "#/projects") return "projects";
   if (location.hash === "#/eval" || location.hash.startsWith("#/eval/")) return "eval";
   return "review";
 }
@@ -1102,6 +1253,14 @@ function isEval() {
 async function route() {
   if (!state.datasets.length) {
     await loadDatasets();
+  }
+
+  // Projects describes what's installed, not what's been run — so it must not
+  // sit behind dataset selection (a fresh install has no datasets at all).
+  if (currentRoute() === "projects") {
+    renderHeader();
+    await renderProjects();
+    return;
   }
 
   // Resolve the current dataset:

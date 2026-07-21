@@ -145,3 +145,90 @@ def test_review_cli_host_db_flags_and_defaults():
     assert a.host == "0.0.0.0" and str(a.db) == "/tmp/x.db"
     d = parser.parse_args(["review", "somedir"])
     assert d.host == "127.0.0.1" and d.db is None  # safe defaults (local + nginx)
+
+
+def test_api_projects_describes_installed_projects():
+    """The Projects page reads installed state, so a stale install is visible."""
+    from paratext.inspect import describe_all
+
+    projects = {p["name"]: p for p in describe_all()}
+    assert "card-template" in projects
+    p = projects["card-template"]
+    assert p["schema_version"] == "v1"
+    assert p["entry_point"]["package"] == "paratext"
+    assert p["source"]["kind"] == "images"
+    # The bundled example must ship with the card-specific preprocessing off.
+    assert p["source"]["crop"] is False
+    assert p["source"]["verso_filter"] is False
+    assert p["audit"] == []
+    assert {f["key"] for f in p["view"]["panels"][0]["fields"]} == {"heading", "text"}
+
+
+def test_describe_all_survives_a_broken_project(monkeypatch):
+    """One broken plug-in must not blank the whole page."""
+    from paratext import inspect as inspect_mod
+
+    monkeypatch.setattr(inspect_mod, "describe", lambda p: 1 / 0)
+    out = {p["name"]: p for p in inspect_mod.describe_all()}
+    assert "ZeroDivisionError" in out["card-template"]["error"]
+
+
+def test_serve_allows_missing_default_root(tmp_path, monkeypatch):
+    """A fresh install has no ./review yet — Projects must still be reachable."""
+    import paratext.review.server as srv
+
+    monkeypatch.chdir(tmp_path)
+    started = {}
+
+    class _FakeServer:
+        def __init__(self, addr, handler):
+            started["addr"] = addr
+
+        def serve_forever(self):
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(srv, "ThreadingHTTPServer", _FakeServer)
+    srv.serve(tmp_path / "review", port=0, open_browser=False, allow_empty=True)
+    assert (tmp_path / "review").is_dir()
+    assert started["addr"] == ("127.0.0.1", 0)
+
+
+def test_serve_rejects_missing_explicit_dir(tmp_path):
+    """An explicitly-passed path that isn't there is still a typo, not a fresh install."""
+    import pytest
+
+    import paratext.review.server as srv
+
+    with pytest.raises(SystemExit):
+        srv.serve(tmp_path / "nope", port=0, open_browser=False, allow_empty=False)
+
+
+def test_store_is_safe_under_concurrent_access(tmp_path):
+    """One connection is shared across a ThreadingHTTPServer; without a lock,
+    concurrent requests raise sqlite3.InterfaceError ("bad parameter or other
+    API misuse"). Seen live on /api/table, which the stats page fetches
+    alongside /api/stats."""
+    import threading
+
+    store = Store(tmp_path / "c.db")
+    for i in range(50):
+        store.upsert("ds", f"s{i}", {"model_correct": "good_enough"})
+
+    errors = []
+
+    def hammer():
+        try:
+            for _ in range(40):
+                store.all("ds")
+                store.all_gold("ds")
+                store.upsert("ds", "s0", {"model_correct": "needs_tweaks"})
+        except Exception as e:  # noqa: BLE001 — the point is to catch anything
+            errors.append(e)
+
+    threads = [threading.Thread(target=hammer) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"concurrent access failed: {errors[:3]}"

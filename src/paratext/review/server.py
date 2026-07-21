@@ -19,6 +19,7 @@ import json
 import logging
 import re
 import sqlite3
+import threading
 import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -74,6 +75,11 @@ class Store:
     a generic JSON blob keyed by field name, so any schema works."""
 
     def __init__(self, db_path: Path):
+        # One connection shared across a ThreadingHTTPServer. check_same_thread
+        # permits cross-thread use but does NOT make the connection thread-safe:
+        # concurrent requests raise "bad parameter or other API misuse". The
+        # stats page alone fires three fetches at once, so serialise every access.
+        self._lock = threading.RLock()
         self.db = sqlite3.connect(str(db_path), check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.execute(
@@ -128,58 +134,62 @@ class Store:
         }
 
     def get(self, dataset: str, sample_id: str) -> dict | None:
-        r = self.db.execute(
-            "SELECT * FROM annotations WHERE dataset = ? AND sample_id = ?",
-            (dataset, sample_id),
-        ).fetchone()
-        return self._row(r) if r else None
+        with self._lock:
+            r = self.db.execute(
+                "SELECT * FROM annotations WHERE dataset = ? AND sample_id = ?",
+                (dataset, sample_id),
+            ).fetchone()
+            return self._row(r) if r else None
 
     def all(self, dataset: str | None = None) -> list[dict]:
-        if dataset is None:
-            rows = self.db.execute("SELECT * FROM annotations").fetchall()
-        else:
-            rows = self.db.execute(
-                "SELECT * FROM annotations WHERE dataset = ?", (dataset,)
-            ).fetchall()
-        return [self._row(r) for r in rows]
+        with self._lock:
+            if dataset is None:
+                rows = self.db.execute("SELECT * FROM annotations").fetchall()
+            else:
+                rows = self.db.execute(
+                    "SELECT * FROM annotations WHERE dataset = ?", (dataset,)
+                ).fetchall()
+            return [self._row(r) for r in rows]
 
     def upsert(self, dataset: str, sample_id: str, body: dict) -> dict:
-        now = datetime.now(timezone.utc).isoformat()
-        corrections = body.get("corrections")
-        self.db.execute(
-            """INSERT INTO annotations (
-                dataset, sample_id, catalogue_correct, model_correct,
-                corrections, notes, annotator, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(dataset, sample_id) DO UPDATE SET
-                catalogue_correct = excluded.catalogue_correct,
-                model_correct = excluded.model_correct,
-                corrections = excluded.corrections,
-                notes = excluded.notes,
-                annotator = excluded.annotator,
-                updated_at = excluded.updated_at""",
-            (
-                dataset,
-                sample_id,
-                body.get("catalogue_correct"),
-                body.get("model_correct"),
-                json.dumps(corrections) if corrections else None,
-                body.get("notes"),
-                body.get("annotator"),
-                now,
-            ),
-        )
-        self.db.commit()
-        return self.get(dataset, sample_id)
+        with self._lock:
+            now = datetime.now(timezone.utc).isoformat()
+            corrections = body.get("corrections")
+            self.db.execute(
+                """INSERT INTO annotations (
+                    dataset, sample_id, catalogue_correct, model_correct,
+                    corrections, notes, annotator, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(dataset, sample_id) DO UPDATE SET
+                    catalogue_correct = excluded.catalogue_correct,
+                    model_correct = excluded.model_correct,
+                    corrections = excluded.corrections,
+                    notes = excluded.notes,
+                    annotator = excluded.annotator,
+                    updated_at = excluded.updated_at""",
+                (
+                    dataset,
+                    sample_id,
+                    body.get("catalogue_correct"),
+                    body.get("model_correct"),
+                    json.dumps(corrections) if corrections else None,
+                    body.get("notes"),
+                    body.get("annotator"),
+                    now,
+                ),
+            )
+            self.db.commit()
+            return self.get(dataset, sample_id)
 
     def reset(self, dataset: str | None = None) -> None:
-        if dataset is None:
-            self.db.execute("DELETE FROM annotations")
-            self.db.execute("DELETE FROM gold_labels")
-        else:
-            self.db.execute("DELETE FROM annotations WHERE dataset = ?", (dataset,))
-            self.db.execute("DELETE FROM gold_labels WHERE dataset = ?", (dataset,))
-        self.db.commit()
+        with self._lock:
+            if dataset is None:
+                self.db.execute("DELETE FROM annotations")
+                self.db.execute("DELETE FROM gold_labels")
+            else:
+                self.db.execute("DELETE FROM annotations WHERE dataset = ?", (dataset,))
+                self.db.execute("DELETE FROM gold_labels WHERE dataset = ?", (dataset,))
+            self.db.commit()
 
     # -- gold labels (human-corrected answers; see the table comment) --
     def _gold_row(self, r: sqlite3.Row) -> dict:
@@ -192,47 +202,51 @@ class Store:
         }
 
     def get_gold(self, dataset: str, sample_id: str) -> dict | None:
-        r = self.db.execute(
-            "SELECT * FROM gold_labels WHERE dataset = ? AND sample_id = ?",
-            (dataset, sample_id),
-        ).fetchone()
-        return self._gold_row(r) if r else None
+        with self._lock:
+            r = self.db.execute(
+                "SELECT * FROM gold_labels WHERE dataset = ? AND sample_id = ?",
+                (dataset, sample_id),
+            ).fetchone()
+            return self._gold_row(r) if r else None
 
     def all_gold(self, dataset: str) -> list[dict]:
-        rows = self.db.execute(
-            "SELECT * FROM gold_labels WHERE dataset = ?", (dataset,)
-        ).fetchall()
-        return [self._gold_row(r) for r in rows]
+        with self._lock:
+            rows = self.db.execute(
+                "SELECT * FROM gold_labels WHERE dataset = ?", (dataset,)
+            ).fetchall()
+            return [self._gold_row(r) for r in rows]
 
     def upsert_gold(self, dataset: str, sample_id: str, body: dict) -> dict:
-        now = datetime.now(timezone.utc).isoformat()
-        self.db.execute(
-            """INSERT INTO gold_labels (
-                dataset, sample_id, output, fields, annotator, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(dataset, sample_id) DO UPDATE SET
-                output = excluded.output,
-                fields = excluded.fields,
-                annotator = excluded.annotator,
-                updated_at = excluded.updated_at""",
-            (
-                dataset,
-                sample_id,
-                json.dumps(body.get("output") or {}),
-                json.dumps(body.get("fields") or []),
-                body.get("annotator"),
-                now,
-            ),
-        )
-        self.db.commit()
-        return self.get_gold(dataset, sample_id)
+        with self._lock:
+            now = datetime.now(timezone.utc).isoformat()
+            self.db.execute(
+                """INSERT INTO gold_labels (
+                    dataset, sample_id, output, fields, annotator, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(dataset, sample_id) DO UPDATE SET
+                    output = excluded.output,
+                    fields = excluded.fields,
+                    annotator = excluded.annotator,
+                    updated_at = excluded.updated_at""",
+                (
+                    dataset,
+                    sample_id,
+                    json.dumps(body.get("output") or {}),
+                    json.dumps(body.get("fields") or []),
+                    body.get("annotator"),
+                    now,
+                ),
+            )
+            self.db.commit()
+            return self.get_gold(dataset, sample_id)
 
     def delete_gold(self, dataset: str, sample_id: str) -> None:
-        self.db.execute(
-            "DELETE FROM gold_labels WHERE dataset = ? AND sample_id = ?",
-            (dataset, sample_id),
-        )
-        self.db.commit()
+        with self._lock:
+            self.db.execute(
+                "DELETE FROM gold_labels WHERE dataset = ? AND sample_id = ?",
+                (dataset, sample_id),
+            )
+            self.db.commit()
 
 
 # ── Dataset discovery + loading ─────────────────────────────────────────────
@@ -474,6 +488,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._api_stats(self._dataset(qs))
             if path == "/api/table":
                 return self._api_table(self._dataset(qs))
+            if path == "/api/projects":
+                return self._api_projects()
             if path == "/api/prompts":
                 return self._api_prompts(self._dataset(qs))
             if path.startswith("/api/export/"):
@@ -529,6 +545,43 @@ class Handler(BaseHTTPRequestHandler):
                 for d in datasets
             ]
         )
+
+    def _api_projects(self):
+        """Installed projects, described, each annotated with the prompt from its
+        most recent packaged round.
+
+        The comparison is the useful part: if the installed prompt differs from
+        the one that produced the latest round, the next run will not reproduce
+        that round. That is the drift this page exists to catch, so it's shown
+        as a diff rather than asserted in prose.
+        """
+        from ..inspect import describe_all
+
+        projects = describe_all()
+        datasets = discover_datasets(self.data_dir)
+        for p in projects:
+            if p.get("error"):
+                continue
+            mine = [d for d in datasets if d.get("schema") == p["name"]]
+            if not mine:
+                continue
+            latest = max(mine, key=lambda d: d["round"])
+            sample = next((s for s in load_samples(latest) if s.get("prompt")), None)
+            if not sample:
+                continue
+            prompt = sample["prompt"]
+            p["latest_round"] = {
+                "dataset": latest["name"],
+                "round": latest["round"],
+                # The round number comes from the directory name, which can lie:
+                # a re-packaged round (an "r2b" rerun landing in `-r2`) keeps the
+                # old number. The hash is the only unambiguous identifier, so
+                # show it alongside.
+                "prompt_hash": sample.get("prompt_hash"),
+                "prompt": prompt,
+                "matches_installed": prompt.strip() == p["prompt"].strip(),
+            }
+        self._json(projects)
 
     def _api_samples(self, ds):
         ann = {a["sample_id"]: a for a in self.store.all(ds["name"])}
@@ -666,13 +719,25 @@ def serve(
     open_browser: bool = True,
     host: str = "127.0.0.1",
     db_path: Path | None = None,
+    allow_empty: bool = False,
 ) -> None:
+    """Serve the review UI over ``data_dir``.
+
+    ``allow_empty`` starts the server even when the directory doesn't exist yet
+    (creating it). The CLI passes it for the *default* review root, so a fresh
+    install can still reach the Projects page and the homepage guidance — an
+    explicitly-passed path that's missing is a typo, and still an error.
+    """
     data_dir = Path(data_dir).resolve()
-    if not data_dir.is_dir():
-        raise SystemExit(
-            f"No review datasets at {data_dir}. Run `paratext run` first, "
-            f"or pass a dataset directory: paratext review <dir>"
-        )
+    if data_dir.exists() and not data_dir.is_dir():
+        raise SystemExit(f"Not a directory: {data_dir}")
+    if not data_dir.exists():
+        if not allow_empty:
+            raise SystemExit(
+                f"No review datasets at {data_dir}. Run `paratext run` first, "
+                f"or pass a dataset directory: paratext review <dir>"
+            )
+        data_dir.mkdir(parents=True, exist_ok=True)
     Handler.data_dir = data_dir
     # Default the annotation store to <data_dir>/annotations.db; --db can point it
     # elsewhere (e.g. an existing DB when swapping in for another review app).
