@@ -15,11 +15,12 @@ differs.
 
 ```bash
 uv tool install paratext          # installs the `paratext` command on PATH
-uv tool install "paratext[cards]" # + torchvision RetinaNet card cropping (optional)
 ```
 
-Image and PDF collections both work out of the box; the `[cards]` extra only
-adds the (heavier) card-cropping detector.
+Image and PDF collections both work out of the box. Scanned index cards can
+optionally use a card-cropping detector, which needs the heavier `[detector]`
+extra — see [Scanned cards](#scanned-cards-paratextcards); most collections
+don't need it.
 
 The model endpoint is any OpenAI-compatible server (e.g. Lemonade, vLLM,
 llama.cpp). The base URL defaults to `http://localhost:8000/v1`; override it in
@@ -46,7 +47,10 @@ untouched.
 #    (--no-install to just scaffold the files.)
 paratext new my-cards
 
-# 2. Run extraction + packaging in one go, then review in the browser.
+# 2. Check what the project will actually do before spending a model run on it.
+paratext inspect -p my-cards
+
+# 3. Run extraction + packaging in one go, then review in the browser.
 paratext run -p my-cards --limit 50
 paratext review                       # serves ./review — all projects
 ```
@@ -62,6 +66,13 @@ the `review/` root. If a review server is already running, a fresh `run` shows u
 there on reload — no restart needed. Add `paratext run … --review` to launch the
 UI automatically when the run finishes.
 
+`inspect` prints the fields and types the model is asked for, the prompt, the
+preprocessing the source adapter applies, and whether schema, prompt and view
+still agree — the same information as the review UI's **Projects** page. It
+describes what is *installed*, so if it disagrees with the files you're editing,
+the package needs reinstalling (`uv sync`). That mismatch is the most common
+cause of "my change did nothing".
+
 ## Commands
 
 | Command | What it does |
@@ -75,6 +86,7 @@ UI automatically when the run finishes.
 | `paratext sample --source <tree> --out <dir> -n 500` | Symlink a random image subset out of a nested tree. |
 | `paratext config [--show]` | Open `paratext.toml`; `--show` prints the resolved defaults. |
 | `paratext new [name]` | Scaffold a new project package (asks fields, prompt, source). |
+| `paratext inspect [-p <project>]` | Show what an installed project does: fields + types, prompt, source options, audit. |
 
 Run `paratext`, `paratext help`, or `paratext <command> -h` for usage.
 
@@ -122,6 +134,32 @@ new `run` appears on reload without restarting the server.
 
 Once a project is configured, `run`/`extract` need only `-p <project>` —
 everything else resolves from config.
+
+The homepage also links to **Projects**, a read-only view of every installed
+project: its fields and types, its prompt, the preprocessing its source applies,
+and its audit status. Where a project has already been run, it compares the
+installed prompt against the one that produced the latest packaged round and
+diffs them if they differ — so you can see at a glance whether a new run would
+reproduce the round you're looking at. It's the browser equivalent of
+`paratext inspect`, and works before you've run anything.
+
+### When something looks wrong
+
+- **A run finishes but preprocessing didn't happen.** `run`/`extract` print a
+  `!` notice for anything that degraded rather than failed — most often a
+  requested card crop falling back to a uniform crop because no detector was
+  available. Notices appear at the end of the run; the per-record `metadata` also
+  records what was applied.
+- **An edit to `schema.py` or `prompt.md` had no effect.** `paratext inspect`
+  reports the *installed* project. If it disagrees with your editor, reinstall
+  (`uv sync`, or `pip install -e .`). An editable install avoids this; a plain
+  install needs reinstalling after every change.
+- **A field renamed in one place but not another.** `paratext inspect` runs the
+  same audit as `paratext.projects.audit_project`, which checks the view's fields
+  exist in the schema and that every model-output field is named in the prompt.
+  Call it from your project's tests too — `paratext new` generates that test.
+- **Cropping or verso filtering behaves oddly on your scans.** Both are tuned to
+  one collection; see [Scanned cards](#scanned-cards-paratextcards).
 
 <a id="iterating-rounds"></a>
 
@@ -337,20 +375,37 @@ Two things to know for hosted endpoints:
 paratext is a *client*, not a model runner — to use a model that isn't hosted,
 self-host it behind vLLM/TGI/llama.cpp and point `base-url` at that.
 
-## Scanned-card toolkit (`paratext.cards`)
+## Scanned cards (`paratext.cards`)
 
-For index-card collections, two reusable, opt-in tools:
+For index-card collections, two reusable, **opt-in** tools. Both are off by
+default — they are card-specific, and both are calibrated against one
+collection's scans, so neither should be trusted on new material without
+checking it first.
 
 - **`is_verso(image)`** — a pure-NumPy blank-back filter (no ML dependency) that
   drops the blank backs of cards before any model call. Thresholds are arguments;
-  recalibrate them for your scanner.
+  recalibrate them for your scanner. A false positive silently discards a real
+  card, so verify against a labelled sample before enabling it on a full run.
 - **`load_card_detector()`** — a permissive (BSD) torchvision RetinaNet that
-  crops a scan to the card region. Weights download from the Hugging Face Hub on
-  first use; needs the `[cards]` extra. Falls back to a uniform crop if
-  unavailable.
+  crops a scan to the card region. Needs the `[detector]` extra
+  (`uv tool install "paratext[detector]"`). Falls back to a uniform crop if the
+  runtime or the weights are unavailable, and says so in the run summary.
 
-The bundled `cards` project (`paratext run -p cards`) wires both to a neutral
-prompt and a minimal schema as a working starting point.
+The reference weights are trained on National Library of Scotland catalogue
+cards. They are a starting point, not a general-purpose card detector — expect
+to train your own. Point paratext at them with:
+
+```toml
+[detector]
+repo = "your-org/your-card-detector"   # a Hugging Face repo
+file = "weights.pt"
+```
+
+or set `PARATEXT_CARD_DETECTOR=/path/to/weights.pt` for a local file.
+
+The bundled `card-template` project (`paratext run -p card-template`) is a
+worked example — a neutral prompt and a minimal schema to copy and edit. It
+leaves both tools off; enable them once you've calibrated for your collection.
 
 ## Writing a project
 
@@ -409,7 +464,7 @@ restate the prompt.
 Working from a checkout rather than an installed release:
 
 ```bash
-uv sync --extra dev            # add --extra cards for the detector runtime
+uv sync --extra dev            # add --extra detector for the card detector
 uv run paratext …             # run the CLI against the local source
 uv run pytest -q              # tests
 uv run ruff check             # lint (line length 100, rules E/F/I/W)

@@ -24,8 +24,8 @@ human guide.
 - A **project** is a plug-in package discovered via the `paratext.projects`
   entry-point group: `prompt.md` (prompt), `schema.py` (Pydantic schema), and
   `__init__.py` which wires them to a `paratext.sources` adapter
-  (`image_source`/`pdf_source`) into a `PROJECT`. The bundled generic starter is
-  `cards`; `paratext new` scaffolds this layout, offers to write the project's
+  (`image_source`/`pdf_source`) into a `PROJECT`. The bundled worked example is
+  `card-template`; `paratext new` scaffolds this layout, offers to write the project's
   `[project.<name>]` config block (`scaffold._offer_config`), then registers the
   entry point in pyproject.toml and runs `uv sync` automatically
   (`scaffold._register_and_sync`; `--no-install` skips it).
@@ -38,7 +38,7 @@ human guide.
 
 ## Setup, build, run
 
-- Python 3.11–3.13 via `uv`. `uv sync --extra dev` (add `--extra cards` for the
+- Python 3.11–3.13 via `uv`. `uv sync --extra dev` (add `--extra detector` for the
   torch detector runtime). Run with `uv run paratext …`, or `uv tool install`
   for the bare command.
 - model endpoint is any OpenAI-compatible server; base URL via `paratext.toml` or
@@ -77,7 +77,23 @@ human guide.
     are dropped with a warning, never a hard error.
 - `paratext.cards` is the reusable scanned-card toolkit: the deterministic
   `is_verso` pre-filter (pure NumPy) and the optional RetinaNet
-  `load_card_detector()` (weights from the Hugging Face Hub, `[cards]` extra).
+  `load_card_detector()` (weights from the Hugging Face Hub, `[detector]` extra).
+  Both are **off by default** and calibrated on NLS scans — they are opt-in per
+  project via `image_source(verso_filter=…, crop=…)`, and the detector repo is
+  configurable via the `[detector]` table in paratext.toml. Never assume they
+  transfer to another collection unchanged.
+- `paratext inspect [-p <name>]` (and the review UI's **Projects** page, backed by
+  `paratext.inspect`) describes the **installed** projects: derived field types,
+  prompt hash, source options, and the `audit_project` result. Both are
+  read-only. Start here when a project's behaviour doesn't match its source —
+  a mismatch usually means the package needs reinstalling, not that the code is
+  wrong.
+- A source adapter that **degrades** rather than fails appends to
+  `Source.notices`, and `extract` prints those at the end of the run (e.g. a
+  requested card crop falling back to a uniform crop because no detector loaded).
+  Preprocessing that silently does nothing is the worst failure mode here — it
+  looks like a clean run and quietly costs accuracy — so if you add a fallback
+  path, add a notice with it.
 - Bump a project's `schema_version` when its schema changes.
 - A project names its fields in three places — `schema.py` (structure; also sent
   to the model as `response_format`), `prompt.md` (instructions), and the `View`
