@@ -201,20 +201,23 @@ def load_card_detector(
     """Load the RetinaNet card detector, or return ``None`` to fall back to a
     uniform crop.
 
-    Weights resolution: ``weights`` arg → ``PARATEXT_CARD_DETECTOR`` env var →
-    download ``filename`` from the ``repo_id`` Hugging Face repo (cached). Any
-    failure (missing ``[detector]`` runtime, offline, bad weights) is logged and
-    yields ``None`` rather than raising, so the pipeline still runs.
+    Weights resolution, highest first: the ``weights`` argument →
+    ``PARATEXT_CARD_DETECTOR`` env var → ``weights`` in the ``[detector]`` table
+    of paratext.toml (a local path) → download ``filename`` from the ``repo_id``
+    Hugging Face repo (cached). Any failure (missing ``[detector]`` runtime,
+    offline, bad weights) is logged and yields ``None`` rather than raising, so
+    the pipeline still runs.
 
-    ``repo_id``/``filename`` fall back to the ``[detector]`` table in
-    paratext.toml (``repo`` / ``file``), then to the NLS reference weights."""
-    if repo_id is None or filename is None:
-        from .config import load_table
+    ``repo_id``/``filename`` likewise fall back to the ``[detector]`` table
+    (``repo`` / ``file``), then to the reference weights."""
+    from .config import load_table
 
-        cfg = load_table("detector")
-        repo_id = repo_id or cfg.get("repo") or DEFAULT_DETECTOR_REPO
-        filename = filename or cfg.get("file") or DEFAULT_DETECTOR_FILE
-    path = weights or os.environ.get("PARATEXT_CARD_DETECTOR")
+    cfg = load_table("detector")
+    repo_id = repo_id or cfg.get("repo") or DEFAULT_DETECTOR_REPO
+    filename = filename or cfg.get("file") or DEFAULT_DETECTOR_FILE
+    # A local path beats the Hub: training your own is the expected case once
+    # you move off the reference weights, and re-uploading to run is friction.
+    path = weights or os.environ.get("PARATEXT_CARD_DETECTOR") or cfg.get("weights")
     if path is None:
         try:
             from huggingface_hub import hf_hub_download

@@ -11,6 +11,20 @@ output schema, and sample iteration, added without forking the framework — so 
 same code path runs a 50-item pilot and a 250,000-item sweep; only `--limit`
 differs.
 
+## What you'll need
+
+- **A directory of images or PDFs.** Images are read from a flat directory, one
+  item per file; PDFs are read recursively.
+- **An OpenAI-compatible endpoint serving a multimodal model.** This is the part
+  that takes real setup — paratext calls it, it doesn't provide it. Anything
+  speaking the OpenAI chat API works: [Lemonade](https://lemonade-server.ai/),
+  vLLM, llama.cpp, or a hosted provider. The model must accept images.
+  Point paratext at it with `base-url` (see [Configure](#configure)); it
+  defaults to `http://localhost:8000/v1`.
+- **Python 3.11–3.13.**
+
+Nothing else. Card cropping needs an extra, but most collections don't use it.
+
 ## Install
 
 ```bash
@@ -21,11 +35,6 @@ Image and PDF collections both work out of the box. Scanned index cards can
 optionally use a card-cropping detector, which needs the heavier `[detector]`
 extra — see [Scanned cards](#scanned-cards-paratextcards); most collections
 don't need it.
-
-The model endpoint is any OpenAI-compatible server (e.g. Lemonade, vLLM,
-llama.cpp). The base URL defaults to `http://localhost:8000/v1`; override it in
-`paratext.toml` or via `PARATEXT_BASE_URL`. Set `api-key` if your endpoint
-requires one (see Configure).
 
 ### Updating
 
@@ -69,59 +78,61 @@ UI automatically when the run finishes.
 `inspect` prints the fields and types the model is asked for, the prompt, the
 preprocessing the source adapter applies, and whether schema, prompt and view
 still agree — the same information as the review UI's **Project configuration**
-page. It describes what is *installed*, so if it disagrees with the files you're
-editing,
-the package needs reinstalling (`uv sync`). That mismatch is the most common
-cause of "my change did nothing".
+page. It describes what is *installed*, so if it disagrees with the files
+you're editing, the package needs reinstalling (`uv sync`). That mismatch is the
+most common cause of "my change did nothing".
 
-## Commands
+## Writing a project
 
-| Command | What it does |
-| --- | --- |
-| `paratext run -p <project>` | Extract **and** package in one step (the common path). |
-| `paratext extract -p <project>` | Run the model, write JSONL only. |
-| `paratext package <jsonl>` | Re-package an existing JSONL for review (no model calls). |
-| `paratext review <dataset-dir>` | Launch the inbuilt web UI to review a packaged dataset. |
-| `paratext export -p <project>` | Export a reviewed round (`--format hf`/`marc`/`dc`). |
-| `paratext carbon` | Show the current grid carbon/renewables (for `--green` scheduling). |
-| `paratext sample --source <tree> --out <dir> -n 500` | Symlink a random image subset out of a nested tree. |
-| `paratext config [--show]` | Open `paratext.toml`; `--show` prints the resolved defaults. |
-| `paratext new [name]` | Scaffold a new project package (asks fields, prompt, source). |
-| `paratext inspect [-p <project>]` | Show what an installed project does: fields + types, prompt, source options, audit. |
+`paratext new` scaffolds a project package for you — the three files you then
+edit are the prompt, the schema, and a short wiring file:
 
-Run `paratext`, `paratext help`, or `paratext <command> -h` for usage.
+```
+my_cards/
+    prompt.md     # the prompt (prose, for the model)
+    schema.py     # the Pydantic output schema (your metadata fields)
+    __init__.py   # wires schema + prompt + a source adapter into PROJECT
+```
 
-### Flags
+`__init__.py` is small because the input handling comes from a **source
+adapter** (`paratext.sources`):
 
-Most `run`/`extract` values resolve from `paratext.toml` (see Configure), so you
-rarely pass them — but every default can be overridden on the CLI.
+```python
+# my_cards/__init__.py
+from paratext.projects import Project, load_prompt
+from paratext.sources import image_source   # or pdf_source
 
-- **`run -p <project>`** — `--source DIR`, `--output FILE` (default
-  `output/<project>.jsonl`), `--model ID`, `--base-url URL`, `--api-key KEY`,
-  `--limit N`, `--no-structured`, `--skip-preflight`, `--green` (wait for a clean
-  grid; see below), `--review-out DIR` (overrides round auto-naming), `--round N`
-  (force a round), `--fresh` (rebuild the round, discarding its annotations),
-  `--review` (open the UI when finished).
-- **`extract -p <project>`** — same as `run` minus the review flags
-  (writes JSONL only); includes `--green`.
-- **`carbon`** — `--window` (show the greenest forecast window instead of the
-  current reading), `--renewables-above PCT`, `--max-carbon GCO2`.
-- **`package <jsonl>`** — `-p/--project` (inferred from the JSONL's provenance
-  if omitted), `--out DIR` (default: the `review/<project>-r<N>` round for this
-  prompt), `--round N`, `--fresh` (rebuild, discarding annotations).
-- **`export -p <project>`** — `--format {hf,marc,dc}` (omit → prompt on a terminal,
-  hf default); `--round N` (default: latest). HF-only: `--to <org/name>` (else
-  `export.repo`), `--public` (default private), `--license <id>` (else prompted; CC0
-  recommended), `--dry-run` (build locally, don't push).
-- **`review [data_dir]`** — `data_dir` defaults to `./review`; `--port N`
-  (config `review-port`, else 5050), `--no-open`.
-- **`sample`** — `--source DIR` (required), `--out DIR` (required), `-n N`
-  (default 500), `--seed N`.
-- **`config`** — `--show` (print resolved defaults instead of editing),
-  `-p <project>` (which project's defaults to resolve), `--suggest-region`
-  (IP-geolocate and propose a `[carbon]` region).
-- **`new [name]`** (alias `init`) — interactive; `--no-install` (scaffold only,
-  don't edit pyproject.toml or run `uv sync`).
+from .schema import Record
+
+PROJECT = Project(
+    name="my-cards",
+    schema_version="v1",
+    prompt=load_prompt(__file__),
+    schema=Record,
+    source=image_source(verso_filter=True, crop=True),
+)
+```
+
+Register it via the `paratext.projects` entry-point group so it's discovered at
+runtime:
+
+```toml
+[project.entry-points."paratext.projects"]
+my-cards = "my_cards:PROJECT"
+```
+
+The View defaults to showing every schema field. Override only what you need:
+pass a `view=View(...)` to curate the display, and the optional hooks `curate`,
+`build_record`, `ground_truth` (and a custom `materialise_images` or
+`iter_samples`) for drop/quarantine rules, ground truth, etc.
+
+Your fields end up named in all three files — schema (structure), prompt
+(instructions), and View (display) — with no automatic link between them. Keep
+them in step by calling `audit_project(PROJECT)` from a test: it checks every View
+field exists in the schema and every model field is named in the prompt. Put
+behaviour in `prompt.md`; keep the schema's `Field(description=...)` short and
+structural, since those descriptions are sent to the model too and shouldn't
+restate the prompt.
 
 ## Review
 
@@ -137,9 +148,9 @@ Once a project is configured, `run`/`extract` need only `-p <project>` —
 everything else resolves from config.
 
 The homepage also links to **Project configuration**, a read-only view of every
-installed project: its fields and types, its prompt, the preprocessing its source
-applies,
-and its audit status. Where a project has already been run, it compares the
+installed project: its fields and types, its prompt, the preprocessing its
+source applies, and its audit status. Where a project has already been run, it
+compares the
 installed prompt against the one that produced the latest packaged round and
 diffs them if they differ — so you can see at a glance whether a new run would
 reproduce the round you're looking at. It's the browser equivalent of
@@ -201,6 +212,104 @@ edits the fields your project's View shows; fields the View hides keep their mod
 value. `paratext export` then ships these corrected rows **alongside** the
 *good enough* ones as one gold set (see below). The Stats tab reports the eval-set
 size (good-enough + corrected).
+
+## Configure
+
+A `paratext.toml` in the working directory holds defaults. Resolution order,
+highest priority first:
+
+1. CLI flags (`--source`, `--model`, …)
+2. `PARATEXT_*` environment variables (idiomatic inside containers)
+3. `[project.<name>]` section in `paratext.toml`
+4. top-level keys in `paratext.toml`
+
+Keys may be kebab- or snake-case:
+
+```toml
+base-url = "http://localhost:8000/v1"
+model    = "Qwen3-VL-30B"
+
+[project.my-cards]
+source     = "/data/my-cards/images"
+output     = "output/my-cards.jsonl"
+review-out = "review/my-cards"
+
+[project.my-cards.preprocess]
+verso-filter = true
+card-crop    = true
+```
+
+### Remote / hosted endpoints (incl. Hugging Face)
+
+The model endpoint is just an OpenAI-compatible URL, so a hosted API works exactly
+like a local server — only `base-url`, `api-key`, and `model` change. For example,
+Hugging Face Inference Providers (or a dedicated Inference Endpoint's URL + `/v1`):
+
+```toml
+base-url = "https://router.huggingface.co/v1"
+api-key  = "hf_…"                          # or set PARATEXT_API_KEY
+model    = "Qwen/Qwen2.5-VL-7B-Instruct"   # a vision model repo id
+```
+
+Two things to know for hosted endpoints:
+
+- **Auth:** set `api-key` to your provider token (local servers ignore it; the
+  default is `EMPTY`).
+- **Structured output:** extraction uses OpenAI json-schema structured outputs by
+  default. If a provider/model doesn't support that, set `no-structured = true`
+  (or pass `--no-structured`) to fall back to a plain completion + JSON parsing.
+
+paratext is a *client*, not a model runner — to use a model that isn't hosted,
+self-host it behind vLLM/TGI/llama.cpp and point `base-url` at that.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `paratext run -p <project>` | Extract **and** package in one step (the common path). |
+| `paratext extract -p <project>` | Run the model, write JSONL only. |
+| `paratext package <jsonl>` | Re-package an existing JSONL for review (no model calls). |
+| `paratext review <dataset-dir>` | Launch the inbuilt web UI to review a packaged dataset. |
+| `paratext export -p <project>` | Export a reviewed round (`--format hf`/`marc`/`dc`). |
+| `paratext carbon` | Show the current grid carbon/renewables (for `--green` scheduling). |
+| `paratext sample --source <tree> --out <dir> -n 500` | Symlink a random image subset out of a nested tree. |
+| `paratext config [--show]` | Open `paratext.toml`; `--show` prints the resolved defaults. |
+| `paratext new [name]` | Scaffold a new project package (asks fields, prompt, source). |
+| `paratext inspect [-p <project>]` | Show what an installed project does: fields + types, prompt, source options, audit. |
+
+Run `paratext`, `paratext help`, or `paratext <command> -h` for usage.
+
+### Flags
+
+Most `run`/`extract` values resolve from `paratext.toml` (see Configure), so you
+rarely pass them — but every default can be overridden on the CLI.
+
+- **`run -p <project>`** — `--source DIR`, `--output FILE` (default
+  `output/<project>.jsonl`), `--model ID`, `--base-url URL`, `--api-key KEY`,
+  `--limit N`, `--no-structured`, `--skip-preflight`, `--green` (wait for a clean
+  grid; see below), `--review-out DIR` (overrides round auto-naming), `--round N`
+  (force a round), `--fresh` (rebuild the round, discarding its annotations),
+  `--review` (open the UI when finished).
+- **`extract -p <project>`** — same as `run` minus the review flags
+  (writes JSONL only); includes `--green`.
+- **`carbon`** — `--window` (show the greenest forecast window instead of the
+  current reading), `--renewables-above PCT`, `--max-carbon GCO2`.
+- **`package <jsonl>`** — `-p/--project` (inferred from the JSONL's provenance
+  if omitted), `--out DIR` (default: the `review/<project>-r<N>` round for this
+  prompt), `--round N`, `--fresh` (rebuild, discarding annotations).
+- **`export -p <project>`** — `--format {hf,marc,dc}` (omit → prompt on a terminal,
+  hf default); `--round N` (default: latest). HF-only: `--to <org/name>` (else
+  `export.repo`), `--public` (default private), `--license <id>` (else prompted; CC0
+  recommended), `--dry-run` (build locally, don't push).
+- **`review [data_dir]`** — `data_dir` defaults to `./review`; `--port N`
+  (config `review-port`, else 5050), `--no-open`.
+- **`sample`** — `--source DIR` (required), `--out DIR` (required), `-n N`
+  (default 500), `--seed N`.
+- **`config`** — `--show` (print resolved defaults instead of editing),
+  `-p <project>` (which project's defaults to resolve), `--suggest-region`
+  (IP-geolocate and propose a `[carbon]` region).
+- **`new [name]`** (alias `init`) — interactive; `--no-install` (scaffold only,
+  don't edit pyproject.toml or run `uv sync`).
 
 ## Export
 
@@ -287,6 +396,43 @@ personal_authors = "creator"
 publication_date = "date"
 ```
 
+## Scanned cards (`paratext.cards`)
+
+For index-card collections, two reusable, **opt-in** tools. Both are off by
+default — they are card-specific, and both are calibrated against one
+collection's scans, so neither should be trusted on new material without
+checking it first.
+
+- **`is_verso(image)`** — a pure-NumPy blank-back filter (no ML dependency) that
+  drops the blank backs of cards before any model call. Thresholds are arguments;
+  recalibrate them for your scanner. A false positive silently discards a real
+  card, so verify against a labelled sample before enabling it on a full run.
+- **`load_card_detector()`** — a permissive (BSD) torchvision RetinaNet that
+  crops a scan to the card region. Needs the `[detector]` extra
+  (`uv tool install "paratext[detector]"`). Falls back to a uniform crop if the
+  runtime or the weights are unavailable, and says so in the run summary.
+
+The reference weights are trained on National Library of Scotland catalogue
+cards. They are a starting point, not a general-purpose card detector — expect
+to train your own. Point paratext at them with:
+
+```toml
+[detector]
+repo = "your-org/your-card-detector"   # a Hugging Face repo
+file = "weights.pt"
+# ...or point at a local file instead, e.g. weights you've just trained:
+weights = "models/my-card-detector.pt"
+```
+
+Resolution order, highest first: the `weights=` argument → the
+`PARATEXT_CARD_DETECTOR` environment variable → `weights` in the config above →
+downloading `file` from `repo`. The reference weights live at
+[`NationalLibraryOfScotland/card-detector-retinanet`](https://huggingface.co/NationalLibraryOfScotland/card-detector-retinanet).
+
+The bundled `card-template` project (`paratext run -p card-template`) is a
+worked example — a neutral prompt and a minimal schema to copy and edit. It
+leaves both tools off; enable them once you've calibrated for your collection.
+
 ## Green scheduling (`--green`)
 
 A batch sweep is a movable load, so you can wait for the grid to be clean before
@@ -327,139 +473,6 @@ max-wait = "12h"             # give up waiting and run anyway after this
   `paratext config --suggest-region` IP-geolocates your box and *proposes* a
   region for you to confirm (it may reflect your ISP/host rather than your site).
 - Only meaningful when inference runs on the grid you name (e.g. a local model box).
-
-## Configure
-
-A `paratext.toml` in the working directory holds defaults. Resolution order,
-highest priority first:
-
-1. CLI flags (`--source`, `--model`, …)
-2. `PARATEXT_*` environment variables (idiomatic inside containers)
-3. `[project.<name>]` section in `paratext.toml`
-4. top-level keys in `paratext.toml`
-
-Keys may be kebab- or snake-case:
-
-```toml
-base-url = "http://localhost:8000/v1"
-model    = "Qwen3-VL-30B"
-
-[project.my-cards]
-source     = "/data/my-cards/images"
-output     = "output/my-cards.jsonl"
-review-out = "review/my-cards"
-
-[project.my-cards.preprocess]
-verso-filter = true
-card-crop    = true
-```
-
-### Remote / hosted endpoints (incl. Hugging Face)
-
-The model endpoint is just an OpenAI-compatible URL, so a hosted API works exactly
-like a local server — only `base-url`, `api-key`, and `model` change. For example,
-Hugging Face Inference Providers (or a dedicated Inference Endpoint's URL + `/v1`):
-
-```toml
-base-url = "https://router.huggingface.co/v1"
-api-key  = "hf_…"                          # or set PARATEXT_API_KEY
-model    = "Qwen/Qwen2.5-VL-7B-Instruct"   # a vision model repo id
-```
-
-Two things to know for hosted endpoints:
-
-- **Auth:** set `api-key` to your provider token (local servers ignore it; the
-  default is `EMPTY`).
-- **Structured output:** extraction uses OpenAI json-schema structured outputs by
-  default. If a provider/model doesn't support that, set `no-structured = true`
-  (or pass `--no-structured`) to fall back to a plain completion + JSON parsing.
-
-paratext is a *client*, not a model runner — to use a model that isn't hosted,
-self-host it behind vLLM/TGI/llama.cpp and point `base-url` at that.
-
-## Scanned cards (`paratext.cards`)
-
-For index-card collections, two reusable, **opt-in** tools. Both are off by
-default — they are card-specific, and both are calibrated against one
-collection's scans, so neither should be trusted on new material without
-checking it first.
-
-- **`is_verso(image)`** — a pure-NumPy blank-back filter (no ML dependency) that
-  drops the blank backs of cards before any model call. Thresholds are arguments;
-  recalibrate them for your scanner. A false positive silently discards a real
-  card, so verify against a labelled sample before enabling it on a full run.
-- **`load_card_detector()`** — a permissive (BSD) torchvision RetinaNet that
-  crops a scan to the card region. Needs the `[detector]` extra
-  (`uv tool install "paratext[detector]"`). Falls back to a uniform crop if the
-  runtime or the weights are unavailable, and says so in the run summary.
-
-The reference weights are trained on National Library of Scotland catalogue
-cards. They are a starting point, not a general-purpose card detector — expect
-to train your own. Point paratext at them with:
-
-```toml
-[detector]
-repo = "your-org/your-card-detector"   # a Hugging Face repo
-file = "weights.pt"
-```
-
-or set `PARATEXT_CARD_DETECTOR=/path/to/weights.pt` for a local file.
-
-The bundled `card-template` project (`paratext run -p card-template`) is a
-worked example — a neutral prompt and a minimal schema to copy and edit. It
-leaves both tools off; enable them once you've calibrated for your collection.
-
-## Writing a project
-
-`paratext new` scaffolds a project package for you — the three files you then
-edit are the prompt, the schema, and a short wiring file:
-
-```
-my_cards/
-    prompt.md     # the prompt (prose, for the model)
-    schema.py     # the Pydantic output schema (your metadata fields)
-    __init__.py   # wires schema + prompt + a source adapter into PROJECT
-```
-
-`__init__.py` is small because the input handling comes from a **source
-adapter** (`paratext.sources`):
-
-```python
-# my_cards/__init__.py
-from paratext.projects import Project, load_prompt
-from paratext.sources import image_source   # or pdf_source
-
-from .schema import Record
-
-PROJECT = Project(
-    name="my-cards",
-    schema_version="v1",
-    prompt=load_prompt(__file__),
-    schema=Record,
-    source=image_source(verso_filter=True, crop=True),
-)
-```
-
-Register it via the `paratext.projects` entry-point group so it's discovered at
-runtime:
-
-```toml
-[project.entry-points."paratext.projects"]
-my-cards = "my_cards:PROJECT"
-```
-
-The View defaults to showing every schema field. Override only what you need:
-pass a `view=View(...)` to curate the display, and the optional hooks `curate`,
-`build_record`, `ground_truth` (and a custom `materialise_images` or
-`iter_samples`) for drop/quarantine rules, ground truth, etc.
-
-Your fields end up named in all three files — schema (structure), prompt
-(instructions), and View (display) — with no automatic link between them. Keep
-them in step by calling `audit_project(PROJECT)` from a test: it checks every View
-field exists in the schema and every model field is named in the prompt. Put
-behaviour in `prompt.md`; keep the schema's `Field(description=...)` short and
-structural, since those descriptions are sent to the model too and shouldn't
-restate the prompt.
 
 ## Development
 
