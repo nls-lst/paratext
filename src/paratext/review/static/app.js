@@ -280,8 +280,10 @@ function renderPicker() {
       `<p>No datasets found. Run <code>paratext run -p &lt;project&gt;</code> to create a
          review round under <code>review/</code>, then reload — or point
          <code>paratext review</code> at a directory that contains one.</p>
-       <p class="text-light">Meanwhile, <a href="#/projects">Project configuration</a> shows
-         which projects are installed and how each one is set up.</p>`;
+    <p class="page-foot">
+      <a href="#/projects">Project configuration</a> — the fields, prompt and
+      source options each installed project runs with.
+    </p>`;
     return;
   }
 
@@ -331,9 +333,9 @@ function renderPicker() {
   document.getElementById("view").innerHTML = `
     <h2>Choose a dataset to review</h2>
     <div style="max-width:32rem;">${cards}</div>
-    <p class="mt-6 text-light">
+    <p class="page-foot">
       <a href="#/projects">Project configuration</a> — the fields, prompt and
-      source options each project runs with. Reference, not part of reviewing.
+      source options each installed project runs with.
     </p>
   `;
   document.querySelectorAll("[data-dataset]").forEach((btn) => {
