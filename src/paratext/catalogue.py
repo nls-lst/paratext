@@ -14,6 +14,7 @@ never a hard error.
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -290,3 +291,71 @@ def run(dataset_dir: Path, project: str, fmt: str, *, no_wizard: bool = False) -
     return CatalogueSummary(
         format=fmt, records=len(sel.records), path=dest, mapped=mapping, skipped=unmapped
     )
+
+
+# ── Scope-aware, in-memory export (used by the review UI's export modal) ─────
+# The CLI `run` above writes gold only to a file. The GUI needs three record
+# scopes and the bytes in hand (browser download), so these build from a dataset
+# directory without touching disk.
+_SCOPES = {
+    "good_enough": "records verified good enough",
+    "needs_tweaks": "good enough plus needs-tweaks",
+    "everything": "every record in the round, reviewed or not",
+}
+
+
+@dataclass
+class _PlainRecord:
+    """The minimal shape build_marc/build_dc need (label + an id)."""
+
+    label: dict
+    document_id: str | None
+    sid: str
+
+
+def records_for_scope(
+    dataset_dir: Path, project: str, scope: str, db_path: Path | None = None
+) -> list:
+    """Select records for one export scope. `good_enough`/`needs_tweaks` reuse
+    `select_records`; `everything` includes unreviewed rows (model output), and
+    a human-corrected answer still wins over the model where one exists.
+
+    `db_path` points at the gold store (the review service keeps it outside the
+    dataset dir); defaults to `<dataset_dir>/annotations.db`."""
+    if scope not in _SCOPES:
+        raise ValueError(f"unknown scope {scope!r}; expected one of {sorted(_SCOPES)}")
+    if scope != "everything":
+        return select_records(dataset_dir, project, min_verdict=scope, db_path=db_path).records
+
+    from .review.server import Store
+
+    samples = json.loads((dataset_dir / "samples.json").read_text())
+    schema_fields = list(get_project(project).schema.model_fields)
+    store = Store(db_path or dataset_dir / "annotations.db")
+    name = dataset_dir.name
+    out: list = []
+    for s in samples:
+        sid = str(s["id"])
+        gold = (store.get_gold(name, sid) or {}).get("output") or {}
+        model_output = s.get("model_output") or {}
+        label = {f: gold.get(f, model_output.get(f)) for f in schema_fields}
+        out.append(_PlainRecord(label=label, document_id=s.get("document_id"), sid=sid))
+    return out
+
+
+def export_bytes(
+    dataset_dir: Path, project: str, fmt: str, scope: str, db_path: Path | None = None
+) -> tuple[bytes, int]:
+    """Build a MARCXML / DC collection for one scope and return (xml_bytes, n).
+    Mapping is resolved from config + `CANONICAL`; unmapped fields are dropped
+    (the GUI shows which). No wizard, no file written."""
+    import io
+
+    mapping, _unmapped = resolve_mapping(project, fmt)
+    if not mapping:
+        raise ValueError(f"no fields mapped to {fmt.upper()} for {project}")
+    records = records_for_scope(dataset_dir, project, scope, db_path=db_path)
+    tree = build_marc(records, mapping) if fmt == "marc" else build_dc(records, mapping)
+    buf = io.BytesIO()
+    tree.write(buf, encoding="utf-8", xml_declaration=True)
+    return buf.getvalue(), len(records)

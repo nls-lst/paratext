@@ -74,6 +74,7 @@ def select_records(
     min_verdict: str = "good_enough",
     include_negatives: bool = False,
     annotators: str = "omit",
+    db_path: Path | None = None,
 ) -> Selection:
     """Select the gold records for a packaged round. Image-count rules (multi-image
     rejection, no-image exclusion) are left to the caller — they are HF-specific."""
@@ -85,7 +86,9 @@ def select_records(
 
     proj = get_project(project)
     schema_fields = list(proj.schema.model_fields)
-    store = Store(dataset_dir / "annotations.db")
+    # Gold may live in a store outside the dataset dir (the review service runs
+    # with --db elsewhere), so callers can point at it explicitly.
+    store = Store(db_path or dataset_dir / "annotations.db")
     name = dataset_dir.name
     threshold = _VERDICT_ORDER.get(min_verdict, 2)
 

@@ -80,6 +80,7 @@ class Store:
         # concurrent requests raise "bad parameter or other API misuse". The
         # stats page alone fires three fetches at once, so serialise every access.
         self._lock = threading.RLock()
+        self.db_path = Path(db_path)  # so callers (e.g. export) can read the same gold
         self.db = sqlite3.connect(str(db_path), check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.execute(
@@ -492,6 +493,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._api_projects()
             if path == "/api/prompts":
                 return self._api_prompts(self._dataset(qs))
+            if path == "/api/export/fields":
+                return self._api_export_fields(self._dataset(qs), qs)
+            if path in ("/api/export/marc", "/api/export/dc"):
+                return self._api_export_catalogue(
+                    self._dataset(qs), path.rsplit("/", 1)[1], qs
+                )
             if path.startswith("/api/export/"):
                 return self._api_export(self._dataset(qs))
             if path.startswith("/images/"):
@@ -658,6 +665,49 @@ class Handler(BaseHTTPRequestHandler):
             g["rounds"].sort()
         prompts = sorted(groups.values(), key=lambda g: max(g["rounds"]), reverse=True)
         self._json({"dataset": ds["name"], "base": ds["base"], "prompts": prompts})
+
+    def _api_export_fields(self, ds, qs):
+        """The mapping table for the export modal: every schema field and its
+        inferred MARC tag / DC element (editable in the UI). `fmt=marc|dc`."""
+        from ..catalogue import infer_target
+        from ..inspect import describe
+        from ..projects import get_project
+
+        fmt = (qs.get("fmt") or ["marc"])[0]
+        project = get_project(ds["schema"])
+        fields = describe(project)["view"]["panels"][0]["fields"]
+        rows = [
+            {
+                "key": f["key"],
+                "label": f["label"],
+                "type": f["type"],
+                "target": infer_target(f["key"], fmt),  # None == unmapped
+            }
+            for f in fields
+        ]
+        self._json({"dataset": ds["name"], "format": fmt, "fields": rows})
+
+    def _api_export_catalogue(self, ds, fmt, qs):
+        """Stream a MARCXML / Dublin Core collection as a browser download.
+        `scope=good_enough|needs_tweaks|everything` (default everything)."""
+        from ..catalogue import export_bytes
+
+        scope = (qs.get("scope") or ["everything"])[0]
+        try:
+            xml, n = export_bytes(
+                ds["dir"], ds["schema"], fmt, scope, db_path=self.store.db_path
+            )
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        fname = f"{ds['name']}-{fmt}.xml"
+        self._bytes(
+            xml,
+            "application/xml",
+            headers={
+                "content-disposition": f'attachment; filename="{fname}"',
+                "x-record-count": str(n),
+            },
+        )
 
     def _api_export(self, ds):
         """Generic CSV of flagged/scored samples (project-neutral)."""

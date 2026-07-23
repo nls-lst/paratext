@@ -131,3 +131,31 @@ def test_run_writes_marcxml(tmp_path, monkeypatch):
     headings = [sf.text for sf in root.iter(f"{MARC_NS}subfield")
                 if sf.text in ("Hume, David", "Smith, Adam")]
     assert set(headings) == {"Hume, David", "Smith, Adam"}
+
+
+def test_export_bytes_scopes_and_marc(tmp_path, monkeypatch):
+    """MARC/DC export builds in memory, honours scope, and reads gold from the
+    passed db_path (not dataset_dir/annotations.db)."""
+    from paratext.catalogue import export_bytes, records_for_scope
+
+    d = tmp_path / "card-template-r1"
+    d.mkdir()
+    (d / "samples.json").write_text(json.dumps([
+        {"id": "1", "model_output": {"heading": "A", "text": "x"}},
+        {"id": "2", "model_output": {"heading": "B", "text": "y"}},
+    ]))
+    (d / "provenance.json").write_text(json.dumps({"project": "card-template"}))
+    gold_db = tmp_path / "gold.db"
+    store = Store(gold_db)
+    store.upsert("card-template-r1", "1", {"model_correct": "good_enough"})
+
+    # everything = both samples; good_enough = only the verified one — from gold_db
+    assert len(records_for_scope(d, "card-template", "everything", db_path=gold_db)) == 2
+    assert len(records_for_scope(d, "card-template", "good_enough", db_path=gold_db)) == 1
+
+    # card fields aren't standard MARC names, so give a mapping (as the CLI would).
+    monkeypatch.setattr(catalogue, "load_project_section",
+                        lambda p, s: {"marc": {"heading": "245$a", "text": "500$a"}})
+    xml, n = export_bytes(d, "card-template", "marc", "everything", db_path=gold_db)
+    assert n == 2 and xml.startswith(b"<?xml")
+    assert b"MARC21/slim" in xml
