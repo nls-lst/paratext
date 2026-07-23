@@ -683,8 +683,8 @@ function fieldControl(f, value) {
 function entriesEditor(f, entries) {
   const rows = entries.map((e) => entryRow(f, e)).join("");
   return `<div class="entries-editor" data-field="${escapeHtml(f.key)}">
-    <div class="entry-rows">${rows}</div>
-    <button type="button" class="outline small" data-add-entry>+ Add ${escapeHtml(
+    <div class="entry-rows vstack">${rows}</div>
+    <button type="button" class="outline small mt-2" data-add-entry>+ Add ${escapeHtml(
       f.label.toLowerCase(),
     )}</button>
   </div>`;
