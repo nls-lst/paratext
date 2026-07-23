@@ -989,7 +989,7 @@ function renderPromptsPanel(prompts) {
         </summary>
         ${diffToggle}
         <div data-prompt-body="${escapeHtml(p.hash)}" style="margin-top:.5rem;">
-          <pre style="white-space:pre-wrap; font-size:.8125rem; padding:.75rem; background:var(--muted); border-radius:.25rem; margin:0;">${escapeHtml(
+          <pre class="prompt-text">${escapeHtml(
             p.text,
           )}</pre>
         </div>
@@ -1112,7 +1112,7 @@ async function renderStats() {
       if (!self || !other || !body) return;
       const showingDiff = btn.dataset.mode === "diff";
       if (showingDiff) {
-        body.innerHTML = `<pre style="white-space:pre-wrap; font-size:.8125rem; padding:.75rem; background:var(--muted); border-radius:.25rem; margin:0;">${escapeHtml(
+        body.innerHTML = `<pre class="prompt-text">${escapeHtml(
           self.text,
         )}</pre>`;
         btn.textContent = "Difference vs previous round";
@@ -1120,10 +1120,10 @@ async function renderStats() {
       } else {
         // Diff base = previous prompt; new = current. So +/- read as
         // "what was added/removed since the previous round".
-        body.innerHTML = `<div style="font-size:.8125rem; padding:.5rem; background:var(--muted); border-radius:.25rem; font-family:var(--font-mono);">${renderDiff(
+        body.innerHTML = `<pre style="font-size:.8125rem;">${renderDiff(
           other.text,
           self.text,
-        )}</div>`;
+        )}</pre>`;
         btn.textContent = "Show full text";
         btn.dataset.mode = "diff";
       }
@@ -1201,10 +1201,10 @@ function projectCard(p) {
     drift = `<p class="bad mt-2"><strong>Prompt differs</strong> from ${roundLabel(lr)}
         (<code>${escapeHtml(lr.dataset)}</code>) — a new run will not reproduce it.</p>
       <details class="mt-2"><summary>Diff — ${roundLabel(lr)} → installed</summary>
-        <div class="mt-2" style="font-size:.8125rem;">${renderDiff(
+        <pre class="mt-2" style="font-size:.8125rem;">${renderDiff(
           lr.prompt,
           p.prompt,
-        )}</div>
+        )}</pre>
       </details>`;
   } else if (lr) {
     drift = `<p class="text-light mt-2">Prompt matches ${roundLabel(lr)}.</p>`;
@@ -1318,7 +1318,7 @@ async function openExportModal() {
     if (ex.fmt === "hf") {
       return `<div class="ex-hf"><p>Publishing to Hugging Face needs an account sign-in, which
         isn't wired into the review UI yet. For now, publish the gold set from the command line:</p>
-        <pre class="ex-cmd" style="font-family:var(--font-mono);font-size:.8125rem;padding:.6rem;overflow-x:auto;">paratext export -p ${escapeHtml(schema)} --format hf --to &lt;org/name&gt;</pre></div>`;
+        <pre>paratext export -p ${escapeHtml(schema)} --format hf --to &lt;org/name&gt;</pre></div>`;
     }
     return mappingTable(m);
   }
