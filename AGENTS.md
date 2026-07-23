@@ -21,20 +21,6 @@ human guide.
   (`#/eval`) additionally lets them edit fields into a corrected answer, stored in
   a separate `gold_labels` table (`POST /api/gold/<id>`). The `annotations.corrections`
   column is unrelated — handwritten corrections on the card, not reviewer edits.
-- **The review UI is Oat-first.** It styles with [Oat](https://oat.ink) (bundled
-  `review/static/oat.min.css`), a dependency-free component/utility CSS. **Before
-  writing any custom CSS, check the Oat docs (oat.ink/components) — assume it's
-  covered until proven otherwise.** Oat styles the semantic elements
-  (`pre`/`code`, inputs, selects, `table`/`th`/`td`, `<dialog>` via
-  `>header`/`>div`/`>footer`) and provides components (`.card`, `.badge`,
-  `.table` wrapper, `[role=switch]`, `[role=tab]`) and utilities (`.hstack`,
-  `.vstack`, `.mt-*`/`.mb-*`, `.text-light`). Reach for those first. Reserve
-  custom CSS for what Oat genuinely lacks — page-layout grids, fixed-width-label
-  form rows, verdict colours (`.ok`/`.warn`/`.bad`), `table-layout: fixed`.
-  **Gotcha:** the inline `<style>` block is *unlayered*, so it beats Oat's
-  `@layer` rules at any specificity — a broad selector like `.x input` silently
-  overrides Oat's component styling. Scope custom rules narrowly (a specific
-  class), never to bare elements Oat styles.
 - A **project** is a plug-in package discovered via the `paratext.projects`
   entry-point group: `prompt.md` (prompt), `schema.py` (Pydantic schema), and
   `__init__.py` which wires them to a `paratext.sources` adapter
