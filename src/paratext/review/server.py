@@ -499,6 +499,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._api_export_catalogue(
                     self._dataset(qs), path.rsplit("/", 1)[1], qs
                 )
+            if path == "/api/export/jsonl":
+                return self._api_export_jsonl(self._dataset(qs), qs)
             if path.startswith("/api/export/"):
                 return self._api_export(self._dataset(qs))
             if path.startswith("/images/"):
@@ -510,6 +512,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         u = urlparse(self.path)
         qs = parse_qs(u.query)
+        if u.path in ("/api/export/marc", "/api/export/dc"):
+            body = self._body()
+            if body.get("scope"):
+                qs["scope"] = [body["scope"]]
+            return self._api_export_catalogue(
+                self._dataset(qs), u.path.rsplit("/", 1)[1], qs, mapping=body.get("mapping")
+            )
         if u.path.startswith("/api/annotations/"):
             ds = self._dataset(qs)
             sid = unquote(u.path.split("/api/annotations/", 1)[1])
@@ -669,7 +678,7 @@ class Handler(BaseHTTPRequestHandler):
     def _api_export_fields(self, ds, qs):
         """The mapping table for the export modal: every schema field and its
         inferred MARC tag / DC element (editable in the UI). `fmt=marc|dc`."""
-        from ..catalogue import infer_target
+        from ..catalogue import infer_target, records_for_scope
         from ..inspect import describe
         from ..projects import get_project
 
@@ -685,27 +694,56 @@ class Handler(BaseHTTPRequestHandler):
             }
             for f in fields
         ]
-        self._json({"dataset": ds["name"], "format": fmt, "fields": rows})
+        scopes = {
+            s: len(records_for_scope(ds["dir"], ds["schema"], s, db_path=self.store.db_path))
+            for s in ("good_enough", "needs_tweaks", "everything")
+        }
+        self._json({"dataset": ds["name"], "format": fmt, "fields": rows, "scopes": scopes})
 
-    def _api_export_catalogue(self, ds, fmt, qs):
+    def _api_export_catalogue(self, ds, fmt, qs, mapping=None):
         """Stream a MARCXML / Dublin Core collection as a browser download.
-        `scope=good_enough|needs_tweaks|everything` (default everything)."""
+        `scope=good_enough|needs_tweaks|everything`. On POST, an optional
+        `mapping` (field -> target) from the modal's edited table is applied."""
         from ..catalogue import export_bytes
 
         scope = (qs.get("scope") or ["everything"])[0]
         try:
             xml, n = export_bytes(
-                ds["dir"], ds["schema"], fmt, scope, db_path=self.store.db_path
+                ds["dir"], ds["schema"], fmt, scope,
+                db_path=self.store.db_path, mapping=mapping,
             )
         except ValueError as e:
             return self._json({"error": str(e)}, 400)
-        fname = f"{ds['name']}-{fmt}.xml"
         self._bytes(
             xml,
             "application/xml",
             headers={
-                "content-disposition": f'attachment; filename="{fname}"',
+                "content-disposition": f'attachment; filename="{ds["name"]}-{fmt}.xml"',
                 "x-record-count": str(n),
+            },
+        )
+
+    def _api_export_jsonl(self, ds, qs):
+        """Stream the selected records as line-delimited JSON — the zero-config
+        escape hatch. `scope` as above; the label per record is the gold answer
+        where a human corrected it, else the model output."""
+        from ..catalogue import records_for_scope
+
+        scope = (qs.get("scope") or ["everything"])[0]
+        try:
+            records = records_for_scope(ds["dir"], ds["schema"], scope, db_path=self.store.db_path)
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        lines = [
+            json.dumps({"id": r.sid, "document_id": r.document_id, **r.label}, ensure_ascii=False)
+            for r in records
+        ]
+        self._bytes(
+            ("\n".join(lines) + "\n").encode("utf-8"),
+            "application/x-ndjson",
+            headers={
+                "content-disposition": f'attachment; filename="{ds["name"]}-{scope}.jsonl"',
+                "x-record-count": str(len(records)),
             },
         )
 

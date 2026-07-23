@@ -1064,7 +1064,10 @@ async function renderStats() {
 
     ${renderPromptsPanel(promptsData.prompts ?? [])}
 
-    ${exportLinks ? `<div class="controls">${exportLinks}</div>` : ""}
+    <div class="controls">
+      <button class="button outline small" id="open-export">Export…</button>
+      ${exportLinks}
+    </div>
 
     <div class="table">
     <table>
@@ -1092,6 +1095,8 @@ async function renderStats() {
     </table>
     </div>
   `;
+
+  document.getElementById("open-export")?.addEventListener("click", openExportModal);
 
   // Wire up "Diff vs latest" toggles in the prompt history panel.
   const promptByHash = new Map(
@@ -1242,6 +1247,135 @@ async function renderProjects() {
   el.innerHTML = `<h2>Project configuration</h2>
     ${projects.map(projectCard).join("")}
     <p class="mt-4"><a href="#/select" class="button outline small">← Back to datasets</a></p>`;
+}
+
+// ── Export modal ──────────────────────────────────────────────────────
+// A native <dialog> (Oat-styled) over the /api/export/* endpoints. Format-first
+// tabs; a records-scope row (verdict-coloured dots) that governs MARC/DC/JSONL;
+// an editable mapping table whose edits are POSTed with the download. HF is a
+// placeholder until sign-in lands (CLI for now).
+const DC_ELEMENTS = ["title", "creator", "subject", "description", "publisher",
+  "contributor", "date", "type", "format", "identifier", "source", "language",
+  "relation", "coverage", "rights"];
+
+function scopeDots(scope) {
+  if (scope === "good_enough") return `<span class="dots d1"><span style="background:var(--success)"></span></span>`;
+  if (scope === "needs_tweaks") return `<span class="dots d2"><span style="background:var(--success)"></span><span style="background:var(--warning)"></span></span>`;
+  return `<span class="dots d3"><span style="background:var(--success)"></span><span style="background:var(--warning)"></span><span style="background:var(--danger)"></span></span>`;
+}
+
+async function openExportModal() {
+  const dataset = state.dataset;
+  const dsInfo = (state.datasets || []).find((d) => d.name === dataset);
+  const schema = dsInfo ? dsInfo.schema : "";
+
+  const dlg = document.createElement("dialog");
+  dlg.className = "export-dialog";
+  document.body.appendChild(dlg);
+  const ex = { fmt: "marc", scope: "everything", meta: { marc: null, dc: null }, edits: { marc: {}, dc: {} } };
+
+  async function meta(fmt) {
+    if (!ex.meta[fmt]) {
+      const res = await fetch(api("api/export/fields", { fmt }));
+      ex.meta[fmt] = await res.json();
+    }
+    return ex.meta[fmt];
+  }
+
+  function scopeRow(scopes) {
+    const b = (sc, label) => `<button data-scope="${sc}" aria-pressed="${ex.scope === sc}">
+      ${scopeDots(sc)} ${label} <span class="n">${scopes[sc]}</span></button>`;
+    return `<div class="ex-scope"><span class="ex-scope-label">Records to export</span>
+      <div class="ex-scope-btns">
+        ${b("good_enough", "Good enough")}${b("needs_tweaks", "Good enough &amp; needs tweaks")}${b("everything", "Everything")}
+      </div></div>`;
+  }
+
+  function mappingTable(m) {
+    const fmt = ex.fmt;
+    const rows = m.fields.map((f) => {
+      const edited = f.key in ex.edits[fmt];
+      const val = edited ? ex.edits[fmt][f.key] : (f.target ?? "");
+      const control = fmt === "marc"
+        ? `<input class="marc" type="text" data-field="${escapeHtml(f.key)}" value="${escapeHtml(val)}" placeholder="skip">`
+        : `<select data-field="${escapeHtml(f.key)}">
+             <option value=""${val ? "" : " selected"}>— skip —</option>
+             ${DC_ELEMENTS.map((e) => `<option${e === val ? " selected" : ""}>${e}</option>`).join("")}
+           </select>`;
+      return `<tr><td class="fname">${escapeHtml(f.key)}</td><td>${control}</td></tr>`;
+    }).join("");
+    return `<div class="table"><table class="ex-map">
+      <thead><tr><th style="width:45%">Field</th><th>${fmt === "marc" ? "MARC tag$subfield" : "DC element"}</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  }
+
+  function bodyHtml(m) {
+    if (ex.fmt === "hf") {
+      return `<div class="ex-hf"><p>Publishing to Hugging Face needs an account sign-in, which
+        isn't wired into the review UI yet. For now, publish the gold set from the command line:</p>
+        <pre class="box" style="font-family:var(--font-mono);font-size:.8125rem;padding:.6rem;overflow-x:auto;">paratext export -p ${escapeHtml(schema)} --format hf --to &lt;org/name&gt;</pre></div>`;
+    }
+    return mappingTable(m);
+  }
+
+  async function render() {
+    const m = ex.fmt === "hf" ? null : await meta(ex.fmt);
+    const scopes = (ex.meta.marc || ex.meta.dc || m || {}).scopes || { good_enough: 0, needs_tweaks: 0, everything: 0 };
+    const n = scopes[ex.scope];
+    const tab = (f, label) => `<button role="tab" aria-selected="${ex.fmt === f}" data-fmt="${f}">${label}</button>`;
+    dlg.innerHTML = `
+      <header>
+        <h3>Export <span class="text-light" style="font-size:.8125rem;">${escapeHtml(dataset)}</span></h3>
+        <button class="button ghost small" data-close aria-label="Close">✕</button>
+      </header>
+      ${ex.fmt === "hf" ? "" : scopeRow(scopes)}
+      <div role="tablist" style="margin-bottom:1rem;">${tab("marc", "MARC")}${tab("dc", "Dublin Core")}${tab("hf", "Hugging Face")}</div>
+      ${bodyHtml(m)}
+      <div class="ex-foot">
+        ${ex.fmt === "hf" ? "" : `<a class="button ghost small" data-jsonl download>Raw JSONL ↓</a>
+          <span class="ex-note">${n} record${n === 1 ? "" : "s"} → <span class="fname">${escapeHtml(dataset)}-${ex.fmt}.xml</span></span>`}
+        <span class="grow"></span>
+        <button class="button outline" data-close>Close</button>
+        ${ex.fmt === "hf" ? "" : `<button class="button" data-download>Download ${ex.fmt === "marc" ? "MARCXML" : "XML"}</button>`}
+      </div>`;
+    wire();
+  }
+
+  function captureEdits() {
+    if (ex.fmt === "hf") return;
+    dlg.querySelectorAll("[data-field]").forEach((el) => {
+      ex.edits[ex.fmt][el.dataset.field] = el.value.trim();
+    });
+  }
+
+  async function download() {
+    captureEdits();
+    const res = await fetch(api(`api/export/${ex.fmt}`), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scope: ex.scope, mapping: ex.edits[ex.fmt] }),
+    });
+    if (!res.ok) { alert("Export failed: " + (await res.text())); return; }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${dataset}-${ex.fmt}.xml`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function wire() {
+    dlg.querySelectorAll("[data-close]").forEach((b) => (b.onclick = () => { dlg.close(); dlg.remove(); }));
+    dlg.querySelectorAll("[data-fmt]").forEach((b) => (b.onclick = () => { captureEdits(); ex.fmt = b.dataset.fmt; render(); }));
+    dlg.querySelectorAll("[data-scope]").forEach((b) => (b.onclick = () => { ex.scope = b.dataset.scope; render(); }));
+    const dl = dlg.querySelector("[data-download]");
+    if (dl) dl.onclick = download;
+    const jl = dlg.querySelector("[data-jsonl]");
+    if (jl) jl.setAttribute("href", api("api/export/jsonl", { scope: ex.scope }));
+  }
+
+  dlg.addEventListener("close", () => dlg.remove());
+  await render();
+  dlg.showModal();
 }
 
 // ── Routing ───────────────────────────────────────────────────────────

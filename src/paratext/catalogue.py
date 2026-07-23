@@ -344,14 +344,23 @@ def records_for_scope(
 
 
 def export_bytes(
-    dataset_dir: Path, project: str, fmt: str, scope: str, db_path: Path | None = None
+    dataset_dir: Path,
+    project: str,
+    fmt: str,
+    scope: str,
+    db_path: Path | None = None,
+    mapping: dict | None = None,
 ) -> tuple[bytes, int]:
     """Build a MARCXML / DC collection for one scope and return (xml_bytes, n).
-    Mapping is resolved from config + `CANONICAL`; unmapped fields are dropped
-    (the GUI shows which). No wizard, no file written."""
+    `mapping` (field -> target) overrides the inferred mapping when given — this
+    is how the export modal applies the user's edits; an empty target skips a
+    field. No wizard, no file written."""
     import io
 
-    mapping, _unmapped = resolve_mapping(project, fmt)
+    if mapping is None:
+        mapping, _unmapped = resolve_mapping(project, fmt)
+    else:
+        mapping = {f: t for f, t in mapping.items() if (t or "").strip()}
     if not mapping:
         raise ValueError(f"no fields mapped to {fmt.upper()} for {project}")
     records = records_for_scope(dataset_dir, project, scope, db_path=db_path)
