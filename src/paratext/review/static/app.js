@@ -176,25 +176,30 @@ function panelBody(obj, fields) {
     ${fields.filter((f) => f.collapsed).map((f) => collapsedBlock(obj, f)).join("")}`;
 }
 
-// Entries are genuinely tabular — many rows, the same item fields as columns —
-// so render them as an Oat table (one column per item field).
-function entriesBlock(field, entries) {
-  if (!Array.isArray(entries) || !entries.length) {
-    return `<p><em>No ${escapeHtml(field.label.toLowerCase())}.</em></p>`;
-  }
-  // Columns come from the contract; fall back to the first row's keys.
-  const items =
-    field.item_fields ??
-    Object.keys(entries[0] ?? {}).map((k) => ({ key: k, label: k }));
+// The read-only entries table body (shared by the display panels and the eval
+// editor's read-only rounds). Columns = item fields, one row per entry.
+function entriesTable(items, entries) {
   const head = items.map((it) => `<th>${escapeHtml(it.label)}</th>`).join("");
   const body = entries
     .map(
       (e) => `<tr>${items.map((it) => `<td>${escapeHtml(fmt(e[it.key]))}</td>`).join("")}</tr>`,
     )
     .join("");
+  return `<div class="table"><table class="entry-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+function entryItems(field, entries) {
+  return field.item_fields ?? Object.keys(entries[0] ?? {}).map((k) => ({ key: k, label: k }));
+}
+
+// Entries are genuinely tabular, so render them as an Oat table.
+function entriesBlock(field, entries) {
+  if (!Array.isArray(entries) || !entries.length) {
+    return `<p><em>No ${escapeHtml(field.label.toLowerCase())}.</em></p>`;
+  }
   return `
     <h4>${escapeHtml(field.label)} (${entries.length})</h4>
-    <div class="table"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+    ${entriesTable(entryItems(field, entries), entries)}`;
 }
 
 function renderHeader() {
@@ -680,7 +685,17 @@ function fieldControl(f, value, inline = false) {
     return `<textarea data-field="${key}" data-type="list" rows="2"
       placeholder="one per line">${escapeHtml(text)}</textarea>`;
   }
-  if (f.type === "entries") return entriesEditor(f, Array.isArray(value) ? value : []);
+  if (f.type === "entries") {
+    const list = Array.isArray(value) ? value : [];
+    // On a read-only round the inputs can't be saved and clip long values, so
+    // show the plain read-only table (text wraps freely) instead.
+    if (state.readOnly) {
+      return list.length
+        ? entriesTable(entryItems(f, list), list)
+        : `<p><em>No ${escapeHtml(f.label.toLowerCase())}.</em></p>`;
+    }
+    return entriesEditor(f, list);
+  }
   if (inline) {
     return `<input type="text" data-field="${key}" data-type="string" value="${escapeHtml(value ?? "")}" />`;
   }
