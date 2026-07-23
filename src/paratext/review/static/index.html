@@ -111,60 +111,43 @@
       .proj-meta { margin: .25rem 0 .75rem; font-size: .8125rem; word-break: break-word; }
       .prompt-text { white-space: pre-wrap; font-size: .8125rem; max-height: 30rem;
         overflow-y: auto; }
-      /* Export modal. Oat styles dialog > header / > div / > footer (padding,
-         and overflow-y:auto on the body div). We only set the flex column so the
-         body scrolls between a fixed header and footer, and make the header a row. */
+      /* Export modal. Oat styles the dialog (pads > header / > div / > footer, the
+         body div scrolls) plus inputs, selects, switches and tables. Inline CSS is
+         UNLAYERED and beats Oat's @layer rules, so this stays narrow: the bespoke
+         records-scope selector, and the few things Oat leaves to the app. */
       dialog.export-dialog[open] { display: flex; flex-direction: column;
         width: min(100% - 2rem, 46rem); }
       .export-dialog > header { flex-direction: row; align-items: center;
-        justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border);
-        padding-block-end: var(--space-4); }
+        justify-content: space-between; gap: 1rem;
+        border-bottom: 1px solid var(--border); padding-block-end: var(--space-4); }
       .export-dialog > header h3 { margin: 0; }
-      .export-dialog > div { flex: 1; min-height: 0; }
-      .export-dialog > footer { align-items: center; border-top: 1px solid var(--border);
-        padding-block-start: var(--space-4); }
+      .export-dialog > div { flex: 1; min-height: 0; }   /* the scroll region */
+      .export-dialog > footer { align-items: center;
+        border-top: 1px solid var(--border); padding-block-start: var(--space-4); }
       .export-dialog > footer .grow { margin-left: auto; }
+      .ex-note { font-size: var(--text-8); color: var(--muted-foreground); }
+      .fname { font-family: var(--font-mono); }
+      /* Records-scope selector — a bespoke segmented tier control (no Oat equivalent). */
       .ex-scope { margin-bottom: 1rem; }
-      .ex-scope-label { font-size: .6875rem; font-weight: 600; letter-spacing: .04em;
+      .ex-scope-label { font-size: var(--text-8); font-weight: 600; letter-spacing: .04em;
         text-transform: uppercase; color: var(--muted-foreground); display: block; margin-bottom: .4rem; }
       .ex-scope-btns { display: flex; gap: .5rem; flex-wrap: wrap; }
       .ex-scope-btns button { display: inline-flex; align-items: center; gap: .5rem;
-        padding: .45rem .75rem; font: inherit; font-size: .8125rem; font-weight: 500;
+        padding: .45rem .75rem; font: inherit; font-weight: 500;
         border: 1px solid var(--border); background: var(--background); color: var(--foreground);
         border-radius: var(--radius-medium); cursor: pointer; }
       .ex-scope-btns button[aria-pressed="true"] { border-color: var(--primary);
         box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent); }
       .ex-scope-btns .dots { display: inline-grid; gap: .13rem; justify-items: center; }
-      .ex-scope-btns .dots.d2 { grid-template-columns: auto auto; }
-      .ex-scope-btns .dots.d3 { grid-template-columns: auto auto; }
+      .ex-scope-btns .dots.d2, .ex-scope-btns .dots.d3 { grid-template-columns: auto auto; }
       .ex-scope-btns .dots.d3 span:first-child { grid-column: 1 / -1; }
       .ex-scope-btns .dots span { width: .42rem; height: .42rem; border-radius: var(--radius-full); }
-      .ex-scope-btns .n { font-variant-numeric: tabular-nums; font-weight: 600; font-size: .75rem;
-        color: var(--muted-foreground); background: var(--muted); padding: .05rem .45rem;
-        border-radius: var(--radius-full); }
-      .ex-map { width: 100%; border-collapse: collapse; font-size: .875rem; }
-      .ex-map th { text-align: left; font-size: .6875rem; font-weight: 600; letter-spacing: .04em;
-        text-transform: uppercase; color: var(--muted-foreground); padding: 0 .5rem .4rem;
-        border-bottom: 1px solid var(--border); }
-      .ex-map td { padding: .35rem .5rem; border-bottom: 1px solid var(--border); }
-      /* Only the MARC text input + DC select — NOT the role=switch checkbox,
-         which Oat styles (a border/background here would paint over it). */
-      .ex-map input.marc, .ex-map select { font: inherit; font-size: .8125rem; padding: .25rem .4rem;
-        border: 1px solid var(--border); border-radius: var(--radius-medium);
-        background: var(--background); color: var(--foreground); }
-      .ex-map input.marc { width: 6rem; font-family: var(--font-mono); }
-      .ex-map input.marc:disabled, .ex-map select:disabled { opacity: .4; }
-      .ex-map .fname { font-family: var(--font-mono); font-size: .8125rem; }
-      .ex-map td.skip { text-align: center; width: 3.5rem; }
-      .ex-map .skipped .fname, .ex-map .skipped select { opacity: .4; text-decoration: line-through; }
-      /* The bundled Oat's [role=switch] omits appearance:none / position:relative,
-         so the native checkbox shows through as a filled box and the thumb has
-         nothing to anchor to. Supply both; Oat provides the track, thumb, sizing. */
-      input[role="switch"] { appearance: none; -webkit-appearance: none;
-        position: relative; margin: 0; cursor: pointer; flex: none; vertical-align: middle; }
-      .ex-foot .grow { margin-left: auto; }
-      .ex-note { font-size: .75rem; color: var(--muted-foreground); }
-      .ex-hf { font-size: .875rem; color: var(--muted-foreground); line-height: 1.6; }
+      .ex-scope-btns .n { font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--text-8);
+        color: var(--muted-foreground); background: var(--muted); padding: .05rem .45rem; border-radius: var(--radius-full); }
+      /* Mapping table: Oat styles th/td/inputs/selects/switch. Only column tweaks. */
+      .ex-map input.marc { width: 6rem; }  /* Oat inputs are width:100% */
+      .ex-map td.skip, .ex-map th.skip { text-align: center; width: 4rem; }
+      .ex-map .skipped .fname, .ex-map .skipped select { opacity: .5; text-decoration: line-through; }
     </style>
   </head>
   <body>
