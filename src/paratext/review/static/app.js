@@ -737,7 +737,8 @@ function renderEditor() {
       )}</span>`;
 
   const fields = modelPanelOf(state.view)
-    .fields.map((f) => {
+    .fields.filter((f) => !f.collapsed) // auxiliary fields (e.g. the "Debug" notes) aren't gold
+    .map((f) => {
       const hint =
         f.type === "entries" ? "" : `<small class="hint">model: ${escapeHtml(fmt(base[f.key]))}</small>`;
       return `<div class="edit-field" data-key="${escapeHtml(f.key)}" data-type="${escapeHtml(
