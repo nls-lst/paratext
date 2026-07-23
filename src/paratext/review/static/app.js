@@ -108,7 +108,7 @@ async function loadList(targetId = null) {
     document.getElementById("progress").textContent = "";
     document.getElementById("view").innerHTML = `
       <h2>${escapeHtml(state.view?.title ?? "Review")}</h2>
-      <p class="muted">Nothing to review in this dataset — every record was filtered
+      <p class="text-light">Nothing to review in this dataset — every record was filtered
         out during packaging (e.g. blank versos). Try another round from the picker.</p>
       <p><a href="#/select" class="button outline small">← Back to datasets</a></p>`;
     return;
@@ -623,7 +623,7 @@ function renderEvalEmpty() {
   const reviewed = state.allSamples.filter((s) => s.model_correct).length;
   document.getElementById("view").innerHTML = `
     <h2>Build eval set</h2>
-    <p class="muted">Nothing to correct — no rows are marked <em>needs tweaks</em> or
+    <p class="text-light">Nothing to correct — no rows are marked <em>needs tweaks</em> or
       <em>not accurate</em>. ${
         reviewed
           ? `${good} good-enough row${good === 1 ? "" : "s"} ${
@@ -750,7 +750,7 @@ function renderEditor() {
     <div class="split">
       <div class="split-media">
         ${imagesHtml(s, "media")}
-        ${note ? `<p class="muted eval-note"><strong>Reviewer note:</strong> ${escapeHtml(note)}</p>` : ""}
+        ${note ? `<p class="text-light eval-note"><strong>Reviewer note:</strong> ${escapeHtml(note)}</p>` : ""}
       </div>
       <div class="split-content">
         <form id="editor">${fields}</form>
@@ -1020,7 +1020,7 @@ async function renderStats() {
     if (v === "good_enough") return `<span class="ok">Good enough</span>`;
     if (v === "needs_tweaks") return `<span class="warn">Needs tweaks</span>`;
     if (v === "not_accurate") return `<span class="bad">Not accurate</span>`;
-    return `<span class="muted">—</span>`;
+    return `<span class="text-light">—</span>`;
   };
 
   // Stats display is driven by the contract: which exports apply, whether a
@@ -1044,7 +1044,7 @@ async function renderStats() {
     .join("");
 
   document.getElementById("view").innerHTML = `
-    <h2>Stats — ${escapeHtml(s.dataset)} <small class="muted">(${escapeHtml(s.schema)})</small></h2>
+    <h2>Stats — ${escapeHtml(s.dataset)} <small class="text-light">(${escapeHtml(s.schema)})</small></h2>
 
     <dl>
       <div class="field-row"><dt>Reviewed</dt><dd>${s.annotated} of ${s.total} (${
@@ -1058,7 +1058,7 @@ async function renderStats() {
       <div class="field-row"><dt>Not accurate</dt><dd class="bad">${s.model.not_accurate}</dd></div>
       ${hasFlag ? `<div class="field-row"><dt>Flagged</dt><dd>${s.flagged_marc}</dd></div>` : ""}
       <div class="field-row"><dt>Eval gold set</dt><dd><strong>${s.eval_gold ?? s.model.good_enough}</strong>
-        <small class="muted">(${s.model.good_enough} good-enough + ${s.corrected ?? 0} human-corrected ·
+        <small class="text-light">(${s.model.good_enough} good-enough + ${s.corrected ?? 0} human-corrected ·
         <a href="#/eval">build →</a>)</small></dd></div>
     </dl>
 
