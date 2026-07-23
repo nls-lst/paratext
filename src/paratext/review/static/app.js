@@ -146,14 +146,6 @@ function fmt(v) {
   return String(v);
 }
 
-function fieldRow(obj, f) {
-  return `
-    <div class="field-row">
-      <dt>${escapeHtml(f.label)}</dt>
-      <dd>${escapeHtml(fmt(obj?.[f.key]))}</dd>
-    </div>`;
-}
-
 // A <details> the reviewer opens on demand; omitted entirely when empty.
 function collapsedBlock(obj, f) {
   const v = obj?.[f.key];
@@ -165,36 +157,44 @@ function collapsedBlock(obj, f) {
     </details>`;
 }
 
-// Render a panel's body: scalar fields in a <dl>, then any "entries"
-// (list-of-objects) fields as their own blocks, then any collapsed fields.
+// Render a panel's body: scalar fields as a key/value table (row-header th +
+// value td, styled by Oat), then any "entries" fields as their own columnar
+// tables, then any collapsed fields.
 function panelBody(obj, fields) {
   const shown = fields.filter((f) => !f.collapsed);
   const scalar = shown.filter((f) => f.type !== "entries");
   const entries = shown.filter((f) => f.type === "entries");
+  const rows = scalar
+    .map(
+      (f) =>
+        `<tr><th scope="row">${escapeHtml(f.label)}</th><td>${escapeHtml(fmt(obj?.[f.key]))}</td></tr>`,
+    )
+    .join("");
   return `
-    <dl>${scalar.map((f) => fieldRow(obj, f)).join("")}</dl>
+    ${scalar.length ? `<div class="table"><table><tbody>${rows}</tbody></table></div>` : ""}
     ${entries.map((f) => entriesBlock(f, obj?.[f.key])).join("")}
     ${fields.filter((f) => f.collapsed).map((f) => collapsedBlock(obj, f)).join("")}`;
 }
 
+// Entries are genuinely tabular — many rows, the same item fields as columns —
+// so render them as an Oat table (one column per item field).
 function entriesBlock(field, entries) {
   if (!Array.isArray(entries) || !entries.length) {
     return `<p><em>No ${escapeHtml(field.label.toLowerCase())}.</em></p>`;
   }
-  // Item columns come from the contract; fall back to the first row's keys.
+  // Columns come from the contract; fall back to the first row's keys.
   const items =
     field.item_fields ??
     Object.keys(entries[0] ?? {}).map((k) => ({ key: k, label: k }));
+  const head = items.map((it) => `<th>${escapeHtml(it.label)}</th>`).join("");
+  const body = entries
+    .map(
+      (e) => `<tr>${items.map((it) => `<td>${escapeHtml(fmt(e[it.key]))}</td>`).join("")}</tr>`,
+    )
+    .join("");
   return `
     <h4>${escapeHtml(field.label)} (${entries.length})</h4>
-    <ol>
-      ${entries
-        .map(
-          (e) => `
-        <li>${items.map((it) => fieldRow(e, it)).join("")}</li>`,
-        )
-        .join("")}
-    </ol>`;
+    <div class="table"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 function renderHeader() {
