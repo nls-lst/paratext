@@ -102,6 +102,11 @@
       .proj-meta { margin: .25rem 0 .75rem; font-size: .8125rem; word-break: break-word; }
       .prompt-text { white-space: pre-wrap; font-size: .8125rem; max-height: 30rem;
         overflow-y: auto; }
+      /* Entries tables (read-only + editor). Oat tables are table-layout:auto,
+         which sizes columns to content — so a long folios cell overflows and an
+         editor input stays ~20ch. Fixed layout shares the width equally (generic:
+         columns vary by project) so text wraps and inputs fill their column. */
+      .entry-table { table-layout: fixed; width: 100%; }
       /* Export modal. Oat styles the dialog (pads > header / > div / > footer, the
          body div scrolls) plus inputs, selects, switches and tables. Inline CSS is
          UNLAYERED and beats Oat's @layer rules, so this stays narrow: the bespoke
