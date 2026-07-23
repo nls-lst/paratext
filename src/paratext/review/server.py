@@ -724,9 +724,14 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def _api_export_jsonl(self, ds, qs):
-        """Stream the selected records as line-delimited JSON — the zero-config
-        escape hatch. `scope` as above; the label per record is the gold answer
-        where a human corrected it, else the model output."""
+        """The zero-config escape hatch: a zip of two line-delimited JSON files —
+        the records (`<name>-<scope>.jsonl`, gold answer where a human corrected
+        it, else model output) and the review state alongside it
+        (`<name>.review.jsonl`, verdict + correction provenance keyed by id), so
+        a full-round export can still be filtered to the verified subset."""
+        import io
+        import zipfile
+
         from ..catalogue import records_for_scope
 
         scope = (qs.get("scope") or ["everything"])[0]
@@ -734,15 +739,30 @@ class Handler(BaseHTTPRequestHandler):
             records = records_for_scope(ds["dir"], ds["schema"], scope, db_path=self.store.db_path)
         except ValueError as e:
             return self._json({"error": str(e)}, 400)
-        lines = [
-            json.dumps({"id": r.sid, "document_id": r.document_id, **r.label}, ensure_ascii=False)
-            for r in records
-        ]
+
+        rec_lines, review_lines = [], []
+        for r in records:
+            rec = {"id": r.sid, "document_id": r.document_id, **r.label}
+            rec_lines.append(json.dumps(rec, ensure_ascii=False))
+            ann = self.store.get(ds["name"], r.sid) or {}
+            gold = self.store.get_gold(ds["name"], r.sid)
+            review_lines.append(json.dumps({
+                "id": r.sid,
+                "verdict": ann.get("model_correct"),
+                "notes": ann.get("notes"),
+                "corrected": gold is not None,
+                "corrected_fields": (gold or {}).get("fields") or [],
+            }, ensure_ascii=False))
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr(f"{ds['name']}-{scope}.jsonl", "\n".join(rec_lines) + "\n")
+            z.writestr(f"{ds['name']}.review.jsonl", "\n".join(review_lines) + "\n")
         self._bytes(
-            ("\n".join(lines) + "\n").encode("utf-8"),
-            "application/x-ndjson",
+            buf.getvalue(),
+            "application/zip",
             headers={
-                "content-disposition": f'attachment; filename="{ds["name"]}-{scope}.jsonl"',
+                "content-disposition": f'attachment; filename="{ds["name"]}-{scope}.zip"',
                 "x-record-count": str(len(records)),
             },
         )

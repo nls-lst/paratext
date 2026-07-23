@@ -111,11 +111,14 @@
       .proj-meta { margin: .25rem 0 .75rem; font-size: .8125rem; word-break: break-word; }
       .prompt-text { white-space: pre-wrap; font-size: .8125rem; max-height: 30rem;
         overflow-y: auto; }
-      /* Export modal — native <dialog> (Oat-styled); these are layout-only. */
-      .export-dialog { width: min(100% - 2rem, 46rem); max-height: 85vh; }
-      .export-dialog header { display: flex; align-items: baseline;
-        justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-      .export-dialog h3 { margin: 0; }
+      /* Export modal. Oat's <dialog> is padding:0 (so header/footer can be
+         full-bleed), so we structure it head / main / foot and pad those. */
+      dialog.export-dialog[open] { display: flex; flex-direction: column;
+        width: min(100% - 2rem, 46rem); max-height: 85vh; }
+      .ex-head { display: flex; align-items: center; justify-content: space-between;
+        gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+      .ex-head h3 { margin: 0; font-size: 1.0625rem; }
+      .ex-main { padding: 1.25rem; overflow-y: auto; }
       .ex-scope { margin-bottom: 1rem; }
       .ex-scope-label { font-size: .6875rem; font-weight: 600; letter-spacing: .04em;
         text-transform: uppercase; color: var(--muted-foreground); display: block; margin-bottom: .4rem; }
@@ -143,9 +146,12 @@
         border: 1px solid var(--border); border-radius: var(--radius-medium);
         background: var(--background); color: var(--foreground); }
       .ex-map input.marc { width: 6rem; font-family: var(--font-mono); }
+      .ex-map input.marc:disabled, .ex-map select:disabled { opacity: .4; }
       .ex-map .fname { font-family: var(--font-mono); font-size: .8125rem; }
-      .ex-foot { display: flex; align-items: center; gap: .625rem; margin-top: 1.25rem;
-        padding-top: .9rem; border-top: 1px solid var(--border); }
+      .ex-map td.skip { text-align: center; width: 3.5rem; }
+      .ex-map .skipped .fname, .ex-map .skipped select { opacity: .4; text-decoration: line-through; }
+      .ex-foot { display: flex; align-items: center; gap: .625rem;
+        padding: .9rem 1.25rem; border-top: 1px solid var(--border); }
       .ex-foot .grow { margin-left: auto; }
       .ex-note { font-size: .75rem; color: var(--muted-foreground); }
       .ex-hf { font-size: .875rem; color: var(--muted-foreground); line-height: 1.6; }

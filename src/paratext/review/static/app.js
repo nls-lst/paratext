@@ -1294,18 +1294,23 @@ async function openExportModal() {
   function mappingTable(m) {
     const fmt = ex.fmt;
     const rows = m.fields.map((f) => {
+      const skipped = ex.skips[fmt][f.key] === true;
       const edited = f.key in ex.edits[fmt];
       const val = edited ? ex.edits[fmt][f.key] : (f.target ?? "");
       const control = fmt === "marc"
-        ? `<input class="marc" type="text" data-field="${escapeHtml(f.key)}" value="${escapeHtml(val)}" placeholder="skip">`
-        : `<select data-field="${escapeHtml(f.key)}">
-             <option value=""${val ? "" : " selected"}>— skip —</option>
+        ? `<input class="marc" type="text" data-field="${escapeHtml(f.key)}" value="${escapeHtml(val)}" placeholder="245$a"${skipped ? " disabled" : ""}>`
+        : `<select data-field="${escapeHtml(f.key)}"${skipped ? " disabled" : ""}>
+             <option value=""${val ? "" : " selected"}>— none —</option>
              ${DC_ELEMENTS.map((e) => `<option${e === val ? " selected" : ""}>${e}</option>`).join("")}
            </select>`;
-      return `<tr><td class="fname">${escapeHtml(f.key)}</td><td>${control}</td></tr>`;
+      return `<tr class="${skipped ? "skipped" : ""}">
+        <td class="fname">${escapeHtml(f.key)}</td>
+        <td>${control}</td>
+        <td class="skip"><input type="checkbox" data-skip="${escapeHtml(f.key)}"${skipped ? " checked" : ""} aria-label="skip ${escapeHtml(f.key)}"></td>
+      </tr>`;
     }).join("");
     return `<div class="table"><table class="ex-map">
-      <thead><tr><th style="width:45%">Field</th><th>${fmt === "marc" ? "MARC tag$subfield" : "DC element"}</th></tr></thead>
+      <thead><tr><th style="width:42%">Field</th><th>${fmt === "marc" ? "MARC tag$subfield" : "DC element"}</th><th class="skip">Skip</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }
 
@@ -1324,15 +1329,17 @@ async function openExportModal() {
     const n = scopes[ex.scope];
     const tab = (f, label) => `<button role="tab" aria-selected="${ex.fmt === f}" data-fmt="${f}">${label}</button>`;
     dlg.innerHTML = `
-      <header>
+      <div class="ex-head">
         <h3>Export <span class="text-light" style="font-size:.8125rem;">${escapeHtml(dataset)}</span></h3>
         <button class="button ghost small" data-close aria-label="Close">✕</button>
-      </header>
-      ${ex.fmt === "hf" ? "" : scopeRow(scopes)}
-      <div role="tablist" style="margin-bottom:1rem;">${tab("marc", "MARC")}${tab("dc", "Dublin Core")}${tab("hf", "Hugging Face")}</div>
-      ${bodyHtml(m)}
+      </div>
+      <div class="ex-main">
+        ${ex.fmt === "hf" ? "" : scopeRow(scopes)}
+        <div role="tablist" style="margin-bottom:1rem;">${tab("marc", "MARC")}${tab("dc", "Dublin Core")}${tab("hf", "Hugging Face")}</div>
+        ${bodyHtml(m)}
+      </div>
       <div class="ex-foot">
-        ${ex.fmt === "hf" ? "" : `<a class="button ghost small" data-jsonl download>Raw JSONL ↓</a>
+        ${ex.fmt === "hf" ? "" : `<a class="button ghost small" data-jsonl download>JSONL + review ↓</a>
           <span class="ex-note">${n} record${n === 1 ? "" : "s"} → <span class="fname">${escapeHtml(dataset)}-${ex.fmt}.xml</span></span>`}
         <span class="grow"></span>
         <button class="button outline" data-close>Close</button>
@@ -1344,7 +1351,7 @@ async function openExportModal() {
   function captureEdits() {
     if (ex.fmt === "hf") return;
     dlg.querySelectorAll("[data-field]").forEach((el) => {
-      ex.edits[ex.fmt][el.dataset.field] = el.value.trim();
+      ex.edits[ex.fmt][el.dataset.field] = ex.skips[ex.fmt][el.dataset.field] ? "" : el.value.trim();
     });
   }
 
@@ -1363,18 +1370,31 @@ async function openExportModal() {
     URL.revokeObjectURL(a.href);
   }
 
+  function close() {
+    document.body.style.overflow = "";
+    dlg.close();
+    dlg.remove();
+  }
+
   function wire() {
-    dlg.querySelectorAll("[data-close]").forEach((b) => (b.onclick = () => { dlg.close(); dlg.remove(); }));
+    dlg.querySelectorAll("[data-close]").forEach((b) => (b.onclick = close));
     dlg.querySelectorAll("[data-fmt]").forEach((b) => (b.onclick = () => { captureEdits(); ex.fmt = b.dataset.fmt; render(); }));
-    dlg.querySelectorAll("[data-scope]").forEach((b) => (b.onclick = () => { ex.scope = b.dataset.scope; render(); }));
+    dlg.querySelectorAll("[data-scope]").forEach((b) => (b.onclick = () => { captureEdits(); ex.scope = b.dataset.scope; render(); }));
+    dlg.querySelectorAll("[data-skip]").forEach((cb) => (cb.onchange = () => {
+      captureEdits();
+      ex.skips[ex.fmt][cb.dataset.skip] = cb.checked;
+      render();
+    }));
     const dl = dlg.querySelector("[data-download]");
     if (dl) dl.onclick = download;
     const jl = dlg.querySelector("[data-jsonl]");
     if (jl) jl.setAttribute("href", api("api/export/jsonl", { scope: ex.scope }));
   }
 
-  dlg.addEventListener("close", () => dlg.remove());
+  ex.skips = { marc: {}, dc: {} };
+  dlg.addEventListener("close", close);  // Esc key
   await render();
+  document.body.style.overflow = "hidden";  // scroll-lock the page behind the modal
   dlg.showModal();
 }
 
