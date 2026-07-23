@@ -1201,7 +1201,7 @@ function projectCard(p) {
     drift = `<p class="bad mt-2"><strong>Prompt differs</strong> from ${roundLabel(lr)}
         (<code>${escapeHtml(lr.dataset)}</code>) — a new run will not reproduce it.</p>
       <details class="mt-2"><summary>Diff — ${roundLabel(lr)} → installed</summary>
-        <div class="box mt-2" style="font-size:.8125rem;">${renderDiff(
+        <div class="mt-2" style="font-size:.8125rem;">${renderDiff(
           lr.prompt,
           p.prompt,
         )}</div>
@@ -1219,7 +1219,7 @@ function projectCard(p) {
     <div class="table"><table><thead><tr><th>Field</th><th>Type</th><th></th></tr></thead>
       <tbody>${fields}</tbody></table></div>
     <details class="mt-4"><summary>Prompt</summary>
-      <pre class="box prompt-text">${escapeHtml(p.prompt)}</pre></details>
+      <pre class="prompt-text">${escapeHtml(p.prompt)}</pre></details>
   </article>`;
 }
 
@@ -1318,7 +1318,7 @@ async function openExportModal() {
     if (ex.fmt === "hf") {
       return `<div class="ex-hf"><p>Publishing to Hugging Face needs an account sign-in, which
         isn't wired into the review UI yet. For now, publish the gold set from the command line:</p>
-        <pre class="box" style="font-family:var(--font-mono);font-size:.8125rem;padding:.6rem;overflow-x:auto;">paratext export -p ${escapeHtml(schema)} --format hf --to &lt;org/name&gt;</pre></div>`;
+        <pre class="ex-cmd" style="font-family:var(--font-mono);font-size:.8125rem;padding:.6rem;overflow-x:auto;">paratext export -p ${escapeHtml(schema)} --format hf --to &lt;org/name&gt;</pre></div>`;
     }
     return mappingTable(m);
   }
