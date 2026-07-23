@@ -640,10 +640,10 @@ function evalHeader() {
   const queue = state.samples.length;
   const corrected = state.samples.filter((s) => s.corrected).length;
   return `
-    <div class="eval-head">
-      <span class="pill">${corrected} / ${queue} corrected</span>
-      <span class="pill">${good} good-enough (already gold)</span>
-      <span class="pill">eval set so far: ${good + corrected} of ${total}</span>
+    <div class="eval-head hstack gap-2">
+      <span class="badge" data-variant="secondary">${corrected} / ${queue} corrected</span>
+      <span class="badge" data-variant="secondary">${good} good-enough (already gold)</span>
+      <span class="badge" data-variant="secondary">eval set so far: ${good + corrected} of ${total}</span>
     </div>`;
 }
 
@@ -697,7 +697,7 @@ function entryRow(f, entry) {
       ${fieldControl(it, entry?.[it.key])}</label>`,
     )
     .join("");
-  return `<fieldset class="entry-row">
+  return `<fieldset class="entry-row card">
     <div class="entry-grid">${inner}</div>
     <button type="button" class="ghost small" data-del-entry>Remove</button>
   </fieldset>`;
