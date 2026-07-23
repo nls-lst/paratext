@@ -155,6 +155,11 @@
       .ex-map .fname { font-family: var(--font-mono); font-size: .8125rem; }
       .ex-map td.skip { text-align: center; width: 3.5rem; }
       .ex-map .skipped .fname, .ex-map .skipped select { opacity: .4; text-decoration: line-through; }
+      /* The bundled Oat's [role=switch] omits appearance:none / position:relative,
+         so the native checkbox shows through as a filled box and the thumb has
+         nothing to anchor to. Supply both; Oat provides the track, thumb, sizing. */
+      input[role="switch"] { appearance: none; -webkit-appearance: none;
+        position: relative; margin: 0; cursor: pointer; flex: none; vertical-align: middle; }
       .ex-foot .grow { margin-left: auto; }
       .ex-note { font-size: .75rem; color: var(--muted-foreground); }
       .ex-hf { font-size: .875rem; color: var(--muted-foreground); line-height: 1.6; }
