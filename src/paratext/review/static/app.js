@@ -1306,7 +1306,7 @@ async function openExportModal() {
       return `<tr class="${skipped ? "skipped" : ""}">
         <td class="fname">${escapeHtml(f.key)}</td>
         <td>${control}</td>
-        <td class="skip"><input type="checkbox" data-skip="${escapeHtml(f.key)}"${skipped ? " checked" : ""} aria-label="skip ${escapeHtml(f.key)}"></td>
+        <td class="skip"><input type="checkbox" role="switch" data-skip="${escapeHtml(f.key)}"${skipped ? " checked" : ""} aria-label="skip ${escapeHtml(f.key)}"></td>
       </tr>`;
     }).join("");
     return `<div class="table"><table class="ex-map">
@@ -1329,22 +1329,22 @@ async function openExportModal() {
     const n = scopes[ex.scope];
     const tab = (f, label) => `<button role="tab" aria-selected="${ex.fmt === f}" data-fmt="${f}">${label}</button>`;
     dlg.innerHTML = `
-      <div class="ex-head">
+      <header>
         <h3>Export <span class="text-light" style="font-size:.8125rem;">${escapeHtml(dataset)}</span></h3>
         <button class="button ghost small" data-close aria-label="Close">✕</button>
-      </div>
-      <div class="ex-main">
+      </header>
+      <div>
         ${ex.fmt === "hf" ? "" : scopeRow(scopes)}
         <div role="tablist" style="margin-bottom:1rem;">${tab("marc", "MARC")}${tab("dc", "Dublin Core")}${tab("hf", "Hugging Face")}</div>
         ${bodyHtml(m)}
       </div>
-      <div class="ex-foot">
-        ${ex.fmt === "hf" ? "" : `<a class="button ghost small" data-jsonl download>JSONL + review ↓</a>
-          <span class="ex-note">${n} record${n === 1 ? "" : "s"} → <span class="fname">${escapeHtml(dataset)}-${ex.fmt}.xml</span></span>`}
+      <footer>
+        <a class="button ghost small" data-jsonl download>JSONL + review ↓</a>
+        ${ex.fmt === "hf" ? "" : `<span class="ex-note">${n} record${n === 1 ? "" : "s"} → <span class="fname">${escapeHtml(dataset)}-${ex.fmt}.xml</span></span>`}
         <span class="grow"></span>
         <button class="button outline" data-close>Close</button>
         ${ex.fmt === "hf" ? "" : `<button class="button" data-download>Download ${ex.fmt === "marc" ? "MARCXML" : "XML"}</button>`}
-      </div>`;
+      </footer>`;
     wire();
   }
 
@@ -1387,8 +1387,10 @@ async function openExportModal() {
     }));
     const dl = dlg.querySelector("[data-download]");
     if (dl) dl.onclick = download;
+    // JSONL is always the full round — the review.jsonl alongside it is what
+    // you filter with, so scope doesn't apply here.
     const jl = dlg.querySelector("[data-jsonl]");
-    if (jl) jl.setAttribute("href", api("api/export/jsonl", { scope: ex.scope }));
+    if (jl) jl.setAttribute("href", api("api/export/jsonl", { scope: "everything" }));
   }
 
   ex.skips = { marc: {}, dc: {} };

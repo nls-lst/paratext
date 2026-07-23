@@ -111,14 +111,19 @@
       .proj-meta { margin: .25rem 0 .75rem; font-size: .8125rem; word-break: break-word; }
       .prompt-text { white-space: pre-wrap; font-size: .8125rem; max-height: 30rem;
         overflow-y: auto; }
-      /* Export modal. Oat's <dialog> is padding:0 (so header/footer can be
-         full-bleed), so we structure it head / main / foot and pad those. */
+      /* Export modal. Oat styles dialog > header / > div / > footer (padding,
+         and overflow-y:auto on the body div). We only set the flex column so the
+         body scrolls between a fixed header and footer, and make the header a row. */
       dialog.export-dialog[open] { display: flex; flex-direction: column;
-        width: min(100% - 2rem, 46rem); max-height: 85vh; }
-      .ex-head { display: flex; align-items: center; justify-content: space-between;
-        gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
-      .ex-head h3 { margin: 0; font-size: 1.0625rem; }
-      .ex-main { padding: 1.25rem; overflow-y: auto; }
+        width: min(100% - 2rem, 46rem); }
+      .export-dialog > header { flex-direction: row; align-items: center;
+        justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border);
+        padding-block-end: var(--space-4); }
+      .export-dialog > header h3 { margin: 0; }
+      .export-dialog > div { flex: 1; min-height: 0; }
+      .export-dialog > footer { align-items: center; border-top: 1px solid var(--border);
+        padding-block-start: var(--space-4); }
+      .export-dialog > footer .grow { margin-left: auto; }
       .ex-scope { margin-bottom: 1rem; }
       .ex-scope-label { font-size: .6875rem; font-weight: 600; letter-spacing: .04em;
         text-transform: uppercase; color: var(--muted-foreground); display: block; margin-bottom: .4rem; }
@@ -150,8 +155,6 @@
       .ex-map .fname { font-family: var(--font-mono); font-size: .8125rem; }
       .ex-map td.skip { text-align: center; width: 3.5rem; }
       .ex-map .skipped .fname, .ex-map .skipped select { opacity: .4; text-decoration: line-through; }
-      .ex-foot { display: flex; align-items: center; gap: .625rem;
-        padding: .9rem 1.25rem; border-top: 1px solid var(--border); }
       .ex-foot .grow { margin-left: auto; }
       .ex-note { font-size: .75rem; color: var(--muted-foreground); }
       .ex-hf { font-size: .875rem; color: var(--muted-foreground); line-height: 1.6; }
