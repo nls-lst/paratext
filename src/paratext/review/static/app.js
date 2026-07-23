@@ -649,7 +649,7 @@ function evalHeader() {
 
 // Editable control for one field spec, prefilled with `value`. Shared by the
 // top-level fields and (recursively) the item fields of an entries editor.
-function fieldControl(f, value) {
+function fieldControl(f, value, inline = false) {
   const key = escapeHtml(f.key);
   if (f.type === "bool") {
     return `<select data-field="${key}" data-type="bool">
@@ -670,20 +670,37 @@ function fieldControl(f, value) {
     return `<input type="number" data-field="${key}" data-type="number" value="${value ?? ""}" />`;
   }
   if (f.type === "list") {
+    // Inline (an entry-table cell) → single line, comma-separated; otherwise a
+    // textarea, one item per line. readControl splits on either.
+    if (inline) {
+      return `<input type="text" data-field="${key}" data-type="list"
+        value="${escapeHtml(Array.isArray(value) ? value.join(", ") : "")}" placeholder="comma-separated" />`;
+    }
     const text = Array.isArray(value) ? value.join("\n") : "";
     return `<textarea data-field="${key}" data-type="list" rows="2"
       placeholder="one per line">${escapeHtml(text)}</textarea>`;
   }
   if (f.type === "entries") return entriesEditor(f, Array.isArray(value) ? value : []);
+  if (inline) {
+    return `<input type="text" data-field="${key}" data-type="string" value="${escapeHtml(value ?? "")}" />`;
+  }
   return `<textarea data-field="${key}" data-type="string" rows="2">${escapeHtml(
     value ?? "",
   )}</textarea>`;
 }
 
+// Entries edit as a table — one column per item field, one row per entry, an
+// input in each cell. Mirrors the read-only entries table. The add/delete/save
+// handlers key off .entry-row and [data-field], so this stays compatible.
 function entriesEditor(f, entries) {
+  const items = f.item_fields ?? [];
+  const head = items.map((it) => `<th>${escapeHtml(it.label)}</th>`).join("") + "<th></th>";
   const rows = entries.map((e) => entryRow(f, e)).join("");
-  return `<div class="entries-editor" data-field="${escapeHtml(f.key)}">
-    <div class="entry-rows vstack">${rows}</div>
+  return `<div class="entries-editor">
+    <div class="table"><table class="entry-table">
+      <thead><tr>${head}</tr></thead>
+      <tbody class="entry-rows">${rows}</tbody>
+    </table></div>
     <button type="button" class="outline small mt-2" data-add-entry>+ Add ${escapeHtml(
       f.label.toLowerCase(),
     )}</button>
@@ -691,16 +708,12 @@ function entriesEditor(f, entries) {
 }
 
 function entryRow(f, entry) {
-  const inner = (f.item_fields ?? [])
-    .map(
-      (it) => `<label class="entry-field"><span>${escapeHtml(it.label)}</span>
-      ${fieldControl(it, entry?.[it.key])}</label>`,
-    )
+  const cells = (f.item_fields ?? [])
+    .map((it) => `<td>${fieldControl(it, entry?.[it.key], true)}</td>`)
     .join("");
-  return `<fieldset class="entry-row card">
-    <div class="entry-grid">${inner}</div>
-    <button type="button" class="ghost small" data-del-entry>Remove</button>
-  </fieldset>`;
+  return `<tr class="entry-row">${cells}
+    <td class="entry-del"><button type="button" class="ghost small" data-del-entry
+      aria-label="Remove entry">✕</button></td></tr>`;
 }
 
 function modelPanelOf(view) {
@@ -813,7 +826,8 @@ function readControl(el) {
   if (t === "bool") return el.value === "true";
   if (t === "enum") return el.value === "" ? null : el.value;
   if (t === "number") return el.value === "" ? null : Number(el.value);
-  if (t === "list") return el.value.split("\n").map((x) => x.trim()).filter(Boolean);
+  // Split on newline (textarea, one per line) or comma (inline entry-cell input).
+  if (t === "list") return el.value.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
   return el.value.trim() === "" ? null : el.value; // string
 }
 
