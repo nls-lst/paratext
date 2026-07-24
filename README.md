@@ -1,8 +1,6 @@
-<p align="center">
-  <img src="assets/logo.png" alt="paratext" width="112" height="112">
-</p>
-
-<h1 align="center">paratext</h1>
+<h1 align="center">
+  <img src="assets/logo.png" alt="" height="38" align="middle">&nbsp; paratext
+</h1>
 
 A modular, project-based pipeline that produces metadata from digitised library
 & archive collections with a multimodal model. Includes a human-in-the-loop
