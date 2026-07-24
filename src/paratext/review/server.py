@@ -784,6 +784,7 @@ class Handler(BaseHTTPRequestHandler):
         """What the HF tab needs to start sign-in: the client id (a registered
         app if configured, else the CIMD URL), the redirect uri, scopes, and the
         config defaults + gold count."""
+        from .. import hf_export
         from ..catalogue import records_for_scope
         from ..config import load_project_section
         from . import hf_oauth
@@ -804,6 +805,7 @@ class Handler(BaseHTTPRequestHandler):
             "default_repo": cfg.get("repo"),
             "default_license": cfg.get("license"),
             "gold_count": n,
+            "provenance_missing": hf_export.provenance_gaps(ds["dir"]),
         })
 
     def _serve_cimd(self):

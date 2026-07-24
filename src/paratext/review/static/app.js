@@ -1441,8 +1441,15 @@ async function openExportModal() {
 
   function hfBody() {
     const cfg = ex.hfCfg || {};
+    const gaps = cfg.provenance_missing || [];
+    const warn = gaps.length
+      ? `<p class="ex-hf-status warn">⚠ No recorded provenance for ${gaps.map(escapeHtml).join(", ")} —
+         publishing works, but the card will read “unknown” for these until you fill them in on the
+         dataset card on Hugging Face.</p>`
+      : "";
     if (!hfAuth) {
       return `<div class="ex-hf">
+        ${warn}
         <p>Publish the gold set to the Hub as <strong>yourself</strong> — sign in with your
         Hugging Face account. paratext relays the sign-in but never stores your token.</p>
         <button class="button" data-hf-signin>Sign in with Hugging Face</button>
@@ -1456,6 +1463,7 @@ async function openExportModal() {
     const name = ex.hf.name ?? (dflt.includes("/") ? dflt.split("/").slice(1).join("/") : `${schema}-eval`);
     const lic = ex.hf.license ?? cfg.default_license ?? "";
     return `<div class="ex-hf">
+      ${warn}
       <p class="ex-hf-id">Signed in as <strong>${escapeHtml(user.name || "—")}</strong>
         <button class="button ghost small" data-hf-signout>Sign out</button></p>
       <div class="ex-hf-form">

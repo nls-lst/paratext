@@ -105,6 +105,23 @@ class ExportSummary:
     build_dir: Path | None = None
     repo: str | None = None
     url: str | None = None
+    provenance_missing: list[str] = field(default_factory=list)
+
+
+# Card fields sourced from the round's provenance.json; if any are absent the
+# dataset card reads "unknown"/blank, so export warns before publishing.
+_PROVENANCE_FIELDS = ("model", "prompt_hash", "schema_version", "prompt")
+
+
+def missing_provenance(provenance: dict) -> list[str]:
+    return [k for k in _PROVENANCE_FIELDS if not provenance.get(k)]
+
+
+def provenance_gaps(dataset_dir: Path) -> list[str]:
+    """Which provenance fields the round is missing (empty = complete)."""
+    pfile = dataset_dir / "provenance.json"
+    prov = json.loads(pfile.read_text()) if pfile.is_file() else {}
+    return missing_provenance(prov)
 
 
 def _rows(dataset_dir: Path, project: str, cfg: ExportConfig, *, db_path: Path | None = None):
@@ -348,6 +365,7 @@ def build(
     return ExportSummary(
         dataset=name, gold=gold, corrected=corrected, negatives=negatives,
         excluded=excluded, build_dir=dest,
+        provenance_missing=missing_provenance(provenance),
     )
 
 
@@ -384,6 +402,11 @@ def run(dataset_dir: Path, project: str, cfg: ExportConfig, *, dry_run: bool) ->
               "may not display it. Common ids: cc0-1.0, cc-by-4.0, apache-2.0.")
     dest = EXPORT_ROOT / dataset_dir.name
     summary = build(dataset_dir, project, cfg, dest)
+
+    if summary.provenance_missing:
+        print(f"note: no recorded provenance for {', '.join(summary.provenance_missing)} — "
+              "publishing anyway; the dataset card shows 'unknown'/blank for these until you fill "
+              "them in on the Hub (or re-package the round with a provenance.json).")
 
     if dry_run:
         return summary
