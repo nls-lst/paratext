@@ -816,14 +816,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def _oauth_callback_page(self):
         """The popup lands here after HF consent; hand code+state back to the
-        opener and close. The token exchange itself runs in the opener via
-        /api/oauth/hf/exchange (it holds the PKCE verifier)."""
+        opener and close. HF sets COOP on its pages, which severs window.opener on
+        the way back — so deliver over BroadcastChannel (+ localStorage fallback),
+        both same-origin and COOP-proof; postMessage is only a best-effort. The
+        token exchange runs in the opener (it holds the PKCE verifier)."""
         html = (
             "<!doctype html><meta charset=utf-8><title>Signing in…</title>"
             "<script>(function(){var p=new URLSearchParams(location.search);"
             "var m={source:'paratext-hf-oauth',code:p.get('code'),state:p.get('state'),"
             "error:p.get('error'),error_description:p.get('error_description')};"
-            "if(window.opener){window.opener.postMessage(m,location.origin);window.close();}"
+            "try{var bc=new BroadcastChannel('paratext-hf-oauth');bc.postMessage(m);bc.close();}catch(e){}"
+            "try{localStorage.setItem('paratext-hf-oauth',JSON.stringify(m));}catch(e){}"
+            "try{if(window.opener)window.opener.postMessage(m,location.origin);}catch(e){}"
+            "try{window.close();}catch(e){}"
             "})();</script><p>Signing in… you can close this window.</p>"
         ).encode()
         self._bytes(html, "text/html; charset=utf-8")

@@ -1331,19 +1331,32 @@ async function pkcePair() {
   return { verifier, challenge: b64url(digest) };
 }
 
-// Resolve once the popup postMessages the code back; `state` guards against CSRF.
+// Resolve once the popup hands the code back; `state` guards against CSRF. HF's
+// COOP severs window.opener, so we listen on BroadcastChannel and the storage
+// event (both same-origin, COOP-proof) as well as postMessage.
 function awaitOAuth(stateTok) {
   return new Promise((resolve, reject) => {
+    const bc = "BroadcastChannel" in window ? new BroadcastChannel("paratext-hf-oauth") : null;
     const timer = setTimeout(() => { done(); reject(new Error("sign-in timed out")); }, 180000);
-    function onMsg(e) {
-      if (e.origin !== window.location.origin) return;
-      const d = e.data;
+    function handle(d) {
       if (!d || d.source !== "paratext-hf-oauth" || d.state !== stateTok) return;
       done();
       resolve(d);
     }
-    function done() { clearTimeout(timer); window.removeEventListener("message", onMsg); }
+    function onMsg(e) { if (e.origin === window.location.origin) handle(e.data); }
+    function onStorage(e) {
+      if (e.key !== "paratext-hf-oauth" || !e.newValue) return;
+      try { handle(JSON.parse(e.newValue)); localStorage.removeItem("paratext-hf-oauth"); } catch { /* ignore */ }
+    }
+    function done() {
+      clearTimeout(timer);
+      window.removeEventListener("message", onMsg);
+      window.removeEventListener("storage", onStorage);
+      if (bc) { bc.onmessage = null; bc.close(); }
+    }
+    if (bc) bc.onmessage = (e) => handle(e.data);
     window.addEventListener("message", onMsg);
+    window.addEventListener("storage", onStorage);
   });
 }
 
@@ -1358,6 +1371,7 @@ async function hfSignIn() {
   const popup = window.open(url, "hf-oauth", "width=680,height=820");
   if (!popup) throw new Error("popup blocked — allow popups for this site, then retry");
   const msg = await awaitOAuth(stateTok);
+  try { popup.close(); } catch { /* COOP may block; the callback also self-closes */ }
   if (msg.error) throw new Error(msg.error_description || msg.error);
   const res = await fetch(api("api/oauth/hf/exchange"), {
     method: "POST", headers: { "content-type": "application/json" },
