@@ -1447,8 +1447,6 @@ async function openExportModal() {
         Hugging Face account. paratext relays the sign-in but never stores your token.</p>
         <button class="button" data-hf-signin>Sign in with Hugging Face</button>
         <p class="ex-hf-status" data-hf-status></p>
-        <details><summary>Prefer the command line?</summary>
-          <pre>paratext export -p ${escapeHtml(schema)} --format hf --to &lt;org/name&gt;</pre></details>
       </div>`;
     }
     const user = hfAuth.user || {};
@@ -1461,7 +1459,7 @@ async function openExportModal() {
       <p class="ex-hf-id">Signed in as <strong>${escapeHtml(user.name || "—")}</strong>
         <button class="button ghost small" data-hf-signout>Sign out</button></p>
       <div class="ex-hf-form">
-        <label>Owner<select data-hf="owner">${owners.map((o) =>
+        <label>Publish to<select data-hf="owner">${owners.map((o) =>
           `<option${o === owner ? " selected" : ""}>${escapeHtml(o)}</option>`).join("")}</select></label>
         <label>Dataset name<input data-hf="name" value="${escapeHtml(name)}" placeholder="${escapeHtml(schema)}-eval"></label>
         <label>Licence<select data-hf="license">
