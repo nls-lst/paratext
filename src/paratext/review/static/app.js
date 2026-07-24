@@ -678,8 +678,8 @@ function fieldControl(f, value, inline = false) {
     // Inline (an entry-table cell) → single line, comma-separated; otherwise a
     // textarea, one item per line. readControl splits on either.
     if (inline) {
-      return `<input type="text" data-field="${key}" data-type="list"
-        value="${escapeHtml(Array.isArray(value) ? value.join(", ") : "")}" placeholder="comma-separated" />`;
+      return `<textarea data-field="${key}" data-type="list" rows="1" class="autogrow"
+        placeholder="comma-separated">${escapeHtml(Array.isArray(value) ? value.join(", ") : "")}</textarea>`;
     }
     const text = Array.isArray(value) ? value.join("\n") : "";
     return `<textarea data-field="${key}" data-type="list" rows="2"
@@ -697,7 +697,9 @@ function fieldControl(f, value, inline = false) {
     return entriesEditor(f, list);
   }
   if (inline) {
-    return `<input type="text" data-field="${key}" data-type="string" value="${escapeHtml(value ?? "")}" />`;
+    return `<textarea data-field="${key}" data-type="string" rows="1" class="autogrow">${escapeHtml(
+      value ?? "",
+    )}</textarea>`;
   }
   return `<textarea data-field="${key}" data-type="string" rows="2">${escapeHtml(
     value ?? "",
@@ -801,6 +803,7 @@ function renderEditor() {
   } else {
     wireEditor(editor);
   }
+  autogrow(editor.querySelectorAll("textarea.autogrow"));
   document.getElementById("ev-prev").addEventListener("click", () => navigate(-1));
   document.getElementById("ev-next")?.addEventListener("click", () => navigate(1));
   document.getElementById("ev-clear").addEventListener("click", clearGold);
@@ -816,20 +819,29 @@ function wireEditor(editor) {
     const del = e.target.closest("[data-del-entry]");
     if (add) {
       const wrap = add.closest(".edit-field");
-      wrap.querySelector(".entry-rows").insertAdjacentHTML(
-        "beforeend",
-        entryRow(fieldSpec(wrap.dataset.key), {}),
-      );
+      const rows = wrap.querySelector(".entry-rows");
+      rows.insertAdjacentHTML("beforeend", entryRow(fieldSpec(wrap.dataset.key), {}));
+      autogrow(rows.lastElementChild.querySelectorAll("textarea.autogrow"));
       markDirty();
     } else if (del) {
       del.closest(".entry-row").remove();
       markDirty();
     }
   });
-  editor.addEventListener("input", () => {
+  editor.addEventListener("input", (e) => {
+    if (e.target.matches("textarea.autogrow")) autogrow([e.target]);
     markDirty();
     clearTimeout(state.evalTimer);
     state.evalTimer = setTimeout(saveGold, 500);
+  });
+}
+
+// Size cell textareas to their content so long values wrap and grow the row
+// rather than clipping. Runs on render and on each edit of an .autogrow cell.
+function autogrow(els) {
+  els.forEach((el) => {
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
   });
 }
 

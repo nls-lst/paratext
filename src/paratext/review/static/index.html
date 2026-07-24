@@ -39,6 +39,14 @@
       .split-media a { display: block; }
       .split-media a + a { margin-top: .5rem; }
       .split-media img { width: 100%; max-height: 85vh; object-fit: contain; border: 1px solid var(--border); }
+      /* Editable entries grid: long cell values (folios, descriptions) wrap and
+         grow the row (autogrow textareas) instead of clipping past the edge. */
+      .entries-editor .entry-table { table-layout: auto; width: 100%; }
+      .entries-editor .entry-table th, .entries-editor .entry-table td { vertical-align: top; }
+      .entries-editor .entry-table td > textarea {
+        width: 100%; min-width: 8ch; box-sizing: border-box; resize: vertical;
+        overflow: hidden; line-height: 1.35; }
+      .entries-editor .entry-table td.entry-del { width: 2.25rem; }
       @media (max-width: 820px) {
         .split { grid-template-columns: 1fr; }
         .split-media { position: static; }
