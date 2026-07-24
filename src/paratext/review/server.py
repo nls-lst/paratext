@@ -501,6 +501,12 @@ class Handler(BaseHTTPRequestHandler):
                 )
             if path == "/api/export/jsonl":
                 return self._api_export_jsonl(self._dataset(qs), qs)
+            if path == "/api/export/hf/config":
+                return self._api_hf_config(self._dataset(qs))
+            if path == "/.well-known/oauth-cimd":
+                return self._serve_cimd()
+            if path == "/oauth/callback/huggingface":
+                return self._oauth_callback_page()
             if path.startswith("/api/export/"):
                 return self._api_export(self._dataset(qs))
             if path.startswith("/images/"):
@@ -519,6 +525,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_export_catalogue(
                 self._dataset(qs), u.path.rsplit("/", 1)[1], qs, mapping=body.get("mapping")
             )
+        if u.path == "/api/oauth/hf/exchange":
+            return self._api_hf_exchange()
+        if u.path == "/api/export/hf":
+            return self._api_hf_push(self._dataset(qs))
         if u.path.startswith("/api/annotations/"):
             ds = self._dataset(qs)
             sid = unquote(u.path.split("/api/annotations/", 1)[1])
@@ -766,6 +776,131 @@ class Handler(BaseHTTPRequestHandler):
                 "x-record-count": str(len(records)),
             },
         )
+
+    # -- Hugging Face push (OAuth) --
+    # The token is the user's, obtained by "Sign in with HF" in the browser and
+    # sent per push; the service stores none. See review/hf_oauth.py.
+    def _api_hf_config(self, ds):
+        """What the HF tab needs to start sign-in: the client id (a registered
+        app if configured, else the CIMD URL), the redirect uri, scopes, and the
+        config defaults + gold count."""
+        from ..catalogue import records_for_scope
+        from ..config import load_project_section
+        from . import hf_oauth
+
+        cfg = load_project_section(ds["schema"], "export")
+        base = hf_oauth.base_url(cfg, self.headers)
+        try:
+            n = len(records_for_scope(
+                ds["dir"], ds["schema"], "good_enough", db_path=self.store.db_path
+            ))
+        except ValueError:
+            n = 0
+        self._json({
+            "authorize_url": hf_oauth.AUTHORIZE,
+            "client_id": hf_oauth.client_id(cfg, base),
+            "redirect_uri": f"{base}{hf_oauth.CALLBACK_PATH}",
+            "scopes": hf_oauth.SCOPES,
+            "default_repo": cfg.get("repo"),
+            "default_license": cfg.get("license"),
+            "gold_count": n,
+        })
+
+    def _serve_cimd(self):
+        """The CIMD document HF fetches to validate a registration-free client.
+        Base comes from PARATEXT_HF_PUBLIC_BASE_URL or the forwarded headers —
+        there's no project context on this route."""
+        from . import hf_oauth
+
+        self._json(hf_oauth.cimd_document(hf_oauth.base_url({}, self.headers)))
+
+    def _oauth_callback_page(self):
+        """The popup lands here after HF consent; hand code+state back to the
+        opener and close. The token exchange itself runs in the opener via
+        /api/oauth/hf/exchange (it holds the PKCE verifier)."""
+        html = (
+            "<!doctype html><meta charset=utf-8><title>Signing in…</title>"
+            "<script>(function(){var p=new URLSearchParams(location.search);"
+            "var m={source:'paratext-hf-oauth',code:p.get('code'),state:p.get('state'),"
+            "error:p.get('error'),error_description:p.get('error_description')};"
+            "if(window.opener){window.opener.postMessage(m,location.origin);window.close();}"
+            "})();</script><p>Signing in… you can close this window.</p>"
+        ).encode()
+        self._bytes(html, "text/html; charset=utf-8")
+
+    def _api_hf_exchange(self):
+        """Proxy the PKCE code->token exchange (server-side, so no CORS and no
+        client secret in the browser), then return the token plus the identity it
+        resolves to. The token is handed straight back to the browser; not stored."""
+        from . import hf_oauth
+
+        body = self._body()
+        try:
+            tok = hf_oauth.exchange_code(
+                code=body["code"], code_verifier=body["code_verifier"],
+                redirect_uri=body["redirect_uri"], client_id=body["client_id"],
+            )
+        except KeyError as e:
+            return self._json({"error": f"missing {e}"}, 400)
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        access = tok.get("access_token")
+        if not access:
+            return self._json({"error": "no access_token in token response"}, 400)
+        try:
+            who = hf_oauth.userinfo(access)
+        except Exception:
+            who = {}
+        self._json({
+            "access_token": access,
+            "user": {
+                "name": who.get("name") or who.get("fullname"),
+                "orgs": [o.get("name") for o in (who.get("orgs") or []) if o.get("name")],
+            },
+        })
+
+    def _api_hf_push(self, ds):
+        """Build the gold set and push it to the Hub as the signed-in user (the
+        Bearer token from their browser). Builds into a temp dir — never the
+        CWD-relative export/ — so concurrent pushes don't clash."""
+        import shutil
+        import tempfile
+
+        from .. import hf_export
+        from ..config import load_project_section
+
+        auth = self.headers.get("authorization") or ""
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        if not token:
+            return self._json({"error": "sign in to Hugging Face first"}, 401)
+        body = self._body()
+        repo = (body.get("repo") or "").strip()
+        if not repo:
+            return self._json({"error": "choose a target repo (owner/name)"}, 400)
+        raw = load_project_section(ds["schema"], "export")
+        cfg = hf_export.ExportConfig(
+            repo=repo,
+            license=hf_export.normalise_license(body.get("license") or raw.get("license")),
+            rights=raw.get("rights"),
+            min_verdict=raw.get("min_verdict", "good_enough"),
+            include_negatives=bool(raw.get("include_negatives", False)),
+            annotators=raw.get("annotators", "omit"),
+            public=bool(body.get("public")),
+        )
+        dest = Path(tempfile.mkdtemp(prefix="paratext-hf-"))
+        try:
+            summary = hf_export.build(
+                ds["dir"], ds["schema"], cfg, dest, db_path=self.store.db_path
+            )
+            hf_export.push_built(dest, cfg, summary, token=token)
+        except (Exception, SystemExit) as e:
+            return self._json({"error": str(e)}, 400)
+        finally:
+            shutil.rmtree(dest, ignore_errors=True)
+        self._json({
+            "url": summary.url, "repo": summary.repo,
+            "gold": summary.gold, "corrected": summary.corrected,
+        })
 
     def _api_export(self, ds):
         """Generic CSV of flagged/scored samples (project-neutral)."""

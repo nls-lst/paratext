@@ -147,6 +147,15 @@
       .ex-map input.marc { width: 6rem; }  /* Oat inputs are width:100% */
       .ex-map td.skip, .ex-map th.skip { text-align: center; width: 4rem; }
       .ex-map .skipped .fname, .ex-map .skipped select { opacity: .5; text-decoration: line-through; }
+      /* Hugging Face tab. */
+      .ex-hf { display: flex; flex-direction: column; gap: 1rem; }
+      .ex-hf-id { display: flex; align-items: center; gap: .75rem; margin: 0; }
+      .ex-hf-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .75rem 1rem; }
+      .ex-hf-form label { display: flex; flex-direction: column; gap: .25rem;
+        font-size: var(--text-8); font-weight: 600; }
+      .ex-hf-form label.ex-hf-vis { flex-direction: row; align-items: center; gap: .5rem; align-self: end; }
+      .ex-hf-status { margin: 0; font-size: var(--text-8); color: var(--muted-foreground); min-height: 1.2em; }
+      .ex-hf-status.bad { color: var(--danger); }
     </style>
   </head>
   <body>

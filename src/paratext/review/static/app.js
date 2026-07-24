@@ -1306,6 +1306,69 @@ function scopeDots(scope) {
   return `<span class="dots d3"><span style="background:var(--success)"></span><span style="background:var(--warning)"></span><span style="background:var(--danger)"></span></span>`;
 }
 
+// Hugging Face sign-in (OAuth 2.0 Authorization Code + PKCE, public client).
+// The token is the user's and lives only in this tab (sessionStorage); the
+// server proxies the code→token exchange but stores nothing. See hf_oauth.py.
+const HF_LICENSES = ["cc0-1.0", "cc-by-4.0", "cc-by-sa-4.0", "apache-2.0", "mit", "other"];
+
+function loadHfAuth() {
+  try { return JSON.parse(sessionStorage.getItem("paratext_hf")) || null; } catch { return null; }
+}
+let hfAuth = loadHfAuth();
+function saveHfAuth(a) {
+  hfAuth = a;
+  if (a) sessionStorage.setItem("paratext_hf", JSON.stringify(a));
+  else sessionStorage.removeItem("paratext_hf");
+}
+
+function b64url(bytes) {
+  return btoa(String.fromCharCode(...new Uint8Array(bytes)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function pkcePair() {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  return { verifier, challenge: b64url(digest) };
+}
+
+// Resolve once the popup postMessages the code back; `state` guards against CSRF.
+function awaitOAuth(stateTok) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { done(); reject(new Error("sign-in timed out")); }, 180000);
+    function onMsg(e) {
+      if (e.origin !== window.location.origin) return;
+      const d = e.data;
+      if (!d || d.source !== "paratext-hf-oauth" || d.state !== stateTok) return;
+      done();
+      resolve(d);
+    }
+    function done() { clearTimeout(timer); window.removeEventListener("message", onMsg); }
+    window.addEventListener("message", onMsg);
+  });
+}
+
+async function hfSignIn() {
+  const cfg = await (await fetch(api("api/export/hf/config"))).json();
+  const { verifier, challenge } = await pkcePair();
+  const stateTok = b64url(crypto.getRandomValues(new Uint8Array(16)));
+  const url = `${cfg.authorize_url}?${new URLSearchParams({
+    client_id: cfg.client_id, redirect_uri: cfg.redirect_uri, response_type: "code",
+    scope: cfg.scopes, state: stateTok, code_challenge: challenge, code_challenge_method: "S256",
+  })}`;
+  const popup = window.open(url, "hf-oauth", "width=680,height=820");
+  if (!popup) throw new Error("popup blocked — allow popups for this site, then retry");
+  const msg = await awaitOAuth(stateTok);
+  if (msg.error) throw new Error(msg.error_description || msg.error);
+  const res = await fetch(api("api/oauth/hf/exchange"), {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: msg.code, code_verifier: verifier,
+      redirect_uri: cfg.redirect_uri, client_id: cfg.client_id }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "sign-in failed");
+  saveHfAuth({ token: data.access_token, user: data.user || {} });
+}
+
 async function openExportModal() {
   const dataset = state.dataset;
   const dsInfo = (state.datasets || []).find((d) => d.name === dataset);
@@ -1314,7 +1377,8 @@ async function openExportModal() {
   const dlg = document.createElement("dialog");
   dlg.className = "export-dialog";
   document.body.appendChild(dlg);
-  const ex = { fmt: "marc", scope: "everything", meta: { marc: null, dc: null }, edits: { marc: {}, dc: {} } };
+  const ex = { fmt: "marc", scope: "everything", meta: { marc: null, dc: null },
+    edits: { marc: {}, dc: {} }, hf: {}, hfCfg: null };
 
   async function meta(fmt) {
     if (!ex.meta[fmt]) {
@@ -1357,15 +1421,91 @@ async function openExportModal() {
   }
 
   function bodyHtml(m) {
-    if (ex.fmt === "hf") {
-      return `<div class="ex-hf"><p>Publishing to Hugging Face needs an account sign-in, which
-        isn't wired into the review UI yet. For now, publish the gold set from the command line:</p>
-        <pre>paratext export -p ${escapeHtml(schema)} --format hf --to &lt;org/name&gt;</pre></div>`;
-    }
+    if (ex.fmt === "hf") return hfBody();
     return mappingTable(m);
   }
 
+  function hfBody() {
+    const cfg = ex.hfCfg || {};
+    if (!hfAuth) {
+      return `<div class="ex-hf">
+        <p>Publish the gold set to the Hub as <strong>yourself</strong> — sign in with your
+        Hugging Face account. paratext relays the sign-in but never stores your token.</p>
+        <button class="button" data-hf-signin>Sign in with Hugging Face</button>
+        <p class="ex-hf-status" data-hf-status></p>
+        <details><summary>Prefer the command line?</summary>
+          <pre>paratext export -p ${escapeHtml(schema)} --format hf --to &lt;org/name&gt;</pre></details>
+      </div>`;
+    }
+    const user = hfAuth.user || {};
+    const owners = [user.name, ...(user.orgs || [])].filter(Boolean);
+    const dflt = cfg.default_repo || "";
+    const owner = ex.hf.owner ?? (dflt.includes("/") ? dflt.split("/")[0] : user.name);
+    const name = ex.hf.name ?? (dflt.includes("/") ? dflt.split("/").slice(1).join("/") : `${schema}-eval`);
+    const lic = ex.hf.license ?? cfg.default_license ?? "";
+    return `<div class="ex-hf">
+      <p class="ex-hf-id">Signed in as <strong>${escapeHtml(user.name || "—")}</strong>
+        <button class="button ghost small" data-hf-signout>Sign out</button></p>
+      <div class="ex-hf-form">
+        <label>Owner<select data-hf="owner">${owners.map((o) =>
+          `<option${o === owner ? " selected" : ""}>${escapeHtml(o)}</option>`).join("")}</select></label>
+        <label>Dataset name<input data-hf="name" value="${escapeHtml(name)}" placeholder="${escapeHtml(schema)}-eval"></label>
+        <label>Licence<select data-hf="license">
+          <option value=""${lic ? "" : " selected"}>— none —</option>
+          ${HF_LICENSES.map((l) => `<option${l === lic ? " selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select></label>
+        <label class="ex-hf-vis"><input type="checkbox" role="switch" data-hf="public"${ex.hf.public ? " checked" : ""}> Public dataset</label>
+      </div>
+      <p class="ex-hf-status" data-hf-status></p>
+    </div>`;
+  }
+
+  function setHfStatus(msg, isErr = false, url = null) {
+    const el = dlg.querySelector("[data-hf-status]");
+    if (!el) return;
+    el.className = "ex-hf-status" + (isErr ? " bad" : "");
+    el.innerHTML = escapeHtml(msg) +
+      (url ? ` <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>` : "");
+  }
+
+  function captureHf() {
+    dlg.querySelectorAll("[data-hf]").forEach((el) => {
+      ex.hf[el.dataset.hf] = el.type === "checkbox" ? el.checked : el.value.trim();
+    });
+  }
+
+  async function hfPublish() {
+    captureHf();
+    const owner = ex.hf.owner || hfAuth.user.name;
+    const name = (ex.hf.name || "").trim();
+    if (!name) return setHfStatus("Enter a dataset name.", true);
+    const repo = `${owner}/${name}`;
+    setHfStatus(`Publishing ${repo}…`);
+    const btn = dlg.querySelector("[data-hf-publish]");
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch(api("api/export/hf"), {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${hfAuth.token}` },
+        body: JSON.stringify({ repo, public: !!ex.hf.public, license: ex.hf.license || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 401) { saveHfAuth(null); render(); }
+        throw new Error(data.error || "publish failed");
+      }
+      setHfStatus(`Published ${data.gold} record${data.gold === 1 ? "" : "s"} →`, false, data.url);
+    } catch (e) {
+      setHfStatus(e.message, true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   async function render() {
+    if (ex.fmt === "hf" && !ex.hfCfg) {
+      try { ex.hfCfg = await (await fetch(api("api/export/hf/config"))).json(); }
+      catch { ex.hfCfg = {}; }
+    }
     const m = ex.fmt === "hf" ? null : await meta(ex.fmt);
     const scopes = (ex.meta.marc || ex.meta.dc || m || {}).scopes || { good_enough: 0, needs_tweaks: 0, everything: 0 };
     const n = scopes[ex.scope];
@@ -1382,10 +1522,14 @@ async function openExportModal() {
       </div>
       <footer>
         <a class="button ghost small" data-jsonl download>JSONL + review ↓</a>
-        ${ex.fmt === "hf" ? "" : `<span class="ex-note">${n} record${n === 1 ? "" : "s"} → <span class="fname">${escapeHtml(dataset)}-${ex.fmt}.xml</span></span>`}
+        ${ex.fmt === "hf"
+          ? `<span class="ex-note">${(ex.hfCfg || {}).gold_count ?? 0} gold record${((ex.hfCfg || {}).gold_count === 1) ? "" : "s"} → the Hub</span>`
+          : `<span class="ex-note">${n} record${n === 1 ? "" : "s"} → <span class="fname">${escapeHtml(dataset)}-${ex.fmt}.xml</span></span>`}
         <span class="grow"></span>
         <button class="button outline" data-close>Close</button>
-        ${ex.fmt === "hf" ? "" : `<button class="button" data-download>Download ${ex.fmt === "marc" ? "MARCXML" : "XML"}</button>`}
+        ${ex.fmt === "hf"
+          ? (hfAuth ? `<button class="button" data-hf-publish>Publish to Hub</button>` : "")
+          : `<button class="button" data-download>Download ${ex.fmt === "marc" ? "MARCXML" : "XML"}</button>`}
       </footer>`;
     wire();
   }
@@ -1433,6 +1577,18 @@ async function openExportModal() {
     // you filter with, so scope doesn't apply here.
     const jl = dlg.querySelector("[data-jsonl]");
     if (jl) jl.setAttribute("href", api("api/export/jsonl", { scope: "everything" }));
+    // Hugging Face tab.
+    const signin = dlg.querySelector("[data-hf-signin]");
+    if (signin) signin.onclick = async () => {
+      setHfStatus("Opening Hugging Face…");
+      try { await hfSignIn(); render(); }
+      catch (e) { setHfStatus(e.message, true); }
+    };
+    const signout = dlg.querySelector("[data-hf-signout]");
+    if (signout) signout.onclick = () => { saveHfAuth(null); render(); };
+    dlg.querySelectorAll("[data-hf]").forEach((el) => (el.onchange = captureHf));
+    const pub = dlg.querySelector("[data-hf-publish]");
+    if (pub) pub.onclick = hfPublish;
   }
 
   ex.skips = { marc: {}, dc: {} };

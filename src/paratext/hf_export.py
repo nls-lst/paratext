@@ -107,12 +107,14 @@ class ExportSummary:
     url: str | None = None
 
 
-def _rows(dataset_dir: Path, project: str, cfg: ExportConfig):
+def _rows(dataset_dir: Path, project: str, cfg: ExportConfig, *, db_path: Path | None = None):
     """Yield (metadata_row, source_image_path) for included samples, plus a
     running tally of what was excluded and why. Raises on multi-image projects.
 
     Selection (which items are gold) is shared with the other export formats via
     `records.select_records`; here we add the image-count rules and the HF row shape.
+    `db_path` points at the gold DB when it isn't the round's own annotations.db
+    (the review service keeps it at `--db`) — same fix the catalogue exports got.
     """
     sel = select_records(
         dataset_dir,
@@ -120,6 +122,7 @@ def _rows(dataset_dir: Path, project: str, cfg: ExportConfig):
         min_verdict=cfg.min_verdict,
         include_negatives=cfg.include_negatives,
         annotators=cfg.annotators,
+        db_path=db_path,
     )
     excluded = dict(sel.excluded)
     rows: list[dict] = []
@@ -306,9 +309,14 @@ the reviewing institution's cataloguing conventions.
     return "\n".join(front) + body
 
 
-def build(dataset_dir: Path, project: str, cfg: ExportConfig, dest: Path) -> ExportSummary:
+def build(
+    dataset_dir: Path, project: str, cfg: ExportConfig, dest: Path,
+    *, db_path: Path | None = None,
+) -> ExportSummary:
     """Build the export folder (imagefolder + metadata.jsonl + card) at `dest`."""
-    rows, images, excluded, provenance, samples, store, name = _rows(dataset_dir, project, cfg)
+    rows, images, excluded, provenance, samples, store, name = _rows(
+        dataset_dir, project, cfg, db_path=db_path
+    )
     if dest.exists():
         shutil.rmtree(dest)
     (dest / "images").mkdir(parents=True, exist_ok=True)
@@ -343,6 +351,31 @@ def build(dataset_dir: Path, project: str, cfg: ExportConfig, dest: Path) -> Exp
     )
 
 
+def push_built(dest: Path, cfg: ExportConfig, summary: ExportSummary, *, token: str | None = None):
+    """Create the dataset repo (if needed) and upload a built folder. `token`
+    lets a caller push as a specific user (the review UI's OAuth flow); None
+    falls back to the ambient token (env / HF cache) the CLI uses. Sets
+    `summary.repo`/`summary.url`."""
+    if not cfg.repo:
+        raise ValueError("no target repo: pass a repo id (org/name) or set export.repo in config")
+
+    from huggingface_hub import HfApi
+
+    api = HfApi(token=token)
+    api.create_repo(
+        repo_id=cfg.repo, repo_type="dataset", private=not cfg.public, exist_ok=True
+    )
+    api.upload_folder(
+        folder_path=str(dest),
+        repo_id=cfg.repo,
+        repo_type="dataset",
+        commit_message=f"paratext export: {summary.dataset} ({summary.gold} gold)",
+    )
+    summary.repo = cfg.repo
+    summary.url = f"https://huggingface.co/datasets/{cfg.repo}"
+    return summary
+
+
 def run(dataset_dir: Path, project: str, cfg: ExportConfig, *, dry_run: bool) -> ExportSummary:
     """Build the export and, unless `dry_run`, push it to the Hub."""
     cfg.license = normalise_license(cfg.license)
@@ -360,19 +393,4 @@ def run(dataset_dir: Path, project: str, cfg: ExportConfig, *, dry_run: bool) ->
         vis = "publicly" if cfg.public else "privately"
         print(f"warning: publishing {vis} with no licence set — the dataset card shows "
               "`license: other`. Add a licence (e.g. cc0-1.0) to make reuse terms clear.")
-
-    from huggingface_hub import HfApi
-
-    api = HfApi()
-    api.create_repo(
-        repo_id=cfg.repo, repo_type="dataset", private=not cfg.public, exist_ok=True
-    )
-    api.upload_folder(
-        folder_path=str(dest),
-        repo_id=cfg.repo,
-        repo_type="dataset",
-        commit_message=f"paratext export: {dataset_dir.name} ({summary.gold} gold)",
-    )
-    summary.repo = cfg.repo
-    summary.url = f"https://huggingface.co/datasets/{cfg.repo}"
-    return summary
+    return push_built(dest, cfg, summary)
