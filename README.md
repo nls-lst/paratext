@@ -1,5 +1,5 @@
 <h1>
-  <img src="assets/logo.png" alt="paratext logo" height="112" align="middle">&nbsp; paratext
+  <img src="assets/logo.png" alt="paratext logo" height="100" align="middle">&nbsp; paratext
 </h1>
 
 A modular, project-based pipeline that produces metadata from digitised library
