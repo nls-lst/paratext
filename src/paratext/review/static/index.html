@@ -4,6 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>paratext review</title>
+    <!-- Relative href, like every other asset URL here, so it survives being
+         served behind a prefix (e.g. /verify/). Prevents the browser's default
+         /favicon.ico request escaping to the origin root. -->
+    <link rel="icon" href="favicon.svg" />
     <link rel="stylesheet" href="oat.min.css" />
     <!-- Apply the stored theme before first paint, so a dark-mode user doesn't
          get a flash of light. Mirrors lst.nls.uk/conservation. -->
