@@ -3,7 +3,10 @@ name = "paratext"
 version = "0.1.0"
 description = "Plugin VLM metadata-extraction pipeline for digitised library/archive collections"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+# Core is pure-Python + numpy/pillow/pydantic — runs on 3.14. The optional
+# [detector] extra needs torch, which currently ships no cp314 wheels; that
+# constraint is torch's to enforce at install time, not the framework's.
+requires-python = ">=3.11"
 license = "Apache-2.0"
 dependencies = [
     "openai~=2.17",
