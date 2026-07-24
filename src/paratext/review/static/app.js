@@ -1450,8 +1450,6 @@ async function openExportModal() {
     if (!hfAuth) {
       return `<div class="ex-hf">
         ${warn}
-        <p>Publish the gold set to the Hub as <strong>yourself</strong> — sign in with your
-        Hugging Face account. paratext relays the sign-in but never stores your token.</p>
         <button class="button" data-hf-signin>Sign in with Hugging Face</button>
         <p class="ex-hf-status" data-hf-status></p>
       </div>`;
