@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -93,7 +94,7 @@ def select_records(
     threshold = _VERDICT_ORDER.get(min_verdict, 2)
 
     records: list[Record] = []
-    excluded: dict[str, int] = {}
+    excluded: Counter[str] = Counter()
 
     for s in samples:
         sid = str(s["id"])
@@ -108,13 +109,13 @@ def select_records(
         # the old behaviour (good_enough only).
         is_corrected = gold is not None
         if not is_corrected and verdict is None:
-            excluded["unreviewed"] = excluded.get("unreviewed", 0) + 1
+            excluded["unreviewed"] += 1
             continue
 
         is_gold = is_corrected or _VERDICT_ORDER.get(verdict, -1) >= threshold
         is_negative = not is_corrected and verdict == "not_accurate" and include_negatives
         if not (is_gold or is_negative):
-            excluded[verdict] = excluded.get(verdict, 0) + 1
+            excluded[verdict] += 1
             continue
 
         gold_output = (gold or {}).get("output") or {}

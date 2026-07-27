@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -141,7 +142,7 @@ def _rows(dataset_dir: Path, project: str, cfg: ExportConfig, *, db_path: Path |
         annotators=cfg.annotators,
         db_path=db_path,
     )
-    excluded = dict(sel.excluded)
+    excluded = Counter(sel.excluded)
     rows: list[dict] = []
     images: list[Path] = []
 
@@ -153,7 +154,7 @@ def _rows(dataset_dir: Path, project: str, cfg: ExportConfig, *, db_path: Path |
                 "(e.g. index-cards); use --format marc/dc for multi-image, or v2."
             )
         if not rec.images:
-            excluded["no_image"] = excluded.get("no_image", 0) + 1
+            excluded["no_image"] += 1
             continue
 
         src = rec.images[0]  # resolved: <round>/images/<id>/image.jpg

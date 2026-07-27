@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+from collections import Counter
 from pathlib import Path
 
 from PIL import Image
@@ -86,7 +87,7 @@ def package(
     build_record = proj.build_record or _default_build_record
     ground_truth = proj.ground_truth
 
-    skipped: dict[str, int] = {}
+    skipped: Counter[str] = Counter()
     records: list[dict] = []
     quarantined: list[dict] = []  # recoverable, not reviewed (e.g. ephemera)
 
@@ -94,7 +95,7 @@ def package(
         decision = curate(rec)
         if decision.action == "drop":
             key = decision.reason or "dropped"
-            skipped[key] = skipped.get(key, 0) + 1
+            skipped[key] += 1
             continue
 
         images_rel = materialise(rec, out, image_max_size)
@@ -109,7 +110,7 @@ def package(
 
         if decision.action == "quarantine":
             key = decision.reason or "quarantined"
-            skipped[key] = skipped.get(key, 0) + 1
+            skipped[key] += 1
             quarantined.append(r)
         else:
             records.append(r)
