@@ -201,7 +201,12 @@ class View:
     collapsed: list[str] = field(default_factory=list)
 
 
-def _humanize(key: str) -> str:
+def humanise(key: str) -> str:
+    """Field key -> display label ("publication_date" -> "Publication date").
+
+    Shared with the review server, which needs the same labels when it has to
+    synthesise a view for a dataset packaged without one.
+    """
     s = key.replace("_", " ")
     return s[:1].upper() + s[1:]
 
@@ -217,11 +222,11 @@ def _unwrap_optional(ann):
 
 
 def _field_spec(
-    key: str, model: type[BaseModel], labels: dict[str, str], humanize: bool = True
+    key: str, model: type[BaseModel], labels: dict[str, str], humanised: bool = True
 ) -> dict:
     """Describe one field — {key, label, type[, item_fields]} — from the schema."""
     ann = _unwrap_optional(model.model_fields[key].annotation)
-    label = labels.get(key) or (_humanize(key) if humanize else key)
+    label = labels.get(key) or (humanise(key) if humanised else key)
     spec: dict = {"key": key, "label": label}
     if ann is bool:
         spec["type"] = "bool"
@@ -236,7 +241,7 @@ def _field_spec(
         if isinstance(inner, type) and issubclass(inner, BaseModel):
             spec["type"] = "entries"
             spec["item_fields"] = [
-                _field_spec(k, inner, {}, humanize=False) for k in inner.model_fields
+                _field_spec(k, inner, {}, humanised=False) for k in inner.model_fields
             ]
         else:
             spec["type"] = "list"
@@ -252,7 +257,7 @@ def default_view(project: Project) -> View:
     project doesn't define its own `view` (curation: order/hide/labels/GT)."""
     return View(
         layout="split",
-        title=_humanize(project.name),
+        title=humanise(project.name),
         id_label="ID",
         panels=[
             Panel(

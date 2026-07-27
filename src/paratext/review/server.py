@@ -26,6 +26,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from ..projects import humanise
+
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -315,11 +317,6 @@ def load_samples(dataset: dict) -> list[dict]:
     return records
 
 
-def _humanise(key: str) -> str:
-    s = key.replace("_", " ")
-    return s[:1].upper() + s[1:]
-
-
 def _infer_type(v) -> str:
     if isinstance(v, bool):
         return "bool"
@@ -345,7 +342,7 @@ def synthesise_view(dataset: dict, samples: list[dict]) -> dict:
                 if not empty:
                     t = _infer_type(v)
                     break
-            specs.append({"key": k, "label": _humanise(k), "type": t})
+            specs.append({"key": k, "label": humanise(k), "type": t})
         return specs
 
     panels = (
