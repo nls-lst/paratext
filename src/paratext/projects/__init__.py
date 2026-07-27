@@ -1,9 +1,10 @@
 """Project plug-ins. A project owns a prompt, an output schema (Pydantic), and
 a way to enumerate samples from a source directory.
 
-Adding a new project: create `paratext/projects/<name>/__init__.py` exporting
-a Project instance, then register the name in REGISTRY below. Put the prompt in
-a `prompt.md` beside the module and load it with `load_prompt(__file__)`.
+Adding a new project: create a package exporting a Project instance and register
+it under the `paratext.projects` entry-point group (see "Plugin discovery"
+below) — `paratext new` scaffolds both. Put the prompt in a `prompt.md` beside
+the module and load it with `load_prompt(__file__)`.
 """
 
 from __future__ import annotations

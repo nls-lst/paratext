@@ -595,7 +595,9 @@ def _add_extract_args(p: argparse.ArgumentParser) -> None:
                    help="With --green: wait until intensity ≤ GCO2 gCO2/kWh (overrides config)")
 
 
-def _build_parser() -> tuple[argparse.ArgumentParser, list[argparse.ArgumentParser]]:
+def _build_parser() -> tuple[
+    argparse.ArgumentParser, list[argparse.ArgumentParser], argparse.ArgumentParser
+]:
     p = argparse.ArgumentParser(
         prog="paratext",
         description="Metadata extraction from digitised collections with a multimodal model.",
