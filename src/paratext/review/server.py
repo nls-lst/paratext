@@ -535,7 +535,7 @@ class Handler(BaseHTTPRequestHandler):
             ds = self._dataset(qs)
             sid = unquote(u.path.split("/api/gold/", 1)[1])
             return self._json(self.store.upsert_gold(ds["name"], sid, self._body()))
-        self._json({"error": "not found"}, 404)
+        return self._json({"error": "not found"}, 404)
 
     def do_DELETE(self):
         u = urlparse(self.path)
@@ -550,9 +550,9 @@ class Handler(BaseHTTPRequestHandler):
             sid = unquote(u.path.split("/api/gold/", 1)[1])
             self.store.delete_gold(ds["name"], sid)
             return self._json({"ok": True})
-        self._json({"error": "not found"}, 404)
+        return self._json({"error": "not found"}, 404)
 
-    # -- endpoints --
+    # ── Endpoints ───────────────────────────────────────────────────────────
     def _api_datasets(self):
         datasets = discover_datasets(self.data_dir)
         active = _active_round(datasets)

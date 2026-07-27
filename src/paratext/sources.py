@@ -123,12 +123,12 @@ def image_source(
             yield Sample(id=path.stem, images=[img], metadata=meta)
 
     return Source(
-        _iter,
+        iter_samples=_iter,
         # One image per record from metadata.image_path — exactly the packager's
         # generic default, so reuse it rather than keeping a second copy.
-        default_materialise,
-        notices,
-        {
+        materialise=default_materialise,
+        notices=notices,
+        config={
             "kind": "images",
             "verso_filter": verso_filter,
             "crop": crop,
@@ -218,7 +218,7 @@ def pdf_source(
         return rels
 
     return Source(
-        _iter,
-        _materialise,
+        iter_samples=_iter,
+        materialise=_materialise,
         config={"kind": "pdf", "scale": scale, "pages": getattr(pages, "__name__", str(pages))},
     )

@@ -43,6 +43,22 @@ from .review.server import DEFAULT_PORT
 # so `paratext review` with no args groups a project's rounds on its homepage.
 REVIEW_ROOT = Path("review")
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+# Hardcoded fallbacks when neither TOML, env, nor CLI provides a value.
+HARDCODED_DEFAULTS: dict = {
+    "base_url": "http://localhost:8000/v1",
+    "api_key": "EMPTY",  # most local OpenAI-compatible servers ignore the key
+    "limit": None,
+    "review_port": DEFAULT_PORT,
+    "no_structured": False,
+    "skip_preflight": False,
+}
+
 
 # ── Review rounds ────────────────────────────────────────────────────────────
 # A "round" is a prompt version: datasets are named `<project>-r<N>` and the
@@ -90,23 +106,16 @@ def _resolve_round(
         return last_dir, last_round, True  # same prompt → same round
     return REVIEW_ROOT / f"{project}-r{last_round + 1}", last_round + 1, False
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    datefmt="%H:%M:%S",
-)
 
-# Hardcoded fallbacks when neither TOML, env, nor CLI provides a value.
-HARDCODED_DEFAULTS: dict = {
-    "base_url": "http://localhost:8000/v1",
-    "api_key": "EMPTY",  # most local OpenAI-compatible servers ignore the key
-    "limit": None,
-    "review_port": DEFAULT_PORT,
-    "no_structured": False,
-    "skip_preflight": False,
-}
+def _print_skipped(skipped: dict[str, int]) -> None:
+    """Report the packager's skipped-by-reason tally (nothing if it's empty)."""
+    if not skipped:
+        return
+    breakdown = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
+    print(f"Skipped {sum(skipped.values())} item(s): {breakdown}")
 
 
+# ── Extract ───────────────────────────────────────────────────────────────
 def _do_extract(args: argparse.Namespace) -> None:
     missing = [
         flag
@@ -153,7 +162,6 @@ def _do_extract(args: argparse.Namespace) -> None:
     )
 
 
-# ── Extract ───────────────────────────────────────────────────────────────
 def _cmd_extract(args: argparse.Namespace) -> int:
     _do_extract(args)
     print(f"Wrote extractions to {args.output}")
@@ -179,9 +187,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     where = f"round {round_no} ({review_out.name})" if round_no else str(review_out)
     verb = "Updated" if reuse else "Packaged"
     print(f"{verb} {kept} record(s) → {where}")
-    if skipped:
-        breakdown = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
-        print(f"Skipped {sum(skipped.values())} item(s): {breakdown}")
+    _print_skipped(skipped)
 
     from .review.server import is_running
 
@@ -216,9 +222,7 @@ def _cmd_package(args: argparse.Namespace) -> int:
         out, _round, reuse = _resolve_round(project, provenance.get("prompt_hash", ""), args.round)
     kept, skipped = package(args.jsonl, out, project, fresh=args.fresh or not reuse)
     print(f"{'Updated' if reuse else 'Wrote'} {kept} records → {out}")
-    if skipped:
-        breakdown = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
-        print(f"Skipped {sum(skipped.values())} item(s): {breakdown}")
+    _print_skipped(skipped)
     return 0
 
 
