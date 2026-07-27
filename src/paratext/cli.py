@@ -28,8 +28,8 @@ import subprocess
 from pathlib import Path
 
 from .config import (
-    CONFIG_TEMPLATE,
     coerce_paths,
+    config_template,
     load_defaults,
     local_config_path,
 )
@@ -479,7 +479,7 @@ def _cmd_config(args: argparse.Namespace) -> int:
     path = local_config_path()
     fresh = not path.exists()
     if fresh:
-        path.write_text(CONFIG_TEMPLATE)
+        path.write_text(config_template())
         print(f"Created {path} from the default template.")
         # Onboarding: offer (never force) carbon-aware scheduling on a new config.
         import sys

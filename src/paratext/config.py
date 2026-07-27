@@ -32,37 +32,17 @@ from pathlib import Path
 
 ENV_PREFIX = "PARATEXT_"
 
-# Seeded into a fresh paratext.toml by `paratext config`. The package can't read
-# the repo's paratext.example.toml once installed, so the template lives here.
-CONFIG_TEMPLATE = """\
-# paratext config — edit for your environment.
-# `paratext config` opens this; `paratext config --show -p <project>` resolves it.
-#
-# Resolution order (highest first):
-#   CLI flags  >  PARATEXT_* env vars  >  [project.<name>]  >  top-level keys
-# Keys may be kebab-case (base-url) or snake_case (base_url).
 
-base-url = "http://localhost:8000/v1"   # any OpenAI-compatible model server
-# model  = "Qwen3-VL-30B"               # a model id your server serves (required)
-# review-port = 5050                    # port for `paratext review`
+def config_template() -> str:
+    """The starter config `paratext config` seeds into a fresh paratext.toml.
 
-# The bundled starter project. `source` is a flat directory of card images.
-[project.cards]
-source     = "data/cards"
-output     = "output/cards.jsonl"
-review-out = "review/cards"
+    Read from the packaged ``paratext.example.toml`` — the repo-root file,
+    symlinked into the package — so the example a reader finds in the repo and
+    the file the CLI actually writes cannot drift apart.
+    """
+    from importlib.resources import files
 
-# Carbon-aware scheduling for `paratext run --green` (opt-in). Declare your grid
-# region — it's far more precise than national (e.g. South Scotland is often
-# ~85% wind vs ~35% GB-wide). `paratext carbon` shows the current reading.
-# `paratext config --suggest-region` proposes this block from your IP.
-# [carbon]
-# provider = "uk"              # uk / energy-charts (no token) | electricitymaps (needs token)
-# region   = "south-scotland"  # DNO region slug/id, or a UK outcode like "EH"
-# min-renewable = 80           # wait until renewables ≥ 80% (or set max-carbon)
-# mode = "poll"                # poll | window (schedule to the greenest forecast)
-# max-wait = "12h"             # give up waiting and run anyway after this
-"""
+    return (files("paratext") / "paratext.example.toml").read_text(encoding="utf-8")
 
 # Keys the loader will recognise. Anything else in TOML/env is ignored so a
 # stray field doesn't accidentally crash the CLI.
