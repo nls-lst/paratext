@@ -116,6 +116,9 @@ its annotations. Rounds are a linear history — reverting a prompt starts a new
 round. `--round N` forces one; `--fresh` rebuilds a round, discarding its
 annotations. To fold review feedback back into the prompt, read the round's
 `annotations.db` (SQLite: `annotations` for verdicts/notes, `gold_labels` for
-human-corrected answers) or, with the server running, `GET /api/stats`
+human-corrected answers — read it via `store.py`, which is deliberately separate
+from the web server so exporters can select gold without starting one;
+`datasets.py` likewise loads a packaged round and its `view.json`) or, with the
+server running, `GET /api/stats`
 (accuracy/verdict counts + eval-gold size) and `GET /api/export/<id>` (CSV) — then
 tighten the fields reviewers corrected most.
