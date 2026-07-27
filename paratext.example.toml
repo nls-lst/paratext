@@ -4,7 +4,7 @@
 #
 # Resolution order (highest first):
 #   CLI flags  >  PARATEXT_* env vars  >  [project.<name>]  >  top-level keys
-# Keys may be kebab-case (base-url) or snake_case (base_url).
+# Keys are kebab-case, matching the CLI flag that sets them: --base-url -> base-url.
 
 base-url = "http://localhost:8000/v1"   # any OpenAI-compatible model server
 # model  = "Qwen3-VL-30B"               # a model id your server serves (required)

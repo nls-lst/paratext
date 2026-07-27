@@ -11,8 +11,12 @@ first):
     5. Hardcoded defaults in :mod:`paratext.cli`
 
 Env vars are kept alongside the file because they are the idiomatic way to
-configure the CLI inside a container. TOML keys may use either kebab-case
-(``base-url``) or snake_case (``base_url``); both normalise to snake_case.
+configure the CLI inside a container.
+
+**Config keys are kebab-case** (``base-url``), matching the CLI flag that sets
+them (``--base-url``). ``_kebab_to_snake`` also accepts snake_case so an older
+config keeps working, but that is leniency, not a second convention — document
+and generate kebab-case only.
 
 Example ``paratext.toml``::
 
@@ -73,6 +77,8 @@ def _load_toml(path: Path) -> dict:
 
 
 def _kebab_to_snake(d: dict) -> dict:
+    """Config is written kebab-case; Python wants snake_case. Snake_case input
+    passes through unchanged, so an older config still loads."""
     return {k.replace("-", "_"): v for k, v in d.items()}
 
 

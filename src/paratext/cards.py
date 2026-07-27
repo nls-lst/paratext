@@ -19,8 +19,8 @@ prompt or output fields.
 Both are also **calibrated to one collection**: the default weights are trained
 on National Library of Scotland catalogue cards, and the verso thresholds come
 from that same material. Neither is expected to transfer unchanged to another
-library's scans — point ``detector-repo`` at your own weights and recalibrate
-the thresholds before relying on them.
+library's scans — point the ``[detector]`` config table at your own weights and
+recalibrate the thresholds before relying on them.
 """
 
 from __future__ import annotations
@@ -36,9 +36,9 @@ logger = logging.getLogger(__name__)
 
 # Reference weights for the card detector, trained on NLS catalogue cards. This
 # is a starting point, not a general-purpose card detector: another collection's
-# cards will likely need their own weights. Override with `detector-repo` /
-# `detector-file` in paratext.toml, the PARATEXT_CARD_DETECTOR env var (a local
-# weights path), or the `weights=` argument.
+# cards will likely need their own weights. Override with the `[detector]` table
+# in paratext.toml (`repo`/`file` for the Hub, `weights` for a local path), the
+# PARATEXT_CARD_DETECTOR env var, or the `weights=` argument.
 DEFAULT_DETECTOR_REPO = "NationalLibraryOfScotland/card-detector-retinanet"
 DEFAULT_DETECTOR_FILE = "card_detector_retinanet.pt"
 
