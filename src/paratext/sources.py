@@ -20,7 +20,7 @@ from typing import Callable, Iterator
 
 from PIL import Image
 
-from .packaging import save_image
+from .packaging import default_materialise
 from .projects import Sample
 
 logger = logging.getLogger(__name__)
@@ -122,17 +122,11 @@ def image_source(
                 meta["show_through_suppressed"] = True
             yield Sample(id=path.stem, images=[img], metadata=meta)
 
-    def _materialise(rec: dict, out: Path, max_size: int) -> list[str]:
-        src = (rec.get("metadata") or {}).get("image_path")
-        if src and Path(src).exists():
-            rel = f"images/{rec['id']}/image.jpg"
-            save_image(Path(src), out / rel, max_size)
-            return [rel]
-        return []
-
     return Source(
         _iter,
-        _materialise,
+        # One image per record from metadata.image_path — exactly the packager's
+        # generic default, so reuse it rather than keeping a second copy.
+        default_materialise,
         notices,
         {
             "kind": "images",

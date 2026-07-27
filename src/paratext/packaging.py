@@ -43,7 +43,9 @@ def _default_curate(rec: dict) -> Curation:
     return KEEP
 
 
-def _default_materialise(rec: dict, out: Path, max_size: int) -> list[str]:
+def default_materialise(rec: dict, out: Path, max_size: int) -> list[str]:
+    """One image per record from ``metadata.image_path``. Also used by
+    ``sources.image_source``, whose behaviour is identical."""
     src = (rec.get("metadata") or {}).get("image_path")
     if src and Path(src).exists():
         rel = f"images/{rec['id']}/image.jpg"
@@ -80,7 +82,7 @@ def package(
     prompt_hash = provenance.get("prompt_hash", "")
 
     curate = proj.curate or _default_curate
-    materialise = proj.materialise_images or _default_materialise
+    materialise = proj.materialise_images or default_materialise
     build_record = proj.build_record or _default_build_record
     ground_truth = proj.ground_truth
 
