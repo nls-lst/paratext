@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .projects import get_project
-from .review.server import Store
+from .store import Store, default_db_path
 
 # Verdict ordering for the min-verdict gate (higher = more approved).
 _VERDICT_ORDER = {"not_accurate": 0, "needs_tweaks": 1, "good_enough": 2}
@@ -89,7 +89,7 @@ def select_records(
     schema_fields = list(proj.schema.model_fields)
     # Gold may live in a store outside the dataset dir (the review service runs
     # with --db elsewhere), so callers can point at it explicitly.
-    store = Store(db_path or dataset_dir / "annotations.db")
+    store = Store(default_db_path(dataset_dir, db_path))
     name = dataset_dir.name
     threshold = _VERDICT_ORDER.get(min_verdict, 2)
 

@@ -327,11 +327,11 @@ def records_for_scope(
     if scope != "everything":
         return select_records(dataset_dir, project, min_verdict=scope, db_path=db_path).records
 
-    from .review.server import Store
+    from .store import Store, default_db_path
 
     samples = json.loads((dataset_dir / "samples.json").read_text())
     schema_fields = list(get_project(project).schema.model_fields)
-    store = Store(db_path or dataset_dir / "annotations.db")
+    store = Store(default_db_path(dataset_dir, db_path))
     name = dataset_dir.name
     out: list = []
     for s in samples:

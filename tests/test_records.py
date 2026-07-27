@@ -5,7 +5,7 @@ import json
 from PIL import Image
 
 from paratext.records import select_records
-from paratext.review.server import Store
+from paratext.store import Store
 
 
 def _mk_round(tmp_path, *, multi_image=False):

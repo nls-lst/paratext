@@ -7,7 +7,7 @@ from PIL import Image
 
 from paratext import catalogue
 from paratext.records import Record
-from paratext.review.server import Store
+from paratext.store import Store
 
 MARC_NS = "{http://www.loc.gov/MARC21/slim}"
 DC_NS = "{http://purl.org/dc/elements/1.1/}"

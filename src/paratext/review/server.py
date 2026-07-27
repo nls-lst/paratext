@@ -17,16 +17,20 @@ import csv
 import io
 import json
 import logging
-import re
-import sqlite3
-import threading
 import webbrowser
-from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ..projects import humanise
+from ..datasets import (
+    active_rounds,
+    discover_datasets,
+    load_samples,
+    load_view,
+    resolve_dataset,
+    review_stats,
+)
+from ..store import Store, default_db_path
 
 logger = logging.getLogger(__name__)
 
@@ -46,376 +50,7 @@ def is_running(port: int = DEFAULT_PORT) -> bool:
     except Exception:
         return False
 
-VERDICTS_FALLBACK = [
-    {
-        "value": "good_enough",
-        "label": "Good enough",
-        "hotkey": "1",
-        "notes": False,
-        "negative": False,
-    },
-    {
-        "value": "needs_tweaks",
-        "label": "Needs tweaks",
-        "hotkey": "2",
-        "notes": True,
-        "negative": False,
-    },
-    {
-        "value": "not_accurate",
-        "label": "Not accurate",
-        "hotkey": "3",
-        "notes": True,
-        "negative": True,
-    },
-]
 
-
-# ── Annotation store (sqlite) ───────────────────────────────────────────────
-class Store:
-    """One ``annotations`` table keyed by (dataset, sample_id). Corrections are
-    a generic JSON blob keyed by field name, so any schema works."""
-
-    def __init__(self, db_path: Path):
-        # One connection shared across a ThreadingHTTPServer. check_same_thread
-        # permits cross-thread use but does NOT make the connection thread-safe:
-        # concurrent requests raise "bad parameter or other API misuse". The
-        # stats page alone fires three fetches at once, so serialise every access.
-        self._lock = threading.RLock()
-        self.db_path = Path(db_path)  # so callers (e.g. export) can read the same gold
-        self.db = sqlite3.connect(str(db_path), check_same_thread=False)
-        self.db.row_factory = sqlite3.Row
-        self.db.execute(
-            """CREATE TABLE IF NOT EXISTS annotations (
-                dataset TEXT NOT NULL,
-                sample_id TEXT NOT NULL,
-                catalogue_correct TEXT,
-                model_correct TEXT,
-                corrections TEXT,
-                notes TEXT,
-                annotator TEXT,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (dataset, sample_id)
-            )"""
-        )
-        # Human-corrected gold labels, kept in their OWN table (additive: never
-        # alters `annotations`, so pointing --db at a legacy DB is safe). A row
-        # here means the reviewer built a corrected answer for that sample; it
-        # becomes gold in `paratext export`. `output` is the full corrected
-        # field->value map (the label); `fields` lists which keys the human
-        # changed (provenance). NB the `annotations.corrections` column is a
-        # different thing — handwritten corrections on the card, not this.
-        self.db.execute(
-            """CREATE TABLE IF NOT EXISTS gold_labels (
-                dataset TEXT NOT NULL,
-                sample_id TEXT NOT NULL,
-                output TEXT NOT NULL,
-                fields TEXT,
-                annotator TEXT,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (dataset, sample_id)
-            )"""
-        )
-        self.db.commit()
-
-    def _row(self, r: sqlite3.Row) -> dict:
-        corrections = None
-        if r["corrections"]:
-            try:
-                corrections = json.loads(r["corrections"])
-            except json.JSONDecodeError:
-                corrections = None
-        return {
-            "dataset": r["dataset"],
-            "sample_id": r["sample_id"],
-            "catalogue_correct": r["catalogue_correct"],
-            "model_correct": r["model_correct"],
-            "corrections": corrections,
-            "notes": r["notes"],
-            "annotator": r["annotator"],
-            "updated_at": r["updated_at"],
-        }
-
-    def get(self, dataset: str, sample_id: str) -> dict | None:
-        with self._lock:
-            r = self.db.execute(
-                "SELECT * FROM annotations WHERE dataset = ? AND sample_id = ?",
-                (dataset, sample_id),
-            ).fetchone()
-            return self._row(r) if r else None
-
-    def all(self, dataset: str | None = None) -> list[dict]:
-        with self._lock:
-            if dataset is None:
-                rows = self.db.execute("SELECT * FROM annotations").fetchall()
-            else:
-                rows = self.db.execute(
-                    "SELECT * FROM annotations WHERE dataset = ?", (dataset,)
-                ).fetchall()
-            return [self._row(r) for r in rows]
-
-    def upsert(self, dataset: str, sample_id: str, body: dict) -> dict:
-        with self._lock:
-            now = datetime.now(timezone.utc).isoformat()
-            corrections = body.get("corrections")
-            self.db.execute(
-                """INSERT INTO annotations (
-                    dataset, sample_id, catalogue_correct, model_correct,
-                    corrections, notes, annotator, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(dataset, sample_id) DO UPDATE SET
-                    catalogue_correct = excluded.catalogue_correct,
-                    model_correct = excluded.model_correct,
-                    corrections = excluded.corrections,
-                    notes = excluded.notes,
-                    annotator = excluded.annotator,
-                    updated_at = excluded.updated_at""",
-                (
-                    dataset,
-                    sample_id,
-                    body.get("catalogue_correct"),
-                    body.get("model_correct"),
-                    json.dumps(corrections) if corrections else None,
-                    body.get("notes"),
-                    body.get("annotator"),
-                    now,
-                ),
-            )
-            self.db.commit()
-            return self.get(dataset, sample_id)
-
-    def reset(self, dataset: str | None = None) -> None:
-        with self._lock:
-            if dataset is None:
-                self.db.execute("DELETE FROM annotations")
-                self.db.execute("DELETE FROM gold_labels")
-            else:
-                self.db.execute("DELETE FROM annotations WHERE dataset = ?", (dataset,))
-                self.db.execute("DELETE FROM gold_labels WHERE dataset = ?", (dataset,))
-            self.db.commit()
-
-    # -- gold labels (human-corrected answers; see the table comment) --
-    def _gold_row(self, r: sqlite3.Row) -> dict:
-        return {
-            "sample_id": r["sample_id"],
-            "output": json.loads(r["output"]),
-            "fields": json.loads(r["fields"]) if r["fields"] else [],
-            "annotator": r["annotator"],
-            "updated_at": r["updated_at"],
-        }
-
-    def get_gold(self, dataset: str, sample_id: str) -> dict | None:
-        with self._lock:
-            r = self.db.execute(
-                "SELECT * FROM gold_labels WHERE dataset = ? AND sample_id = ?",
-                (dataset, sample_id),
-            ).fetchone()
-            return self._gold_row(r) if r else None
-
-    def all_gold(self, dataset: str) -> list[dict]:
-        with self._lock:
-            rows = self.db.execute(
-                "SELECT * FROM gold_labels WHERE dataset = ?", (dataset,)
-            ).fetchall()
-            return [self._gold_row(r) for r in rows]
-
-    def upsert_gold(self, dataset: str, sample_id: str, body: dict) -> dict:
-        with self._lock:
-            now = datetime.now(timezone.utc).isoformat()
-            self.db.execute(
-                """INSERT INTO gold_labels (
-                    dataset, sample_id, output, fields, annotator, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(dataset, sample_id) DO UPDATE SET
-                    output = excluded.output,
-                    fields = excluded.fields,
-                    annotator = excluded.annotator,
-                    updated_at = excluded.updated_at""",
-                (
-                    dataset,
-                    sample_id,
-                    json.dumps(body.get("output") or {}),
-                    json.dumps(body.get("fields") or []),
-                    body.get("annotator"),
-                    now,
-                ),
-            )
-            self.db.commit()
-            return self.get_gold(dataset, sample_id)
-
-    def delete_gold(self, dataset: str, sample_id: str) -> None:
-        with self._lock:
-            self.db.execute(
-                "DELETE FROM gold_labels WHERE dataset = ? AND sample_id = ?",
-                (dataset, sample_id),
-            )
-            self.db.commit()
-
-
-# ── Dataset discovery + loading ─────────────────────────────────────────────
-def _parse_name(name: str) -> tuple[str, int]:
-    m = re.match(r"^(.*)-r(\d+)$", name)
-    return (m.group(1), int(m.group(2))) if m else (name, 1)
-
-
-def discover_datasets(data_dir: Path) -> list[dict]:
-    """Datasets are subdirs of ``data_dir`` with a samples.json — or ``data_dir``
-    itself if it holds one (single-dataset case)."""
-    out: list[dict] = []
-
-    def _add(name: str, d: Path):
-        records = json.loads((d / "samples.json").read_text())
-        base, rnd = _parse_name(name)
-        schema = (records[0].get("schema") if records else None) or name
-        out.append(
-            {
-                "name": name,
-                "schema": schema,
-                "count": len(records),
-                "dir": d,
-                "base": base,
-                "round": rnd,
-            }
-        )
-
-    if (data_dir / "samples.json").is_file():
-        _add(data_dir.name, data_dir)
-        return out
-    for sub in sorted(p for p in data_dir.iterdir() if p.is_dir()):
-        if (sub / "samples.json").is_file():
-            _add(sub.name, sub)
-    return out
-
-
-def _active_round(datasets: list[dict]) -> dict[str, int]:
-    out: dict[str, int] = {}
-    for d in datasets:
-        out[d["base"]] = max(out.get(d["base"], 0), d["round"])
-    return out
-
-
-def _resolve(data_dir: Path, name: str | None) -> dict:
-    datasets = discover_datasets(data_dir)
-    if not datasets:
-        raise FileNotFoundError(f"No datasets found under {data_dir}")
-    if name:
-        for d in datasets:
-            if d["name"] == name:
-                return d
-        raise KeyError(f"Unknown dataset: {name}")
-    return datasets[0]
-
-
-def load_samples(dataset: dict) -> list[dict]:
-    records = json.loads((dataset["dir"] / "samples.json").read_text())
-    for s in records:
-        imgs = s.get("images") or []
-        s["images"] = [
-            p if p.startswith("/") else f"images/{dataset['name']}/{re.sub('^images/', '', p)}"
-            for p in imgs
-        ]
-    return records
-
-
-def _infer_type(v) -> str:
-    if isinstance(v, bool):
-        return "bool"
-    if isinstance(v, list):
-        return "entries" if (v and isinstance(v[0], dict)) else "list"
-    return "string"
-
-
-def synthesise_view(dataset: dict, samples: list[dict]) -> dict:
-    """Generic view inferred from the data, for datasets packaged without a
-    view.json. Field types come from the first non-empty value across samples."""
-    first = samples[0] if samples else {}
-    has_gt = first.get("ground_truth") is not None
-
-    def fields_of(source: str) -> list[dict]:
-        keys = list((samples[0].get(source) or {}).keys()) if samples else []
-        specs = []
-        for k in keys:
-            t = "string"
-            for s in samples:
-                v = (s.get(source) or {}).get(k)
-                empty = v is None or v == "" or (isinstance(v, list) and not v)
-                if not empty:
-                    t = _infer_type(v)
-                    break
-            specs.append({"key": k, "label": humanise(k), "type": t})
-        return specs
-
-    panels = (
-        [
-            {
-                "source": "ground_truth",
-                "title": "Catalogue ground truth",
-                "fields": fields_of("ground_truth"),
-            },
-            {
-                "source": "model_output",
-                "title": "Model output",
-                "fields": fields_of("model_output"),
-            },
-        ]
-        if has_gt
-        else [
-            {"source": "model_output", "title": "Model output", "fields": fields_of("model_output")}
-        ]
-    )
-    return {
-        "contract_version": 0,
-        "schema": dataset["schema"],
-        "title": dataset["base"],
-        "id_label": "ID",
-        "layout": "stacked" if has_gt else "split",
-        "ground_truth": has_gt,
-        "panels": panels,
-        "scoring": {
-            "verdicts": VERDICTS_FALLBACK,
-            "notes": {
-                "label": "Notes",
-                "placeholder": "Describe what's wrong or what should change…",
-            },
-        },
-    }
-
-
-def load_view(dataset: dict, samples: list[dict]) -> dict:
-    vp = dataset["dir"] / "view.json"
-    if vp.is_file():
-        return json.loads(vp.read_text())
-    return synthesise_view(dataset, samples)
-
-
-def review_stats(
-    total: int, annotations: list[dict], gold_ids: set[str] | None = None
-) -> dict:
-    """Verdict counts + accuracy for a round. `needs_tweaks` counts as half
-    credit. Shared by the `/api/stats` endpoint and `paratext export`.
-
-    `gold_ids` (sample ids with a human-corrected gold label) drives the eval-set
-    figures: `corrected` = how many, `eval_gold` = distinct samples that are
-    `good_enough` OR corrected (the full gold set `paratext export` would ship)."""
-    gold_ids = gold_ids or set()
-    n = lambda v: sum(1 for a in annotations if a["model_correct"] == v)  # noqa: E731
-    good, tweaks, bad = n("good_enough"), n("needs_tweaks"), n("not_accurate")
-    scored = good + tweaks + bad
-    good_ids = {a["sample_id"] for a in annotations if a["model_correct"] == "good_enough"}
-    return {
-        "total": total,
-        "annotated": sum(1 for a in annotations if a["model_correct"] is not None),
-        "flagged_marc": sum(1 for a in annotations if a["catalogue_correct"] == "flagged"),
-        "corrected": len(gold_ids),
-        "eval_gold": len(good_ids | gold_ids),
-        "model": {
-            "good_enough": good,
-            "needs_tweaks": tweaks,
-            "not_accurate": bad,
-            "scored": scored,
-            "accuracy": ((good + tweaks * 0.5) / scored * 100) if scored else None,
-        },
-    }
 
 
 # ── HTTP handler ────────────────────────────────────────────────────────────
@@ -456,7 +91,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _dataset(self, qs):
-        return _resolve(self.data_dir, (qs.get("dataset") or [None])[0])
+        return resolve_dataset(self.data_dir, (qs.get("dataset") or [None])[0])
 
     def _body(self) -> dict:
         n = int(self.headers.get("content-length") or 0)
@@ -555,7 +190,7 @@ class Handler(BaseHTTPRequestHandler):
     # ── Endpoints ───────────────────────────────────────────────────────────
     def _api_datasets(self):
         datasets = discover_datasets(self.data_dir)
-        active = _active_round(datasets)
+        active = active_rounds(datasets)
         self._json(
             [
                 {
@@ -937,7 +572,7 @@ class Handler(BaseHTTPRequestHandler):
         parts = [unquote(p) for p in path.split("/") if p][1:]  # drop "images"
         if len(parts) < 3:
             return self._json({"error": "not found"}, 404)
-        ds = _resolve(self.data_dir, parts[0])
+        ds = resolve_dataset(self.data_dir, parts[0])
         base = (ds["dir"] / "images").resolve()
         target = (base / "/".join(parts[1:])).resolve()
         if base != target and base not in target.parents:  # path-traversal guard
@@ -990,7 +625,7 @@ def serve(
     Handler.data_dir = data_dir
     # Default the annotation store to <data_dir>/annotations.db; --db can point it
     # elsewhere (e.g. an existing DB when swapping in for another review app).
-    Handler.store = Store(Path(db_path).resolve() if db_path else data_dir / "annotations.db")
+    Handler.store = Store(default_db_path(data_dir, Path(db_path).resolve() if db_path else None))
     datasets = discover_datasets(data_dir)
     httpd = ThreadingHTTPServer((host, port), Handler)
     # When bound to all interfaces there's no single canonical URL; show

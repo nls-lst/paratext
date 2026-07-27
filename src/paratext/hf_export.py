@@ -24,9 +24,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import load_project_section
+from .datasets import review_stats
 from .projects import get_project
 from .records import select_records
-from .review.server import review_stats
 
 # HF Hub licence ids are a controlled, SPDX-like vocabulary — the Hub only renders
 # a tag it recognises (so `cc0`, unversioned, would NOT show as a licence; use

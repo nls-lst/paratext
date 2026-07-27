@@ -7,7 +7,7 @@ from PIL import Image
 
 from paratext import hf_export
 from paratext.cli import _steer_license
-from paratext.review.server import Store
+from paratext.store import Store
 
 
 def test_steer_license_defaults_to_cc0(monkeypatch):

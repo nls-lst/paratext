@@ -2,12 +2,8 @@
 
 import json
 
-from paratext.review.server import (
-    Store,
-    discover_datasets,
-    load_samples,
-    synthesise_view,
-)
+from paratext.datasets import discover_datasets, load_samples, synthesise_view
+from paratext.store import Store
 
 
 def test_store_roundtrip(tmp_path):
@@ -50,7 +46,7 @@ def test_gold_survives_reset_scope(tmp_path):
 
 
 def test_review_stats_counts_corrected_and_eval_gold():
-    from paratext.review.server import review_stats
+    from paratext.datasets import review_stats
 
     anns = [
         {"sample_id": "1", "model_correct": "good_enough", "catalogue_correct": None},
