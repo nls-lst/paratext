@@ -19,8 +19,10 @@ build/
 /review/
 /logs/
 
-# Session handoff note (local only)
+# Working notes are kept outside this repo (it is public); these rules are a
+# guard so an internal note dropped in here can't be committed by accident.
 HANDOFF.md
+WORKING-NOTES.md
 
 # Deployed service venv (built from a wheel; not source)
 /deploy/
