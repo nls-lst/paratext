@@ -1,7 +1,7 @@
 [project]
 name = "paratext"
 version = "0.1.0"
-description = "Plugin VLM metadata-extraction pipeline for digitised library/archive collections"
+description = "Modular, project-based metadata extraction from digitised library/archive collections with a multimodal model"
 readme = "README.md"
 # Core is pure-Python + numpy/pillow/pydantic — runs on 3.14. The optional
 # [detector] extra needs torch, which currently ships no cp314 wheels; that

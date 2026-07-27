@@ -6,7 +6,7 @@
 #   CLI flags  >  PARATEXT_* env vars  >  [project.<name>]  >  top-level keys
 # Keys may be kebab-case (base-url) or snake_case (base_url).
 
-base-url = "http://localhost:8000/v1"   # any OpenAI-compatible VLM server
+base-url = "http://localhost:8000/v1"   # any OpenAI-compatible model server
 # model  = "Qwen3-VL-30B"               # a model id your server serves (required)
 # review-port = 5050                    # port for `paratext review`
 
