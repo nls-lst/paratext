@@ -53,8 +53,13 @@ api-key  = "hf_…"                          # or set PARATEXT_API_KEY
 model    = "Qwen/Qwen2.5-VL-7B-Instruct"   # must accept images
 ```
 
-Two things to know:
+Three things to know:
 
+- **`base-url` is the API *base*, not an endpoint.** The client appends
+  `/chat/completions` itself, so `https://openrouter.ai/api/v1` is right and
+  `https://openrouter.ai/api/v1/chat/completions` would request a doubled path.
+  paratext trims a full endpoint URL and tells you it did — but the corrected
+  value is worth putting in your config, not relying on.
 - **Auth** — set `api-key` to your provider token. Local servers ignore it.
 - **Structured output** — extraction uses OpenAI json-schema structured outputs.
   If a provider or model doesn't support them, set `no-structured = true` to fall

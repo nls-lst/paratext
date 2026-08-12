@@ -35,6 +35,20 @@ def preflight_check(base_url: str) -> list[str]:
     try:
         with urllib.request.urlopen(f"{base_url}/models", timeout=5) as resp:
             data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        # It answered, so the host is fine — the path or the credentials aren't.
+        if e.code in (401, 403):
+            raise SystemExit(
+                f"{base_url} rejected the request ({e.code}). This endpoint needs "
+                f"credentials — set --api-key or PARATEXT_API_KEY.\n"
+                f"  Skip this check with --skip-preflight if the key is only "
+                f"accepted on the completions route."
+            ) from e
+        raise SystemExit(
+            f"No model list at {base_url}/models ({e.code}).\n"
+            f"  base-url should be the API *base*, not a full endpoint — e.g. "
+            f"https://openrouter.ai/api/v1, not …/v1/chat/completions."
+        ) from e
     except (urllib.error.URLError, OSError) as e:
         raise SystemExit(
             f"Server not reachable at {base_url} — is it running?\n  {e}"

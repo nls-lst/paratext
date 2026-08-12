@@ -65,6 +65,44 @@ RECOGNISED = (
 )
 
 
+# Paths an OpenAI-compatible client appends for itself. Pasting a whole endpoint
+# URL into `base-url` is an easy mistake — the client then requests
+# `…/chat/completions/chat/completions`, which 404s and reads like the server is
+# down rather than like a config error.
+_OPERATION_PATHS = (
+    "/chat/completions",
+    "/completions",
+    "/embeddings",
+    "/responses",
+    "/models",
+)
+
+
+def normalise_base_url(url: str) -> tuple[str, str | None]:
+    """Return ``(base_url, note)``, correcting the two common malformed values:
+    a full endpoint URL, and a missing scheme. ``note`` is None when nothing
+    substantive changed, so callers only speak up when they actually altered
+    something. Trailing slashes are trimmed silently."""
+    original = url.strip()
+    url = original
+    fixes: list[str] = []
+    if url and "://" not in url:
+        url = f"http://{url}"
+        fixes.append("added http://")
+    url = url.rstrip("/")
+    while True:
+        for path in _OPERATION_PATHS:
+            if url.lower().endswith(path):
+                url = url[: -len(path)].rstrip("/")
+                fixes.append(f"dropped {path}")
+                break
+        else:
+            break
+    if not fixes:
+        return url, None
+    return url, f"base-url: using {url} ({', '.join(fixes)})"
+
+
 def local_config_path(start: Path | None = None) -> Path:
     return (start or Path.cwd()) / "paratext.toml"
 

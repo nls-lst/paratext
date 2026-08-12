@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 import paratext.config as cfg
 
 
@@ -44,3 +46,40 @@ def test_load_defaults_precedence(tmp_path, monkeypatch):
     out = cfg.load_defaults("index-cards")
     assert out["model"] == "env-model"  # env beats the TOML
     assert out["source"] == "/from/toml"  # from the [project.index-cards] section
+
+
+@pytest.mark.parametrize(
+    "given,expected",
+    [
+        # The mistake that prompted this: a full endpoint URL. The client appends
+        # /chat/completions itself, so this would 404 on a doubled path.
+        ("https://openrouter.ai/api/v1/chat/completions", "https://openrouter.ai/api/v1"),
+        ("https://openrouter.ai/api/v1/chat/completions/", "https://openrouter.ai/api/v1"),
+        ("http://localhost:8000/v1/completions", "http://localhost:8000/v1"),
+        ("http://localhost:8000/v1/models", "http://localhost:8000/v1"),
+        ("http://localhost:8000/v1/embeddings", "http://localhost:8000/v1"),
+        ("localhost:8000/v1", "http://localhost:8000/v1"),  # missing scheme
+    ],
+)
+def test_normalise_base_url_corrects_and_reports(given, expected):
+    from paratext.config import normalise_base_url
+
+    url, note = normalise_base_url(given)
+    assert url == expected
+    assert note and expected in note
+
+
+@pytest.mark.parametrize(
+    "given",
+    [
+        "http://localhost:8000/v1",
+        "https://openrouter.ai/api/v1",
+        "https://example.org/v1/",  # trailing slash is trimmed silently
+    ],
+)
+def test_normalise_base_url_stays_quiet_when_already_right(given):
+    from paratext.config import normalise_base_url
+
+    url, note = normalise_base_url(given)
+    assert url == given.rstrip("/")
+    assert note is None

@@ -33,6 +33,7 @@ from .config import (
     config_template,
     load_defaults,
     local_config_path,
+    normalise_base_url,
 )
 from .extract import run as run_extract
 from .io import read_provenance
@@ -132,6 +133,11 @@ def _do_extract(args: argparse.Namespace) -> None:
             f"missing required value(s): {', '.join(missing)}\n"
             f"  pass on the CLI, set PARATEXT_<NAME>, or add to paratext.toml"
         )
+    # Correct a full endpoint URL or a missing scheme before anything uses it,
+    # and say so — silently fixing config teaches the wrong value.
+    args.base_url, note = normalise_base_url(args.base_url or "")
+    if note:
+        print(note)
     # --output defaults to output/<project>.jsonl when unset.
     output = args.output or Path("output") / f"{args.project}.jsonl"
     args.output = output  # so callers (e.g. `run`) see the resolved path
