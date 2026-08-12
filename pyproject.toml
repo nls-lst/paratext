@@ -8,6 +8,7 @@ readme = "README.md"
 # constraint is torch's to enforce at install time, not the framework's.
 requires-python = ">=3.11"
 license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 dependencies = [
     "openai~=2.17",
     "stamina~=25.2",
