@@ -70,3 +70,56 @@ def test_unknown_project_without_a_venv_omits_the_hint(tmp_path, monkeypatch):
 
 def test_known_project_passes_through():
     assert cli._project_arg("card-template") == "card-template"
+
+
+def test_delegate_is_a_noop_without_a_venv(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    cli._delegate_to_project_venv()  # must simply return, not exec
+
+
+def _fake_venv(root, *, with_paratext=True, script=True):
+    venv = root / ".venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "python").write_text("")
+    if script:
+        (venv / "bin" / "paratext").write_text("")
+    if with_paratext:
+        (venv / "lib" / "python3.13" / "site-packages" / "paratext").mkdir(parents=True)
+    return venv
+
+
+def test_delegate_skips_a_venv_without_paratext(tmp_path, monkeypatch):
+    # Execing into an interpreter that can't run this command would be worse
+    # than not finding the project.
+    monkeypatch.chdir(tmp_path)
+    _fake_venv(tmp_path, with_paratext=False)
+    called = []
+    monkeypatch.setattr(cli.os, "execv", lambda *a: called.append(a))
+    cli._delegate_to_project_venv()
+    assert called == []
+
+
+def test_delegate_respects_the_opt_out(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PARATEXT_NO_DELEGATE", "1")
+    _fake_venv(tmp_path)
+    called = []
+    monkeypatch.setattr(cli.os, "execv", lambda *a: called.append(a))
+    cli._delegate_to_project_venv()
+    assert called == []
+
+
+def test_delegate_execs_into_a_project_venv(tmp_path, monkeypatch):
+    import sys
+
+    monkeypatch.chdir(tmp_path)
+    for var in ("PARATEXT_NO_DELEGATE", "_PARATEXT_DELEGATED", "VIRTUAL_ENV"):
+        monkeypatch.delenv(var, raising=False)
+    venv = _fake_venv(tmp_path)
+    called = []
+    monkeypatch.setattr(cli.os, "execv", lambda *a: called.append(a))
+    monkeypatch.setattr(sys, "argv", ["paratext", "inspect"])
+    cli._delegate_to_project_venv()
+    assert called, "expected an exec into the project venv"
+    assert called[0][0] == str(venv / "bin" / "paratext")
+    assert called[0][1][1:] == ["inspect"]

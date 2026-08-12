@@ -289,13 +289,10 @@ def init(name: str | None = None, *, install: bool = True) -> int:
         print("     then reinstall:  uv sync   (or: pip install -e .)")
         n += 1
     print(f"  {n}. Edit {where}/prompt.md and {where}/schema.py (keep them in step).")
-    # `uv run`, not a bare `paratext`: the project is installed in this
-    # directory's .venv, which a globally-installed (uv tool) paratext can't see.
-    print(f"  {n + 1}. Run it:  uv run paratext run -p {ep_name}")
+    # Bare `paratext` is enough: run from here and the CLI hands over to this
+    # directory's .venv, where the project is installed (see _delegate_to_project_venv).
+    print(f"  {n + 1}. Run it:  paratext run -p {ep_name}")
     print(f"  {n + 2}. Guard schema/prompt drift:  uv run pytest tests/test_{mod}_audit.py")
-    print("\n  Use `uv run paratext …` — projects are found per environment, and"
-          "\n  that runs the paratext installed alongside this one. (A tool-installed"
-          "\n  paratext can see it too: uv tool install paratext-cli --with .)")
     return 0
 
 

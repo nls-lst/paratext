@@ -750,7 +750,63 @@ def _build_parser() -> tuple[
     return p, [r, e], rv
 
 
+def _delegate_to_project_venv() -> None:
+    """Re-exec under the nearest project's own virtualenv, so `paratext` run from
+    a project directory sees that project's plug-ins.
+
+    Entry points are discovered per *environment*, so a tool-installed paratext
+    otherwise only ever sees the bundled example. Rather than splice another
+    environment's site-packages onto sys.path — which mixes two dependency sets
+    and breaks in confusing ways — hand the whole process over.
+
+    Deliberately conservative: only when the nearest `.venv` actually has
+    paratext installed, and never over an explicitly activated environment.
+    Set ``PARATEXT_NO_DELEGATE=1`` to turn it off.
+    """
+    import sys
+
+    if os.environ.get("PARATEXT_NO_DELEGATE") or os.environ.get("_PARATEXT_DELEGATED"):
+        return
+    for d in (Path.cwd(), *Path.cwd().parents):
+        venv = d / ".venv"
+        if not venv.is_dir():
+            continue
+        # First .venv found wins, or nothing: walking past it risks landing in an
+        # unrelated parent project.
+        win = os.name == "nt"
+        py = venv / ("Scripts/python.exe" if win else "bin/python")
+        pkg = (venv / "Lib/site-packages/paratext") if win else None
+        installed = pkg.is_dir() if win else any(
+            p.is_dir() for p in venv.glob("lib/python*/site-packages/paratext")
+        )
+        if not py.is_file() or not installed:
+            return
+        try:
+            if Path(sys.prefix).resolve() == venv.resolve():
+                return  # already the target — also what stops the exec looping
+            # An explicitly activated environment is a deliberate choice; respect it.
+            active = os.environ.get("VIRTUAL_ENV")
+            if active and Path(active).resolve() == Path(sys.prefix).resolve():
+                return
+        except OSError:
+            return
+        exe = venv / ("Scripts/paratext.exe" if win else "bin/paratext")
+        cmd = [str(exe), *sys.argv[1:]] if exe.is_file() else [
+            str(py), "-m", "paratext.cli", *sys.argv[1:]
+        ]
+        os.environ["_PARATEXT_DELEGATED"] = "1"
+        try:
+            os.execv(cmd[0], cmd)
+        except OSError:
+            return  # fall through and run here rather than dying
+    return
+
+
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        # Only for a real CLI invocation — an in-process main([...]) call (tests,
+        # embedding) must never replace the process.
+        _delegate_to_project_venv()
     parser, config_subparsers, review_subparser = _build_parser()
 
     project = _peek_project(argv)

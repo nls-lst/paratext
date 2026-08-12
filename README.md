@@ -44,15 +44,12 @@ package, so upgrading the framework leaves them untouched.
 #    inside an existing one, where it nests into your package.
 paratext new my-cards
 
-# From here on, `uv run paratext …` — that runs the copy in this directory's
-# .venv, where your project is installed. See "Where projects are found" below.
-
 # 2. Check what it will actually do before spending a model run on it.
-uv run paratext inspect -p my-cards
+paratext inspect -p my-cards
 
 # 3. Extract, package, and review.
-uv run paratext run -p my-cards --limit 50
-uv run paratext review
+paratext run -p my-cards --limit 50
+paratext review
 ```
 
 `run` writes the extraction JSONL and a `review/my-cards-r1/` dataset;
@@ -76,12 +73,17 @@ the bundled example. Any of these fixes that:
 
 ```bash
 uv run paratext …                          # use the project's own .venv
+source .venv/bin/activate                  # then a bare `paratext` works too
 uv tool install paratext-cli --with .      # inject the project into the tool
 pip install paratext-cli && pip install -e .   # or just share one environment
 ```
 
-`uv run` is the least surprising, which is why the quickstart uses it — but the
-rule is one environment, not one tool.
+You usually don't have to think about it: run from a directory that has a
+`.venv` with paratext in it and the CLI **hands over to that environment
+automatically**, so a bare `paratext run -p my-cards` finds your project. It
+only does this when the nearest `.venv` really has paratext installed, and never
+over an environment you activated yourself. `PARATEXT_NO_DELEGATE=1` turns it
+off.
 
 ## Writing a project
 
