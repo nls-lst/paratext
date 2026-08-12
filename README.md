@@ -16,19 +16,28 @@ schema, and input handling — so the same code path runs a 50-item pilot and a
 
 - **A directory of images or PDFs.** Images are read from a flat directory, one
   item per file; PDFs recursively.
-- **An OpenAI-compatible endpoint serving a model that accepts images.** paratext
-  calls it, it doesn't provide it — [Lemonade](https://lemonade-server.ai/), vLLM,
-  llama.cpp, or a hosted provider all work. This is the part that takes real setup.
-- **Python 3.11–3.13.**
+- **An OpenAI-compatible endpoint serving a model that accepts images.** Local
+  hosting (llama.cpp, vLLM, LM Studio, [Lemonade](https://lemonade-server.ai/)
+  etc) or a hosted provider.
+- **Python 3.11 or newer**, and [uv](https://docs.astral.sh/uv/). (The optional
+  card detector is capped at 3.13 until torch ships 3.14 wheels.)
 
 ## Install
 
+paratext is not on PyPI. Install from a clone:
+
 ```bash
-uv tool install paratext
+git clone https://github.com/nls-lst/paratext
+uv tool install ./paratext
 ```
 
-Upgrade with `uv tool upgrade paratext`. Your projects live in their own package,
-so upgrading the framework leaves them untouched.
+The trailing path matters: plain `uv tool install paratext` resolves an
+unrelated package of the same name from PyPI, which installs no `paratext`
+command.
+
+Upgrade with `git -C paratext pull && uv tool install ./paratext --force`. Your
+projects live in their own package, so upgrading the framework leaves them
+untouched.
 
 ## Quickstart
 
@@ -192,5 +201,6 @@ uv run ruff check              # lint
 
 ## License
 
-Apache-2.0. The card-detector model weights are distributed separately on the
-Hugging Face Hub under their own license.
+Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Copyright 2026
+National Library of Scotland. The card-detector model weights are distributed
+separately on the Hugging Face Hub under their own license.
