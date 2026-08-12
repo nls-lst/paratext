@@ -176,6 +176,8 @@ Run `paratext <command> -h` for that command's flags.
   cropping and show-through suppression for index-card collections.
 - **[Green scheduling](docs/green-scheduling.md)** — wait for a clean electricity
   grid before running a batch.
+- **[Publishing](docs/publishing.md)** — cutting a release to PyPI via Trusted
+  Publishing.
 - **[AGENTS.md](AGENTS.md)** — the guide for AI coding agents, including how to
   extend paratext for your own collection.
 
