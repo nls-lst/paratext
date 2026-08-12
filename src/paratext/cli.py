@@ -574,10 +574,11 @@ def _peek_project(argv: list[str] | None) -> str | None:
 
 def _project_arg(value: str) -> str:
     """Validate -p/--project ourselves rather than via argparse `choices`, so an
-    unknown name can explain the commonest new-user failure: `paratext` installed
-    globally (uv tool) only sees its own environment, while a scaffolded project
-    is installed in the working directory's .venv. There the answer is `uv run
-    paratext …`, which argparse's "invalid choice" cannot tell you."""
+    unknown name can explain the commonest new-user failure. Entry points are
+    discovered per *environment*: a tool-installed paratext is isolated by
+    design, so it can't see a project installed in the working directory's .venv
+    (`uv run paratext …`, or inject it with `--with`). argparse's "invalid
+    choice" gives no way to work that out."""
     import sys
 
     names = project_names()

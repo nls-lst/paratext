@@ -44,8 +44,8 @@ package, so upgrading the framework leaves them untouched.
 #    inside an existing one, where it nests into your package.
 paratext new my-cards
 
-# From here on, `uv run paratext …`: your project is installed in this
-# directory's .venv, and a globally installed paratext can't see it.
+# From here on, `uv run paratext …` — that runs the copy in this directory's
+# .venv, where your project is installed. See "Where projects are found" below.
 
 # 2. Check what it will actually do before spending a model run on it.
 uv run paratext inspect -p my-cards
@@ -64,6 +64,24 @@ preprocessing applied, and whether schema, prompt and view still agree. It
 describes what is **installed** — so if it disagrees with the files you're
 editing, the package needs reinstalling. That mismatch is the most common cause
 of "my change did nothing".
+
+### Where projects are found
+
+Projects are discovered through Python entry points, which are **per
+environment**: paratext finds a project when the two are installed into the
+*same* environment. Nothing about it is tied to your working directory.
+
+`uv tool install` deliberately isolates the tool, so a bare `paratext` sees only
+the bundled example. Any of these fixes that:
+
+```bash
+uv run paratext …                          # use the project's own .venv
+uv tool install paratext-cli --with .      # inject the project into the tool
+pip install paratext-cli && pip install -e .   # or just share one environment
+```
+
+`uv run` is the least surprising, which is why the quickstart uses it — but the
+rule is one environment, not one tool.
 
 ## Writing a project
 

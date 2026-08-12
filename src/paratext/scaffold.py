@@ -293,8 +293,9 @@ def init(name: str | None = None, *, install: bool = True) -> int:
     # directory's .venv, which a globally-installed (uv tool) paratext can't see.
     print(f"  {n + 1}. Run it:  uv run paratext run -p {ep_name}")
     print(f"  {n + 2}. Guard schema/prompt drift:  uv run pytest tests/test_{mod}_audit.py")
-    print("\n  Use `uv run paratext …` from this directory — a globally installed"
-          "\n  paratext sees only its own environment, not the project you just made.")
+    print("\n  Use `uv run paratext …` — projects are found per environment, and"
+          "\n  that runs the paratext installed alongside this one. (A tool-installed"
+          "\n  paratext can see it too: uv tool install paratext-cli --with .)")
     return 0
 
 
