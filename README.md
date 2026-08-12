@@ -44,12 +44,15 @@ package, so upgrading the framework leaves them untouched.
 #    inside an existing one, where it nests into your package.
 paratext new my-cards
 
+# From here on, `uv run paratext …`: your project is installed in this
+# directory's .venv, and a globally installed paratext can't see it.
+
 # 2. Check what it will actually do before spending a model run on it.
-paratext inspect -p my-cards
+uv run paratext inspect -p my-cards
 
 # 3. Extract, package, and review.
-paratext run -p my-cards --limit 50
-paratext review
+uv run paratext run -p my-cards --limit 50
+uv run paratext review
 ```
 
 `run` writes the extraction JSONL and a `review/my-cards-r1/` dataset;

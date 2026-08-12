@@ -42,3 +42,31 @@ def test_broken_project_reports_clearly_not_a_traceback(monkeypatch):
     monkeypatch.setattr(projects, "_entry_points", lambda: {"ghost": _Ghost()})
     with pytest.raises(ValueError, match="registered but its module 'ghost_mod'"):
         projects.get_project("ghost")
+
+
+def test_unknown_project_hints_at_uv_run(tmp_path, monkeypatch):
+    # The failure a new user hits: `paratext` installed globally (uv tool) can't
+    # see a project installed in the working directory's .venv. argparse's
+    # "invalid choice" gave no way to work that out.
+    import argparse
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".venv").mkdir()
+    with pytest.raises(argparse.ArgumentTypeError) as exc:
+        cli._project_arg("my-cards")
+    msg = str(exc.value)
+    assert "unknown project 'my-cards'" in msg
+    assert "uv run paratext" in msg
+
+
+def test_unknown_project_without_a_venv_omits_the_hint(tmp_path, monkeypatch):
+    import argparse
+
+    monkeypatch.chdir(tmp_path)  # no .venv here
+    with pytest.raises(argparse.ArgumentTypeError) as exc:
+        cli._project_arg("my-cards")
+    assert "uv run paratext" not in str(exc.value)
+
+
+def test_known_project_passes_through():
+    assert cli._project_arg("card-template") == "card-template"

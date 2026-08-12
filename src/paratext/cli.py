@@ -572,11 +572,37 @@ def _peek_project(argv: list[str] | None) -> str | None:
     return os.environ.get("PARATEXT_PROJECT")
 
 
+def _project_arg(value: str) -> str:
+    """Validate -p/--project ourselves rather than via argparse `choices`, so an
+    unknown name can explain the commonest new-user failure: `paratext` installed
+    globally (uv tool) only sees its own environment, while a scaffolded project
+    is installed in the working directory's .venv. There the answer is `uv run
+    paratext …`, which argparse's "invalid choice" cannot tell you."""
+    import sys
+
+    names = project_names()
+    if value in names:
+        return value
+    msg = f"unknown project {value!r} (installed: {', '.join(names) or 'none'})"
+    venv = Path.cwd() / ".venv"
+    if venv.is_dir() and Path(sys.prefix).resolve() != venv.resolve():
+        msg += (f"\n  This directory has its own .venv but you're running {sys.prefix}."
+                f"\n  If '{value}' was scaffolded here, run:  uv run paratext …")
+    raise argparse.ArgumentTypeError(msg)
+
+
+def _project_kwargs() -> dict:
+    """`type=`-based validation plus a metavar that still lists what's installed,
+    which is what `choices` used to give us in --help."""
+    names = project_names()
+    return {"type": _project_arg, "metavar": "{" + ",".join(names) + "}" if names else "PROJECT"}
+
+
 def _add_extract_args(p: argparse.ArgumentParser) -> None:
     """Shared --source/--model/… overrides for `extract` and `run`. Defaults
     flow in from the config/env layer; missing values are reported at runtime."""
-    choices = project_names() or None
-    p.add_argument("-p", "--project", choices=choices, default=None, help="Project plug-in to run")
+    p.add_argument("-p", "--project", **_project_kwargs(), default=None,
+                   help="Project plug-in to run")
     p.add_argument("--source", type=Path, default=None, help="Input directory (images or PDFs)")
     p.add_argument("--output", type=Path, default=None,
                    help="Output JSONL path (default: output/<project>.jsonl)")
@@ -612,7 +638,6 @@ def _build_parser() -> tuple[
     )
     p.add_argument("-v", "--version", action="version", version=f"paratext {__version__}")
     sub = p.add_subparsers(dest="cmd", metavar="<command>")
-    choices = project_names() or None
 
     r = sub.add_parser("run", help="Extract then package in one go")
     _add_extract_args(r)
@@ -632,7 +657,7 @@ def _build_parser() -> tuple[
 
     pk = sub.add_parser("package", help="Convert extraction JSONL to a review dataset")
     pk.add_argument("jsonl", type=Path, help="Extraction JSONL produced by `extract`")
-    pk.add_argument("-p", "--project", choices=choices, default=None,
+    pk.add_argument("-p", "--project", **_project_kwargs(), default=None,
                     help="Project plug-in (inferred from the JSONL if omitted)")
     pk.add_argument("--out", type=Path, default=None,
                     help="Output dir (default: the review/<project>-r<N> round for this prompt)")
@@ -643,7 +668,7 @@ def _build_parser() -> tuple[
     pk.set_defaults(func=_cmd_package)
 
     ex = sub.add_parser("export", help="Export a reviewed round (HF dataset / MARC / Dublin Core)")
-    ex.add_argument("-p", "--project", choices=choices, default=None, help="Project to export")
+    ex.add_argument("-p", "--project", **_project_kwargs(), default=None, help="Project to export")
     ex.add_argument("--format", choices=["hf", "marc", "dc"], default=None,
                     help="Output format: hf (HF dataset), marc (MARCXML), dc (Dublin Core). "
                          "Omit to be prompted on a terminal (hf by default).")
@@ -680,7 +705,7 @@ def _build_parser() -> tuple[
 
     ins = sub.add_parser("inspect", help="Show what an installed project does (schema, prompt, "
                                          "source, audit)")
-    ins.add_argument("-p", "--project", choices=choices, default=None,
+    ins.add_argument("-p", "--project", **_project_kwargs(), default=None,
                      help="Project to describe (default: all installed)")
     ins.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary")
     ins.set_defaults(func=_cmd_inspect)
@@ -702,7 +727,7 @@ def _build_parser() -> tuple[
     s.set_defaults(func=_cmd_sample)
 
     cfg = sub.add_parser("config", help="Open the config file (--show prints resolved defaults)")
-    cfg.add_argument("-p", "--project", choices=choices, default=None,
+    cfg.add_argument("-p", "--project", **_project_kwargs(), default=None,
                      help="Project to resolve defaults for (with --show)")
     cfg.add_argument("--show", action="store_true", help="Print resolved defaults instead")
     cfg.add_argument("--suggest-region", action="store_true",
