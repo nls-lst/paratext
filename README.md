@@ -35,8 +35,6 @@ of the same name, which provides no `paratext` command.
 Upgrade with `uv tool upgrade paratext-cli`. Your projects live in their own
 package, so upgrading the framework leaves them untouched.
 
-To run against the source instead, clone it and `uv tool install ./paratext`.
-
 ## Quickstart
 
 ```bash

@@ -190,11 +190,6 @@ requires-python = ">=3.11"
 # `paratext` on PyPI is an unrelated project.
 dependencies = ["paratext-cli"]
 
-# Resolved from git until paratext-cli is published to PyPI. Delete this block
-# once it is — the dependency above is then enough.
-[tool.uv.sources]
-paratext-cli = {{ git = "https://github.com/nls-lst/paratext" }}
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
