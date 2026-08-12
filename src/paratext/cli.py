@@ -27,6 +27,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from . import __version__
 from .config import (
     coerce_paths,
     config_template,
@@ -609,6 +610,7 @@ def _build_parser() -> tuple[
                "(project model, workflow, conventions).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    p.add_argument("-v", "--version", action="version", version=f"paratext {__version__}")
     sub = p.add_subparsers(dest="cmd", metavar="<command>")
     choices = project_names() or None
 
