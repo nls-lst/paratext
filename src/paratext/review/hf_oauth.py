@@ -10,7 +10,7 @@ userinfo, so the browser sidesteps CORS and the flow stays client-secret-free.
 Two deploy knobs, both optional (env or `[project.<name>.export]` config):
 - `hf_client_id` — a registered OAuth app's client id. Needed for localhost dev
   (HF can't fetch a CIMD doc from localhost); in prod, omit it and CIMD is used.
-- `public_base_url` — the browser-visible base (e.g. https://ai.nls.uk/verify),
+- `public_base_url` — the browser-visible base (e.g. https://example.org/verify),
   used to build the CIMD client id and redirect uri. Falls back to the request's
   forwarded headers, then its Host.
 """
