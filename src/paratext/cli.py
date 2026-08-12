@@ -134,6 +134,17 @@ def _do_extract(args: argparse.Namespace) -> None:
             f"missing required value(s): {', '.join(missing)}\n"
             f"  pass on the CLI, set PARATEXT_<NAME>, or add to paratext.toml"
         )
+    # Fail on a bad source before the preflight call, not with a traceback from
+    # inside the adapter mid-run. Both adapters keep their own check for library
+    # callers; this one exists to give the CLI a clean message.
+    source = Path(args.source)
+    if not source.is_dir():
+        what = "is not a directory" if source.exists() else "not found"
+        raise SystemExit(
+            f"source {what}: {source}\n"
+            f"  set `source` under [project.{args.project}] in paratext.toml, "
+            f"or pass --source"
+        )
     # Correct a full endpoint URL or a missing scheme before anything uses it,
     # and say so — silently fixing config teaches the wrong value.
     args.base_url, note = normalise_base_url(args.base_url or "")

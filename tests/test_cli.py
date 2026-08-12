@@ -123,3 +123,32 @@ def test_delegate_execs_into_a_project_venv(tmp_path, monkeypatch):
     assert called, "expected an exec into the project venv"
     assert called[0][0] == str(venv / "bin" / "paratext")
     assert called[0][1][1:] == ["inspect"]
+
+
+def _extract_args(**over):
+    import argparse
+
+    base = dict(project="card-template", source="/nonexistent", model="m",
+                base_url="http://localhost:8000/v1", api_key="EMPTY", output=None,
+                limit=None, no_structured=False, skip_preflight=True, green=False)
+    base.update(over)
+    return argparse.Namespace(**base)
+
+
+def test_missing_source_is_a_clean_error_not_a_traceback(tmp_path, monkeypatch):
+    # A typo'd `source` in paratext.toml used to surface as a FileNotFoundError
+    # traceback from inside the source adapter, mid-run.
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        cli._do_extract(_extract_args())
+    assert "source not found" in str(exc.value)
+    assert "paratext.toml" in str(exc.value)
+
+
+def test_source_that_is_a_file_says_so(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    f = tmp_path / "scans.zip"
+    f.write_text("")
+    with pytest.raises(SystemExit) as exc:
+        cli._do_extract(_extract_args(source=str(f)))
+    assert "is not a directory" in str(exc.value)
