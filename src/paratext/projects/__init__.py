@@ -142,7 +142,19 @@ def get_project(name: str) -> Project:
     if ep is None:
         known = ", ".join(sorted(eps)) or "(none installed)"
         raise ValueError(f"Unknown project: {name}. Known: {known}")
-    obj = ep.load()
+    try:
+        obj = ep.load()
+    except ImportError as exc:
+        # Registered but not importable — nearly always a layout problem: the
+        # project module isn't part of the installed package, so the entry point
+        # resolves while the import behind it doesn't. A bare traceback here is
+        # the first thing a new user sees, so name the likely cause.
+        module = str(ep.value).split(":")[0]
+        raise ValueError(
+            f"Project {name!r} is registered but its module {module!r} could not "
+            f"be imported ({exc}). Is it inside your installed package — and has "
+            f"`uv sync` run since it was added?"
+        ) from exc
     return obj() if not isinstance(obj, Project) and callable(obj) else obj
 
 

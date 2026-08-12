@@ -44,6 +44,8 @@ untouched.
 ```bash
 # 1. Scaffold a project: asks input type, fields and prompt, writes the config,
 #    registers the entry point, runs `uv sync`. Ready to run.
+#    Works in an empty directory (it offers to create the project for you) or
+#    inside an existing one, where it nests into your package.
 paratext new my-cards
 
 # 2. Check what it will actually do before spending a model run on it.

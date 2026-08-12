@@ -105,10 +105,16 @@ def render_project(
     verso: bool = False,
     crop: bool = False,
     fields: list[str] | None = None,
+    pkg_dir: str = "",
+    pkg_name: str = "",
 ):
     """Return ``{filename: content}`` for a new project. ``kind`` is
     ``"images"`` or ``"pdf"``; ``verso``/``crop`` apply to image projects;
-    ``fields`` seeds the schema (defaults to a single ``title``)."""
+    ``fields`` seeds the schema (defaults to a single ``title``).
+
+    ``pkg_dir``/``pkg_name`` nest the project inside an existing package (e.g.
+    ``"src/demo"``/``"demo"``), so it ships with that package and its entry
+    point actually imports. Both empty = write at the root (flat layout)."""
     mod = to_module_name(name)
     ep_name = mod.replace("_", "-")
     src_import, src_call = _source_expr(kind, verso, crop)
@@ -131,12 +137,92 @@ PROJECT = Project(
     source={src_call},
 )
 '''
+    where = f"{pkg_dir}/{mod}" if pkg_dir else mod
+    dotted = f"{pkg_name}.{mod}" if pkg_name else mod
     return {
-        f"{mod}/schema.py": _render_schema(name, fields or ["title"]),
-        f"{mod}/prompt.md": _render_prompt(fields or ["title"]),
-        f"{mod}/__init__.py": init_py,
-        f"tests/test_{mod}_audit.py": TEST_STUB.format(ep_name=ep_name, mod=mod),
+        f"{where}/schema.py": _render_schema(name, fields or ["title"]),
+        f"{where}/prompt.md": _render_prompt(fields or ["title"]),
+        f"{where}/__init__.py": init_py,
+        f"tests/test_{mod}_audit.py": TEST_STUB.format(ep_name=ep_name, mod=dotted),
     }
+
+
+def _project_name(pyproject: Path) -> str:
+    import tomllib
+
+    try:
+        return tomllib.loads(pyproject.read_text()).get("project", {}).get("name", "")
+    except (OSError, tomllib.TOMLDecodeError):
+        return ""
+
+
+def detect_package(root: Path | None = None) -> tuple[str, str]:
+    """Where a new project module should live: ``(dir prefix, import prefix)``.
+
+    An entry point only resolves if its module is inside the *installed*
+    package, so a module written beside a ``src/`` layout registers fine and
+    then fails to import. Nest into the package instead. Returns ``("", "")``
+    for a flat layout or no project, meaning "write at the root"."""
+    root = root or Path.cwd()
+    src = root / "src"
+    if src.is_dir():
+        pkgs = sorted(p for p in src.iterdir() if (p / "__init__.py").is_file())
+        if len(pkgs) == 1:
+            return f"src/{pkgs[0].name}", pkgs[0].name
+        return "", ""  # ambiguous: don't guess which package owns the project
+    name = _project_name(root / "pyproject.toml")
+    if name:
+        cand = root / to_module_name(name)
+        if (cand / "__init__.py").is_file():
+            return cand.name, cand.name
+    return "", ""
+
+
+# A minimal packaged project, so a scaffold in an empty directory is runnable
+# rather than merely written. Flat layout: the project module sits at the root
+# and is packaged by name, which is the layout `paratext new` writes into.
+BOOTSTRAP_PYPROJECT = '''\
+[project]
+name = "{name}"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["paratext"]
+
+# paratext is resolved from git, not PyPI, where the name belongs to an
+# unrelated package. Declared as a uv source rather than a direct reference in
+# `dependencies` so the build backend stays happy; if you install with pip
+# instead of uv, install paratext from the URL below yourself.
+[tool.uv.sources]
+paratext = {{ git = "https://github.com/nls-lst/paratext" }}
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["{mod}"]
+
+# The scaffolded audit test guards schema/prompt drift; `uv run pytest` needs it.
+[dependency-groups]
+dev = ["pytest>=8.0"]
+'''
+
+
+def _offer_bootstrap(mod: str) -> bool:
+    """With no pyproject.toml there is nothing to install into, so the entry
+    point can never resolve. Offer to write a minimal packaged project so the
+    scaffold is runnable. Returns True if one was written."""
+    pyproject = Path.cwd() / "pyproject.toml"
+    if pyproject.exists():
+        return False
+    print("\n  No pyproject.toml here, so there's nothing for the project to be "
+          "installed into\n  (an entry point only resolves from an installed package).")
+    if not _ask(f"  Create a minimal one packaging '{mod}'?", default=True):
+        return False
+    name = to_module_name(Path.cwd().name) or "my-project"
+    pyproject.write_text(BOOTSTRAP_PYPROJECT.format(name=name.replace("_", "-"), mod=mod))
+    print(f"  Wrote pyproject.toml (project '{name}', packaging {mod}/).")
+    return True
 
 
 def _ask(question: str, default: bool) -> bool:
@@ -174,9 +260,15 @@ def init(name: str | None = None, *, install: bool = True) -> int:
     raw = input("Metadata fields, comma-separated (e.g. title, author, date) [title]: ")
     fields = [f.strip() for f in raw.split(",") if f.strip()] or ["title"]
 
-    files = render_project(name, kind=kind, verso=verso, crop=crop, fields=fields)
     mod = to_module_name(name)
-    dest = Path.cwd() / mod
+    if install:
+        _offer_bootstrap(mod)
+    pkg_dir, pkg_name = detect_package()
+    files = render_project(name, kind=kind, verso=verso, crop=crop, fields=fields,
+                           pkg_dir=pkg_dir, pkg_name=pkg_name)
+    where = f"{pkg_dir}/{mod}" if pkg_dir else mod
+    dotted = f"{pkg_name}.{mod}" if pkg_name else mod
+    dest = Path.cwd() / where
     if dest.exists():
         raise SystemExit(f"refusing to overwrite existing directory: {dest}")
     for rel, content in files.items():
@@ -185,21 +277,23 @@ def init(name: str | None = None, *, install: bool = True) -> int:
         path.write_text(content)
 
     ep_name = mod.replace("_", "-")
-    print(f"\nCreated ./{mod}/ (schema.py + prompt.md + __init__.py) "
+    print(f"\nCreated ./{where}/ (schema.py + prompt.md + __init__.py) "
           f"and tests/test_{mod}_audit.py.")
+    if pkg_name:
+        print(f"  Nested inside the '{pkg_name}' package so it ships with it.")
 
     _offer_config(ep_name)
-    registered = _register_and_sync(mod, ep_name, install)
+    registered = _register_and_sync(dotted, ep_name, install)
 
     print("\nNext steps:")
     n = 1
     if not registered:
         print(f"  {n}. Register the project — add to your pyproject.toml:")
         print('       [project.entry-points."paratext.projects"]')
-        print(f'       {ep_name} = "{mod}:PROJECT"')
+        print(f'       {ep_name} = "{dotted}:PROJECT"')
         print("     then reinstall:  uv sync   (or: pip install -e .)")
         n += 1
-    print(f"  {n}. Edit {mod}/prompt.md and {mod}/schema.py (keep them in step).")
+    print(f"  {n}. Edit {where}/prompt.md and {where}/schema.py (keep them in step).")
     print(f"  {n + 1}. Run it:  paratext run -p {ep_name}")
     print(f"  {n + 2}. Guard schema/prompt drift:  uv run pytest tests/test_{mod}_audit.py")
     return 0
@@ -262,8 +356,16 @@ def _register_and_sync(mod: str, ep_name: str, install: bool) -> bool:
              f"import sys; sys.exit(0 if '{ep_name}' in p() else 1)"],
         )
         if check.returncode != 0:
-            print(f"  Note: '{ep_name}' isn't discovered yet — make sure {mod}/ is "
-                  "part of your installed package (e.g. under the package root).")
+            # Registered but not installed. Almost always the build config: the
+            # module is on disk and in pyproject, but the wheel doesn't ship it.
+            print(f"\n  ! '{ep_name}' still isn't discovered, so `paratext run -p "
+                  f"{ep_name}` won't work yet.")
+            print(f"    {mod.split('.')[0]}/ has to be part of what your project "
+                  "packages. Check the build\n    config in pyproject.toml — e.g. for "
+                  "hatchling:")
+            print(f'        [tool.hatch.build.targets.wheel]\n        packages = '
+                  f'["{mod.split(".")[0]}"]')
+            print("    then re-run `uv sync`.")
     else:
         print("  uv not found — run `pip install -e .` to reinstall.")
     return True

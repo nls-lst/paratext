@@ -742,7 +742,12 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "func", None) is None:
         parser.print_help()
         return 0
-    return args.func(args)
+    try:
+        return args.func(args)
+    except ValueError as exc:
+        # Project lookup/loading raises ValueError with a user-facing message
+        # (a library shouldn't raise SystemExit). Show it, don't traceback.
+        raise SystemExit(str(exc)) from exc
 
 
 if __name__ == "__main__":

@@ -121,3 +121,72 @@ def test_insert_entry_point_into_existing_table(tmp_path):
     assert scaffold._insert_entry_point(pp, text, "my-cards", "my_cards") is True
     eps = tomllib.loads(pp.read_text())["project"]["entry-points"]["paratext.projects"]
     assert eps == {"existing": "existing:PROJECT", "my-cards": "my_cards:PROJECT"}
+
+
+def test_detect_package_finds_src_layout(tmp_path):
+    from paratext import scaffold
+
+    (tmp_path / "src" / "demo").mkdir(parents=True)
+    (tmp_path / "src" / "demo" / "__init__.py").write_text("")
+    assert scaffold.detect_package(tmp_path) == ("src/demo", "demo")
+
+
+def test_detect_package_finds_flat_layout(tmp_path):
+    from paratext import scaffold
+
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo"\n')
+    (tmp_path / "demo").mkdir()
+    (tmp_path / "demo" / "__init__.py").write_text("")
+    assert scaffold.detect_package(tmp_path) == ("demo", "demo")
+
+
+def test_detect_package_declines_when_ambiguous(tmp_path):
+    from paratext import scaffold
+
+    # Two packages under src/: guessing which one owns the project would be worse
+    # than writing at the root and reporting it.
+    for pkg in ("one", "two"):
+        (tmp_path / "src" / pkg).mkdir(parents=True)
+        (tmp_path / "src" / pkg / "__init__.py").write_text("")
+    assert scaffold.detect_package(tmp_path) == ("", "")
+
+
+def test_detect_package_empty_dir(tmp_path):
+    from paratext import scaffold
+
+    assert scaffold.detect_package(tmp_path) == ("", "")
+
+
+def test_render_project_nests_into_a_package():
+    # The entry point must be the dotted path, or it registers and won't import.
+    files = render_project("My Cards", pkg_dir="src/demo", pkg_name="demo")
+    assert "src/demo/my_cards/__init__.py" in files
+    assert "tests/test_my_cards_audit.py" in files  # tests stay at the root
+    assert "from demo.my_cards import PROJECT" in files["tests/test_my_cards_audit.py"]
+    # relative import still works nested
+    assert "from .schema import Record" in files["src/demo/my_cards/__init__.py"]
+
+
+def test_bootstrap_pyproject_is_valid_and_packages_the_module(tmp_path, monkeypatch):
+    import tomllib
+
+    from paratext import scaffold
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("builtins.input", lambda *a: "y")
+    assert scaffold._offer_bootstrap("my_cards") is True
+
+    parsed = tomllib.loads((tmp_path / "pyproject.toml").read_text())
+    assert parsed["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["my_cards"]
+    # Must resolve from git: the PyPI name is an unrelated package.
+    assert "github.com/nls-lst/paratext" in parsed["tool"]["uv"]["sources"]["paratext"]["git"]
+    assert parsed["project"]["dependencies"] == ["paratext"]
+
+
+def test_bootstrap_leaves_an_existing_pyproject_alone(tmp_path, monkeypatch):
+    from paratext import scaffold
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "mine"\n')
+    assert scaffold._offer_bootstrap("my_cards") is False
+    assert (tmp_path / "pyproject.toml").read_text() == '[project]\nname = "mine"\n'
