@@ -32,7 +32,7 @@ Once a project has a section, `paratext run -p my-cards` needs nothing else.
 | Key | Default | What |
 | --- | --- | --- |
 | `base-url` | `http://localhost:8000/v1` | OpenAI-compatible endpoint |
-| `api-key` | `EMPTY` | Token; local servers ignore it |
+| `api-key` | `EMPTY` | Token; prefer `PARATEXT_API_KEY` (see below). Local servers ignore it |
 | `model` | *(required)* | Model id your endpoint serves |
 | `limit` | none | Process at most N inputs |
 | `review-port` | `5050` | Port for `paratext review` |
@@ -49,8 +49,10 @@ a local server — only `base-url`, `api-key` and `model` change.
 
 ```toml
 base-url = "https://router.huggingface.co/v1"
-api-key  = "hf_…"                          # or set PARATEXT_API_KEY
 model    = "Qwen/Qwen2.5-VL-7B-Instruct"   # must accept images
+```
+```bash
+export PARATEXT_API_KEY=hf_…               # keep the token out of the file
 ```
 
 Three things to know:
@@ -60,7 +62,11 @@ Three things to know:
   `https://openrouter.ai/api/v1/chat/completions` would request a doubled path.
   paratext trims a full endpoint URL and tells you it did — but the corrected
   value is worth putting in your config, not relying on.
-- **Auth** — set `api-key` to your provider token. Local servers ignore it.
+- **Auth — keep the token in the environment.** `paratext.toml` holds source
+  paths and model ids, so it is normally committed; a provider token in it is one
+  `git add` from being published. Use `PARATEXT_API_KEY` or `--api-key`. The
+  `api-key` config key exists and works, but paratext warns when it finds a token
+  there for a remote endpoint. Local servers ignore the key entirely.
 - **Structured output** — extraction uses OpenAI json-schema structured outputs.
   If a provider or model doesn't support them, set `no-structured = true` to fall
   back to a plain completion plus JSON parsing.

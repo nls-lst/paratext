@@ -29,6 +29,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import (
+    api_key_in_file,
     coerce_paths,
     config_template,
     load_defaults,
@@ -138,6 +139,9 @@ def _do_extract(args: argparse.Namespace) -> None:
     args.base_url, note = normalise_base_url(args.base_url or "")
     if note:
         print(note)
+    if api_key_in_file(args.project, args.base_url):
+        print("note: api-key is set in paratext.toml, which is normally committed."
+              "\n  Prefer PARATEXT_API_KEY (or --api-key) for a provider token.")
     # --output defaults to output/<project>.jsonl when unset.
     output = args.output or Path("output") / f"{args.project}.jsonl"
     args.output = output  # so callers (e.g. `run`) see the resolved path

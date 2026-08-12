@@ -83,3 +83,37 @@ def test_normalise_base_url_stays_quiet_when_already_right(given):
     url, note = normalise_base_url(given)
     assert url == given.rstrip("/")
     assert note is None
+
+
+def _write_config(tmp_path, body):
+    (tmp_path / "paratext.toml").write_text(body)
+
+
+def test_api_key_in_file_flags_a_remote_token(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_config(tmp_path, 'api-key = "sk-or-secret"\n')
+    assert cfg.api_key_in_file(None, "https://openrouter.ai/api/v1") is True
+
+
+def test_api_key_in_file_flags_a_per_project_token(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_config(tmp_path, '[project.my-cards]\napi-key = "sk-or-secret"\n')
+    assert cfg.api_key_in_file("my-cards", "https://openrouter.ai/api/v1") is True
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    ["http://localhost:8000/v1", "http://127.0.0.1:8000/v1", "http://box.local/v1"],
+)
+def test_api_key_in_file_ignores_local_servers(tmp_path, monkeypatch, base_url):
+    # Local servers ignore the key, so there's no secret to leak.
+    monkeypatch.chdir(tmp_path)
+    _write_config(tmp_path, 'api-key = "EMPTY"\n')
+    assert cfg.api_key_in_file(None, base_url) is False
+
+
+def test_api_key_in_file_quiet_when_the_key_is_not_in_the_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_config(tmp_path, 'model = "m"\n')
+    monkeypatch.setenv("PARATEXT_API_KEY", "sk-or-secret")  # env is the right place
+    assert cfg.api_key_in_file(None, "https://openrouter.ai/api/v1") is False

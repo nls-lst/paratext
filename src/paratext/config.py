@@ -138,6 +138,23 @@ def _merge_layer(base: dict, layer: dict, project: str | None) -> None:
                     base[k] = v
 
 
+_LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]")
+
+
+def api_key_in_file(project: str | None, base_url: str) -> bool:
+    """True when a token for a *remote* endpoint is sitting in paratext.toml.
+
+    That file belongs in version control — it holds source paths and model ids —
+    so a provider token in it is one `git add` from being published. Local
+    servers ignore the key entirely, so there's nothing to warn about there."""
+    host = base_url.split("://")[-1].split("/")[0].split(":")[0]
+    if not host or host in _LOCAL_HOSTS or host.endswith(".local"):
+        return False
+    layer: dict = {}
+    _merge_layer(layer, _load_toml(local_config_path()), project)
+    return bool(layer.get("api_key"))
+
+
 def load_defaults(project: str | None) -> dict:
     """Return resolved defaults for the given project (excluding CLI flags).
 
