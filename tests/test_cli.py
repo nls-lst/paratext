@@ -20,8 +20,10 @@ def test_version_flag_prints_version(flag, capsys):
 
 def test_version_matches_package_metadata():
     # __version__ and pyproject's version are separate declarations; keep them
-    # honest so `paratext -v` can't report a stale number.
-    assert paratext.__version__ == version("paratext")
+    # honest so `paratext -v` can't report a stale number. NB the distribution is
+    # `paratext-cli` while the import package is `paratext` — the plain name on
+    # PyPI is an unrelated project.
+    assert paratext.__version__ == version("paratext-cli")
 
 
 def test_broken_project_reports_clearly_not_a_traceback(monkeypatch):

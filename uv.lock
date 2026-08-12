@@ -802,7 +802,7 @@ wheels = [
 ]
 
 [[package]]
-name = "paratext"
+name = "paratext-cli"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

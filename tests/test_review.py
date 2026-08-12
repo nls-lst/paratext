@@ -151,7 +151,9 @@ def test_api_projects_describes_installed_projects():
     assert "card-template" in projects
     p = projects["card-template"]
     assert p["schema_version"] == "v1"
-    assert p["entry_point"]["package"] == "paratext"
+    # The providing *distribution*, which is `paratext-cli` — the import package
+    # and the CLI are both `paratext`.
+    assert p["entry_point"]["package"] == "paratext-cli"
     assert p["source"]["kind"] == "images"
     # The bundled example must ship with the card-specific preprocessing off.
     assert p["source"]["crop"] is False

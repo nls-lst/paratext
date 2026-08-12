@@ -25,7 +25,7 @@ A permissive (BSD) torchvision RetinaNet that crops a scan down to the card,
 removing desk background. Needs the `[detector]` extra:
 
 ```bash
-uv tool install "./paratext[detector]"
+uv tool install "paratext-cli[detector]"
 ```
 
 If the runtime or the weights are unavailable it falls back to a **uniform

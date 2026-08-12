@@ -178,9 +178,8 @@ def test_bootstrap_pyproject_is_valid_and_packages_the_module(tmp_path, monkeypa
 
     parsed = tomllib.loads((tmp_path / "pyproject.toml").read_text())
     assert parsed["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["my_cards"]
-    # Must resolve from git: the PyPI name is an unrelated package.
-    assert "github.com/nls-lst/paratext" in parsed["tool"]["uv"]["sources"]["paratext"]["git"]
-    assert parsed["project"]["dependencies"] == ["paratext"]
+    # The distribution is paratext-cli; plain `paratext` on PyPI is unrelated.
+    assert parsed["project"]["dependencies"] == ["paratext-cli"]
 
 
 def test_bootstrap_leaves_an_existing_pyproject_alone(tmp_path, monkeypatch):

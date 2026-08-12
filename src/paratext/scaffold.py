@@ -186,14 +186,14 @@ BOOTSTRAP_PYPROJECT = '''\
 name = "{name}"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["paratext"]
+# The distribution is `paratext-cli`; the import package is `paratext`. Plain
+# `paratext` on PyPI is an unrelated project.
+dependencies = ["paratext-cli"]
 
-# paratext is resolved from git, not PyPI, where the name belongs to an
-# unrelated package. Declared as a uv source rather than a direct reference in
-# `dependencies` so the build backend stays happy; if you install with pip
-# instead of uv, install paratext from the URL below yourself.
+# Resolved from git until paratext-cli is published to PyPI. Delete this block
+# once it is — the dependency above is then enough.
 [tool.uv.sources]
-paratext = {{ git = "https://github.com/nls-lst/paratext" }}
+paratext-cli = {{ git = "https://github.com/nls-lst/paratext" }}
 
 [build-system]
 requires = ["hatchling"]

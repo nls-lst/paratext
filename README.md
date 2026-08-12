@@ -24,20 +24,18 @@ schema, and input handling — so the same code path runs a 50-item pilot and a
 
 ## Install
 
-paratext is not on PyPI. Install from a clone:
-
 ```bash
-git clone https://github.com/nls-lst/paratext
-uv tool install ./paratext
+uv tool install paratext-cli
 ```
 
-The trailing path matters: plain `uv tool install paratext` resolves an
-unrelated package of the same name from PyPI, which installs no `paratext`
-command.
+The distribution is **`paratext-cli`**; the command and the import package are
+both `paratext`. Installing plain `paratext` gets you an unrelated PyPI project
+of the same name, which provides no `paratext` command.
 
-Upgrade with `git -C paratext pull && uv tool install ./paratext --force`. Your
-projects live in their own package, so upgrading the framework leaves them
-untouched.
+Upgrade with `uv tool upgrade paratext-cli`. Your projects live in their own
+package, so upgrading the framework leaves them untouched.
+
+To run against the source instead, clone it and `uv tool install ./paratext`.
 
 ## Quickstart
 
