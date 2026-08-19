@@ -221,6 +221,22 @@ def _first_value(label: dict, mapping: dict[str, str], tag: str, sub: str) -> st
     return ""
 
 
+# MARC 21 leader, 24 characters. Positions that carry meaning for what paratext
+# emits (the rest are fixed or filled in by the receiving system):
+#   05    n  record status: new
+#   06    a  type of record: language material
+#   07    m  bibliographic level: monograph
+#   09    a  character coding: Unicode
+#   17    5  encoding level: partial (preliminary) — these are machine
+#            extractions awaiting cataloguer review, not full-level records
+#   18    i  descriptive cataloguing form: ISBD punctuation included, which is
+#            what _punctuate_isbd puts in 245 and 264
+#   19  ' '  multipart resource record level: not specified
+# NB position 19 is a literal space. MARC documentation writes blank as "#", but
+# the character on the wire is 0x20 — an actual "#" would be invalid data.
+LEADER = "00000nam a22000005i 4500"
+
+
 def _append_isbd(df: ET.Element, code: str, separator: str) -> None:
     """Append an ISBD `separator` to subfield `code`, if that subfield has text.
 
@@ -261,7 +277,7 @@ def _punctuate_isbd(merged: dict[str, ET.Element]) -> None:
 
 def _record_to_marc(label: dict, mapping: dict[str, str], control_no: str | None) -> ET.Element:
     rec = ET.Element("record")
-    ET.SubElement(rec, "leader").text = "00000nam a2200000 a 4500"
+    ET.SubElement(rec, "leader").text = LEADER
     if control_no:
         ET.SubElement(rec, "controlfield", tag="001").text = control_no
     has_author = any(

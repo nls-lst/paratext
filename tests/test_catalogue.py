@@ -289,3 +289,32 @@ def test_imprint_punctuation_is_not_doubled():
     assert _imprint(publication_place="Edinburgh :", publisher="Blackwood,",
                     publication_date="1791") == {
         "a": "Edinburgh : ", "b": "Blackwood, ", "c": "1791"}
+
+
+# ── Leader ───────────────────────────────────────────────────────────────────
+def test_leader_is_24_characters():
+    # Fixed-length field: a miscount silently shifts every position after it.
+    assert len(catalogue.LEADER) == 24
+
+
+def test_leader_positions():
+    ldr = catalogue.LEADER
+    assert ldr[5:8] == "nam"   # new / language material / monograph
+    assert ldr[9] == "a"       # Unicode
+    assert ldr[17] == "5"      # encoding level: partial (preliminary)
+    assert ldr[18] == "i"      # ISBD punctuation included
+    assert ldr[19] == " "      # multipart level: not specified
+    assert ldr[20:] == "4500"  # entry map
+
+
+def test_leader_position_19_is_a_space_not_a_hash():
+    # MARC docs render blank as "#"; the byte on the wire must be 0x20.
+    assert "#" not in catalogue.LEADER
+
+
+def test_leader_reaches_the_serialized_record():
+    root = _build({"title": "Waverley"}, {"title": "245$a"})
+    leader = root.find(f"{MARC_NS}record/{MARC_NS}leader")
+    # Exact match, not a strip() — indentation leaking into a fixed-length field
+    # would shift every position in it.
+    assert leader is not None and leader.text == catalogue.LEADER
