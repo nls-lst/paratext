@@ -174,21 +174,51 @@ def _split_marc(spec: str) -> list[tuple[str, str]]:
     return out
 
 
-def _marc_indicators(tag: str, has_author: bool) -> tuple[str, str]:
+# 245 second indicator = how many leading characters a sort should skip, so a
+# title filed under its first significant word. The count includes the trailing
+# space: "The " is 4, "An " 3, "A " 2, anything else 0.
+_NONFILING = (("the ", "4"), ("an ", "3"), ("a ", "2"))
+
+
+def nonfiling_indicator(title: str) -> str:
+    """MARC 245 ind2 for `title` — the number of characters to skip when sorting."""
+    lowered = (title or "").lstrip().lower()
+    for article, indicator in _NONFILING:
+        if lowered.startswith(article):
+            return indicator
+    return "0"
+
+
+def _marc_indicators(tag: str, has_author: bool, title: str = "") -> tuple[str, str]:
     if tag == "245":
-        return ("1" if has_author else "0", "0")
-    if tag in ("100", "110", "700", "710"):
-        return ("1", " ")
+        # ind1 = whether a title added entry is needed: 0 when the title is the
+        # main entry, 1 when a 1XX holds it.
+        return ("1" if has_author else "0", nonfiling_indicator(title))
+    if tag in ("100", "700"):
+        return ("1", " ")  # personal name, surname-first
+    if tag in ("110", "710"):
+        return ("2", " ")  # corporate name in direct order
     if tag == "264":
         return (" ", "1")
     return (" ", " ")
 
 
-def _datafield(tag: str, sub: str, value: str, has_author: bool) -> ET.Element:
-    i1, i2 = _marc_indicators(tag, has_author)
+def _datafield(tag: str, sub: str, value: str, has_author: bool, title: str = "") -> ET.Element:
+    i1, i2 = _marc_indicators(tag, has_author, title)
     df = ET.Element("datafield", tag=tag, ind1=i1, ind2=i2)
     ET.SubElement(df, "subfield", code=sub).text = value
     return df
+
+
+def _first_value(label: dict, mapping: dict[str, str], tag: str, sub: str) -> str:
+    """The first mapped value destined for `tag$sub` — used for the 245 rules,
+    which need the title text itself, not just its presence."""
+    for field, spec in mapping.items():
+        if _split_marc(spec)[0] == (tag, sub):
+            values = _as_list(label.get(field))
+            if values:
+                return values[0]
+    return ""
 
 
 def _record_to_marc(label: dict, mapping: dict[str, str], control_no: str | None) -> ET.Element:
@@ -204,6 +234,7 @@ def _record_to_marc(label: dict, mapping: dict[str, str], control_no: str | None
     # Subfields destined for the same main tag are merged into one datafield (e.g.
     # 245$a + 245$b, or 264$a/$b/$c); each extra list value becomes its own repeatable
     # added-entry datafield (e.g. authors after the first → 700).
+    title = _first_value(label, mapping, "245", "a")
     merged: dict[str, ET.Element] = {}
     extras: list[tuple[str, ET.Element]] = []
     for f, spec in mapping.items():
@@ -214,13 +245,24 @@ def _record_to_marc(label: dict, mapping: dict[str, str], control_no: str | None
         main_tag, main_sub = targets[0]
         added_tag, added_sub = targets[1] if len(targets) > 1 else targets[0]
         if main_tag not in merged:
-            i1, i2 = _marc_indicators(main_tag, has_author)
+            i1, i2 = _marc_indicators(main_tag, has_author, title)
             merged[main_tag] = ET.Element("datafield", tag=main_tag, ind1=i1, ind2=i2)
         ET.SubElement(merged[main_tag], "subfield", code=main_sub).text = values[0]
         for extra in values[1:]:
-            extras.append((added_tag, _datafield(added_tag, added_sub, extra, has_author)))
+            extras.append(
+                (added_tag, _datafield(added_tag, added_sub, extra, has_author, title))
+            )
     for df in merged.values():  # tidy subfield order within a datafield (264 → $a$b$c)
         df[:] = sorted(df, key=lambda sf: sf.get("code", ""))
+    # ISBD punctuation: a title followed by a subtitle carries the separator on
+    # 245$a, so the two read as one statement when the subfields are concatenated.
+    if "245" in merged:
+        sub_a = merged["245"].find("subfield[@code='a']")
+        sub_b = merged["245"].find("subfield[@code='b']")
+        if sub_a is not None and sub_b is not None and sub_a.text:
+            # rstrip the colon too: a model that already transcribed the ISBD
+            # punctuation off the page would otherwise get " : : ".
+            sub_a.text = sub_a.text.rstrip().rstrip(":").rstrip() + " : "
     ordered = list(merged.items()) + extras
     for _tag, df in sorted(ordered, key=lambda x: x[0]):
         rec.append(df)

@@ -3,6 +3,7 @@
 import json
 from xml.etree import ElementTree as ET
 
+import pytest
 from PIL import Image
 
 from paratext import catalogue
@@ -59,7 +60,8 @@ def test_marc_serialization_and_added_entries():
                 out += [sf.text for sf in df if sf.get("code") == code]
         return out
 
-    assert subfields("245", "a") == ["T"] and subfields("245", "b") == ["S"]
+    # $a carries the ISBD separator because a subtitle follows it
+    assert subfields("245", "a") == ["T : "] and subfields("245", "b") == ["S"]
     assert subfields("100", "a") == ["A, A"]  # first author → main entry
     assert subfields("700", "a") == ["B, B"]  # second → added entry
     assert subfields("264", "a") == ["L"] and subfields("264", "c") == ["1900"]
@@ -159,3 +161,80 @@ def test_export_bytes_scopes_and_marc(tmp_path, monkeypatch):
     xml, n = export_bytes(d, "card-template", "marc", "everything", db_path=gold_db)
     assert n == 2 and xml.startswith(b"<?xml")
     assert b"MARC21/slim" in xml
+
+
+# ── 245 nonfiling indicator ──────────────────────────────────────────────────
+# ind2 tells a catalogue how many leading characters to skip when sorting, so
+# "The Bruce" files under B. The count includes the article's trailing space.
+@pytest.mark.parametrize("title,expected", [
+    ("The Bruce", "4"),
+    ("An Account of the Highlands", "3"),
+    ("A History of Scotland", "2"),
+    ("Waverley", "0"),
+    ("", "0"),
+    ("the bruce", "4"),          # case-insensitive
+    ("  The Bruce", "4"),        # leading whitespace ignored
+    ("Theatre Royal", "0"),      # "The" without a space is not an article
+    ("Anderson's Almanac", "0"),
+    ("Aberdeen", "0"),
+    ("A", "0"),                  # bare article, nothing to skip past
+])
+def test_nonfiling_indicator(title, expected):
+    assert catalogue.nonfiling_indicator(title) == expected
+
+
+def _indicators(root, tag):
+    for df in root.iter(f"{MARC_NS}datafield"):
+        if df.get("tag") == tag:
+            return df.get("ind1"), df.get("ind2")
+    return None
+
+
+def _build(label, mapping):
+    root = catalogue.build_marc([_rec(label)], mapping).getroot()
+    return ET.fromstring(ET.tostring(root))
+
+
+def test_245_indicators_reflect_the_article_and_the_main_entry():
+    mapping = {"title": "245$a", "personal_authors": "100$a|700$a"}
+    root = _build({"title": "The Bruce", "personal_authors": ["Barbour, John"]}, mapping)
+    assert _indicators(root, "245") == ("1", "4")  # 1XX present → title added entry
+
+
+def test_245_ind1_is_zero_without_a_1xx():
+    root = _build({"title": "An Account"}, {"title": "245$a"})
+    assert _indicators(root, "245") == ("0", "3")
+
+
+def test_corporate_names_are_in_direct_order():
+    # 110/710 ind1=2 ("name in direct order"), unlike a personal name's 1
+    # ("surname first"). Both were emitting 1 before.
+    mapping = {"corporate_authors": "110$a|710$a", "title": "245$a"}
+    root = _build(
+        {"title": "Reports", "corporate_authors": ["Bank of Scotland", "Royal Society"]},
+        mapping,
+    )
+    assert _indicators(root, "110") == ("2", " ")
+    assert _indicators(root, "710") == ("2", " ")
+
+
+def test_personal_names_keep_indicator_one():
+    mapping = {"personal_authors": "100$a|700$a", "title": "245$a"}
+    root = _build({"title": "Poems", "personal_authors": ["Burns, Robert", "Scott, W"]}, mapping)
+    assert _indicators(root, "100") == ("1", " ")
+    assert _indicators(root, "700") == ("1", " ")
+
+
+def test_title_without_a_subtitle_gets_no_separator():
+    root = _build({"title": "Waverley"}, {"title": "245$a", "subtitle": "245$b"})
+    a = [sf.text for df in root.iter(f"{MARC_NS}datafield") if df.get("tag") == "245"
+         for sf in df if sf.get("code") == "a"]
+    assert a == ["Waverley"]
+
+
+def test_separator_is_not_doubled_on_a_title_that_already_ends_in_a_colon():
+    root = _build({"title": "Waverley :", "subtitle": "a novel"},
+                  {"title": "245$a", "subtitle": "245$b"})
+    a = [sf.text for df in root.iter(f"{MARC_NS}datafield") if df.get("tag") == "245"
+         for sf in df if sf.get("code") == "a"]
+    assert a == ["Waverley : "]
