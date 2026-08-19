@@ -237,13 +237,12 @@ def _first_value(label: dict, mapping: dict[str, str], tag: str, sub: str) -> st
 LEADER = "00000nam a22000005i 4500"
 
 
-def _append_isbd(df: ET.Element, code: str, separator: str) -> None:
-    """Append an ISBD `separator` to subfield `code`, if that subfield has text.
+def _append_text(sub: ET.Element | None, separator: str) -> None:
+    """Append an ISBD `separator` to one subfield, if it has text.
 
     Idempotent on the punctuation itself: a model that transcribed the mark off
     the page would otherwise produce " : : ".
     """
-    sub = df.find(f"subfield[@code='{code}']")
     if sub is None or not sub.text:
         return
     text = sub.text.rstrip()
@@ -253,9 +252,14 @@ def _append_isbd(df: ET.Element, code: str, separator: str) -> None:
     sub.text = text + separator
 
 
+def _append_isbd(df: ET.Element, code: str, separator: str) -> None:
+    """Append an ISBD `separator` to subfield `code` of `df`."""
+    _append_text(df.find(f"subfield[@code='{code}']"), separator)
+
+
 def _punctuate_isbd(merged: dict[str, ET.Element]) -> None:
     """Add the ISBD separators that make concatenated subfields read as prose:
-    ``Title : subtitle`` and ``Place : Publisher, Date``.
+    ``Title : subtitle.`` and ``Place : Publisher, Date.``
 
     The separator belongs to the subfield it *follows*, so what gets punctuated
     depends on which neighbours are present — with no publisher, the comma before
@@ -263,8 +267,14 @@ def _punctuate_isbd(merged: dict[str, ET.Element]) -> None:
     with a full stop.
     """
     title = merged.get("245")
-    if title is not None and title.find("subfield[@code='b']") is not None:
-        _append_isbd(title, "a", " : ")
+    if title is not None:
+        if title.find("subfield[@code='b']") is not None:
+            _append_isbd(title, "a", " : ")
+        # The title statement closes with a full stop on whichever subfield ends
+        # it — $b when there's a subtitle, otherwise $a. Subfields were sorted
+        # into code order above, so the last element is the last subfield.
+        if len(title):
+            _append_text(title[-1], ".")
 
     imprint = merged.get("264")
     if imprint is None:

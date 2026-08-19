@@ -61,7 +61,7 @@ def test_marc_serialization_and_added_entries():
         return out
 
     # $a carries the ISBD separator because a subtitle follows it
-    assert subfields("245", "a") == ["T : "] and subfields("245", "b") == ["S"]
+    assert subfields("245", "a") == ["T : "] and subfields("245", "b") == ["S."]
     assert subfields("100", "a") == ["A, A"]  # first author → main entry
     assert subfields("700", "a") == ["B, B"]  # second → added entry
     # 264 carries ISBD punctuation too: "L : P, 1900"
@@ -132,9 +132,10 @@ def test_run_writes_marcxml(tmp_path, monkeypatch):
     assert summary.path.name == "cards-r1.marcxml"
     root = ET.parse(summary.path).getroot()
     assert len(list(root)) == 2  # a <record> per gold row
+    # mapped to 245$a, so the headings take the terminating stop like any title
     headings = [sf.text for sf in root.iter(f"{MARC_NS}subfield")
-                if sf.text in ("Hume, David", "Smith, Adam")]
-    assert set(headings) == {"Hume, David", "Smith, Adam"}
+                if sf.text in ("Hume, David.", "Smith, Adam.")]
+    assert set(headings) == {"Hume, David.", "Smith, Adam."}
 
 
 def test_export_bytes_scopes_and_marc(tmp_path, monkeypatch):
@@ -227,11 +228,11 @@ def test_personal_names_keep_indicator_one():
     assert _indicators(root, "700") == ("1", " ")
 
 
-def test_title_without_a_subtitle_gets_no_separator():
+def test_title_without_a_subtitle_takes_the_full_stop_on_a():
     root = _build({"title": "Waverley"}, {"title": "245$a", "subtitle": "245$b"})
     a = [sf.text for df in root.iter(f"{MARC_NS}datafield") if df.get("tag") == "245"
          for sf in df if sf.get("code") == "a"]
-    assert a == ["Waverley"]
+    assert a == ["Waverley."]
 
 
 def test_separator_is_not_doubled_on_a_title_that_already_ends_in_a_colon():
@@ -326,3 +327,33 @@ def test_date_full_stop_is_not_doubled():
 
 def test_date_full_stop_follows_a_bracketed_date():
     assert _imprint(publication_date="[1791]")["c"] == "[1791]."
+
+
+# ── 245 terminating full stop ────────────────────────────────────────────────
+def _title(**label):
+    root = _build(label, {"title": "245$a", "subtitle": "245$b"})
+    df = next(d for d in root.iter(f"{MARC_NS}datafield") if d.get("tag") == "245")
+    return {sf.get("code"): sf.text for sf in df}
+
+
+def test_subtitle_carries_the_full_stop_not_the_title():
+    assert _title(title="Waverley", subtitle="a novel") == {
+        "a": "Waverley : ", "b": "a novel."}
+
+
+def test_title_alone_carries_the_full_stop():
+    assert _title(title="Waverley") == {"a": "Waverley."}
+
+
+def test_title_full_stop_is_not_doubled():
+    assert _title(title="Waverley.") == {"a": "Waverley."}
+    assert _title(title="Waverley", subtitle="a novel.") == {
+        "a": "Waverley : ", "b": "a novel."}
+
+
+def test_title_full_stop_does_not_disturb_the_nonfiling_count():
+    # The stop is appended after the indicator is computed from the raw title.
+    root = _build({"title": "The Bruce"}, {"title": "245$a"})
+    df = next(d for d in root.iter(f"{MARC_NS}datafield") if d.get("tag") == "245")
+    assert df.get("ind2") == "4"
+    assert [sf.text for sf in df] == ["The Bruce."]
