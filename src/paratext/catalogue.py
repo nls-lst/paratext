@@ -221,6 +221,44 @@ def _first_value(label: dict, mapping: dict[str, str], tag: str, sub: str) -> st
     return ""
 
 
+def _append_isbd(df: ET.Element, code: str, separator: str) -> None:
+    """Append an ISBD `separator` to subfield `code`, if that subfield has text.
+
+    Idempotent on the punctuation itself: a model that transcribed the mark off
+    the page would otherwise produce " : : ".
+    """
+    sub = df.find(f"subfield[@code='{code}']")
+    if sub is None or not sub.text:
+        return
+    text = sub.text.rstrip()
+    mark = separator.strip()
+    if text.endswith(mark):
+        text = text[: -len(mark)].rstrip()
+    sub.text = text + separator
+
+
+def _punctuate_isbd(merged: dict[str, ET.Element]) -> None:
+    """Add the ISBD separators that make concatenated subfields read as prose:
+    ``Title : subtitle`` and ``Place : Publisher, Date``.
+
+    The separator belongs to the subfield it *follows*, so what gets punctuated
+    depends on which neighbours are present — with no publisher, the comma before
+    a date falls to the place instead.
+    """
+    title = merged.get("245")
+    if title is not None and title.find("subfield[@code='b']") is not None:
+        _append_isbd(title, "a", " : ")
+
+    imprint = merged.get("264")
+    if imprint is None:
+        return
+    present = {c for c in "abc" if imprint.find(f"subfield[@code='{c}']") is not None}
+    if {"a", "b"} <= present:
+        _append_isbd(imprint, "a", " : ")
+    if "c" in present and present & {"a", "b"}:
+        _append_isbd(imprint, "b" if "b" in present else "a", ", ")
+
+
 def _record_to_marc(label: dict, mapping: dict[str, str], control_no: str | None) -> ET.Element:
     rec = ET.Element("record")
     ET.SubElement(rec, "leader").text = "00000nam a2200000 a 4500"
@@ -254,15 +292,7 @@ def _record_to_marc(label: dict, mapping: dict[str, str], control_no: str | None
             )
     for df in merged.values():  # tidy subfield order within a datafield (264 → $a$b$c)
         df[:] = sorted(df, key=lambda sf: sf.get("code", ""))
-    # ISBD punctuation: a title followed by a subtitle carries the separator on
-    # 245$a, so the two read as one statement when the subfields are concatenated.
-    if "245" in merged:
-        sub_a = merged["245"].find("subfield[@code='a']")
-        sub_b = merged["245"].find("subfield[@code='b']")
-        if sub_a is not None and sub_b is not None and sub_a.text:
-            # rstrip the colon too: a model that already transcribed the ISBD
-            # punctuation off the page would otherwise get " : : ".
-            sub_a.text = sub_a.text.rstrip().rstrip(":").rstrip() + " : "
+    _punctuate_isbd(merged)
     ordered = list(merged.items()) + extras
     for _tag, df in sorted(ordered, key=lambda x: x[0]):
         rec.append(df)

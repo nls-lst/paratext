@@ -64,7 +64,9 @@ def test_marc_serialization_and_added_entries():
     assert subfields("245", "a") == ["T : "] and subfields("245", "b") == ["S"]
     assert subfields("100", "a") == ["A, A"]  # first author → main entry
     assert subfields("700", "a") == ["B, B"]  # second → added entry
-    assert subfields("264", "a") == ["L"] and subfields("264", "c") == ["1900"]
+    # 264 carries ISBD punctuation too: "L : P, 1900"
+    assert subfields("264", "a") == ["L : "] and subfields("264", "b") == ["P, "]
+    assert subfields("264", "c") == ["1900"]
     assert subfields("020", "a") == ["123"]
     # 264 subfields tidied into $a $b $c order
     df264 = next(d for d in root.iter(f"{MARC_NS}datafield") if d.get("tag") == "264")
@@ -238,3 +240,52 @@ def test_separator_is_not_doubled_on_a_title_that_already_ends_in_a_colon():
     a = [sf.text for df in root.iter(f"{MARC_NS}datafield") if df.get("tag") == "245"
          for sf in df if sf.get("code") == "a"]
     assert a == ["Waverley : "]
+
+
+# ── 264 ISBD punctuation ─────────────────────────────────────────────────────
+# "Place : Publisher, Date". The separator belongs to the subfield it follows,
+# so which subfield carries it depends on which neighbours exist.
+_IMPRINT = {"publication_place": "264$a", "publisher": "264$b", "publication_date": "264$c"}
+
+
+def _imprint(**label):
+    root = _build(label, _IMPRINT)
+    df = next(d for d in root.iter(f"{MARC_NS}datafield") if d.get("tag") == "264")
+    return {sf.get("code"): sf.text for sf in df}
+
+
+def test_place_publisher_and_date():
+    assert _imprint(publication_place="Edinburgh", publisher="Blackwood",
+                    publication_date="1791") == {
+        "a": "Edinburgh : ", "b": "Blackwood, ", "c": "1791"}
+
+
+def test_date_without_a_publisher_puts_the_comma_on_the_place():
+    assert _imprint(publication_place="Edinburgh", publication_date="1791") == {
+        "a": "Edinburgh, ", "c": "1791"}
+
+
+def test_date_without_a_place_puts_the_comma_on_the_publisher():
+    assert _imprint(publisher="Blackwood", publication_date="1791") == {
+        "b": "Blackwood, ", "c": "1791"}
+
+
+def test_place_and_publisher_without_a_date_take_only_the_colon():
+    assert _imprint(publication_place="Edinburgh", publisher="Blackwood") == {
+        "a": "Edinburgh : ", "b": "Blackwood"}
+
+
+def test_a_lone_date_is_left_alone():
+    assert _imprint(publication_date="1791") == {"c": "1791"}
+
+
+def test_a_lone_place_is_left_alone():
+    assert _imprint(publication_place="Edinburgh") == {"a": "Edinburgh"}
+
+
+def test_imprint_punctuation_is_not_doubled():
+    # The card may already carry the ISBD marks; transcribing them shouldn't
+    # produce "Edinburgh : : Blackwood, , 1791".
+    assert _imprint(publication_place="Edinburgh :", publisher="Blackwood,",
+                    publication_date="1791") == {
+        "a": "Edinburgh : ", "b": "Blackwood, ", "c": "1791"}
