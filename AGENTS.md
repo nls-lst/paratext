@@ -234,11 +234,17 @@ alongside `_api_export_catalogue`.
 
 ## Conventions
 
-- **Rounds.** `run` writes `review/<project>-r<N>`, keyed on the **prompt hash**:
-  editing `prompt.md` rolls a new round (the UI diffs the two latest); re-running
-  the same prompt updates the current round in place, keeping its annotations.
-  Rounds are linear — reverting a prompt starts a new round, it doesn't return to
-  the old one. `--round N` forces; `--fresh` rebuilds and discards annotations.
+- **Rounds.** `run` writes `review/<project>-r<N>`, keyed on the **prompt hash
+  and the model**: change either and it rolls a new round (the UI diffs the two
+  latest); re-run the same prompt on the same model and it updates the current
+  round in place, keeping its annotations. The model is part of the key because
+  annotations are keyed `(dataset, sample_id)` — reusing a round across a model
+  swap would leave verdicts attached by id to output nobody reviewed. A round
+  packaged before `provenance.json` existed doesn't record its model and so is
+  never reused; you get an extra round and a line saying why. Rounds are linear —
+  reverting a prompt starts a new round, it doesn't return to the old one.
+  `--round N` forces (and skips the model check); `--fresh` rebuilds and discards
+  annotations.
 - **Reading feedback back into the prompt.** `annotations.db` holds verdicts and
   notes (`annotations`) and human-corrected answers (`gold_labels`); read it via
   `store.py`. With the server running, `GET /api/stats` gives accuracy and

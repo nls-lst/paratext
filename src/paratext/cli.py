@@ -92,24 +92,53 @@ def _prompt_hash_of(dataset_dir: Path) -> str | None:
     return records[0].get("prompt_hash") if records else None
 
 
-def _resolve_round(
-    project: str, prompt_hash: str, forced: int | None
-) -> tuple[Path, int, bool]:
-    """Pick the review-output dir for this run. Returns (dir, round, reuse).
+def _model_of(dataset_dir: Path) -> str | None:
+    """The model a packaged round was built with, or None if it doesn't say.
 
-    `reuse` is True when we're re-writing an existing round (same prompt), which
-    the caller uses to preserve that round's annotations. `forced` is --round N.
+    `package` stashes the run's provenance beside the samples; rounds packaged
+    before it did have no record of their model.
+    """
+    try:
+        return json.loads((dataset_dir / "provenance.json").read_text()).get("model")
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return None
+
+
+def _resolve_round(
+    project: str, prompt_hash: str, forced: int | None, model: str | None = None
+) -> tuple[Path, int, bool, str | None]:
+    """Pick the review-output dir for this run. Returns (dir, round, reuse, reason).
+
+    A round is one *run configuration*: re-running the same prompt on the same
+    model updates that round in place, anything else rolls to the next one.
+    Annotations are keyed `(dataset, sample_id)`, so reusing a round across a
+    changed model would leave verdicts attached by id to output nobody reviewed.
+
+    The model check only applies when we know both models: `model=None` means the
+    caller didn't say (prompt-only, the old behaviour), while a round that
+    doesn't record its own model can't be verified and so is never reused.
+    `reason` explains a roll, for the caller to report. `forced` is --round N.
     """
     rounds = _round_dirs(project)
     if forced is not None:
         reuse = any(r == forced for r, _ in rounds)
-        return REVIEW_ROOT / f"{project}-r{forced}", forced, reuse
+        return REVIEW_ROOT / f"{project}-r{forced}", forced, reuse, None
     if not rounds:
-        return REVIEW_ROOT / f"{project}-r1", 1, False
+        return REVIEW_ROOT / f"{project}-r1", 1, False, None
     last_round, last_dir = rounds[-1]
-    if prompt_hash and _prompt_hash_of(last_dir) == prompt_hash:
-        return last_dir, last_round, True  # same prompt → same round
-    return REVIEW_ROOT / f"{project}-r{last_round + 1}", last_round + 1, False
+    nxt = REVIEW_ROOT / f"{project}-r{last_round + 1}"
+    if not prompt_hash or _prompt_hash_of(last_dir) != prompt_hash:
+        return nxt, last_round + 1, False, "the prompt changed"
+    if model is not None:
+        was = _model_of(last_dir)
+        if was is None:
+            return nxt, last_round + 1, False, (
+                f"round {last_round} doesn't record which model built it, so it "
+                f"can't be confirmed as {model}"
+            )
+        if was != model:
+            return nxt, last_round + 1, False, f"the model changed ({was} → {model})"
+    return last_dir, last_round, True, None  # same prompt, same model
 
 
 def _print_skipped(skipped: dict[str, int]) -> None:
@@ -202,9 +231,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
     # prompt changed and updating the current round in place when it didn't.
     if args.review_out:
         review_out, round_no, reuse = Path(args.review_out), None, args.review_out.exists()
+        reason = None
     else:
-        prompt_hash = read_provenance(Path(args.output)).get("prompt_hash", "")
-        review_out, round_no, reuse = _resolve_round(args.project, prompt_hash, args.round)
+        provenance = read_provenance(Path(args.output))
+        review_out, round_no, reuse, reason = _resolve_round(
+            args.project, provenance.get("prompt_hash", ""), args.round,
+            model=provenance.get("model"),
+        )
     # Preserve a reused round's annotations; only clobber on a new round or --fresh.
     kept, skipped = package(
         Path(args.output), review_out, args.project, fresh=args.fresh or not reuse
@@ -212,7 +245,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     print(f"Wrote extractions to {args.output}")
     where = f"round {round_no} ({review_out.name})" if round_no else str(review_out)
     verb = "Updated" if reuse else "Packaged"
-    print(f"{verb} {kept} record(s) → {where}")
+    print(f"{verb} {kept} record(s) → {where}" + (f" — {reason}" if reason else ""))
     _print_skipped(skipped)
 
     from .review.server import is_running
@@ -245,7 +278,10 @@ def _cmd_package(args: argparse.Namespace) -> int:
     if args.out:
         out, reuse = args.out, args.out.exists()
     else:
-        out, _round, reuse = _resolve_round(project, provenance.get("prompt_hash", ""), args.round)
+        out, _round, reuse, _reason = _resolve_round(
+            project, provenance.get("prompt_hash", ""), args.round,
+            model=provenance.get("model"),
+        )
     kept, skipped = package(args.jsonl, out, project, fresh=args.fresh or not reuse)
     print(f"{'Updated' if reuse else 'Wrote'} {kept} records → {out}")
     _print_skipped(skipped)
