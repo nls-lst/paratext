@@ -20,7 +20,7 @@ from .io import (
     write_provenance_header,
 )
 from .projects import Project
-from .runner import call_plain, call_structured
+from .runner import DEFAULT_MAX_TOKENS, call_plain, call_structured
 
 logger = logging.getLogger(__name__)
 
@@ -65,15 +65,23 @@ def run(
     use_structured: bool = True,
     skip_preflight: bool = False,
     energy: dict | None = None,
+    max_tokens: int | None = None,
+    extra_body: dict | None = None,
 ) -> None:
     """Execute the extraction pipeline and write JSONL to `output`."""
     if not skip_preflight:
         preflight_check(base_url)
 
     client = OpenAI(base_url=base_url, api_key=api_key)
-    extra_body: dict | None = None
+    # The project's vLLM-dialect hint is the floor; caller-supplied extra_body
+    # (from paratext.toml) layers on top, so a user on another provider can send
+    # that provider's reasoning control without the project knowing about it.
+    body: dict = {}
     if project.disable_thinking:
-        extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
+        body["chat_template_kwargs"] = {"enable_thinking": False}
+    body.update(extra_body or {})
+    extra_body = body or None
+    max_tokens = max_tokens or project.max_tokens or DEFAULT_MAX_TOKENS
 
     header = {
         "project": project.name,
@@ -82,6 +90,7 @@ def run(
         "prompt": project.prompt,
         "model": model,
         "base_url": base_url,
+        "max_tokens": max_tokens,
     }
     if energy is not None:
         header["energy"] = energy  # carbon reading captured by --green gating
@@ -117,6 +126,7 @@ def run(
                     images=sample.images,
                     schema=project.schema,
                     extra_body=extra_body,
+                    max_tokens=max_tokens,
                     image_max_size=project.image_max_size,
                     image_quality=project.image_quality,
                 )
@@ -128,6 +138,7 @@ def run(
                     prompt=project.prompt,
                     images=sample.images,
                     extra_body=extra_body,
+                    max_tokens=max_tokens,
                     image_max_size=project.image_max_size,
                     image_quality=project.image_quality,
                 )

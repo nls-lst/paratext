@@ -9,12 +9,21 @@
 base-url = "http://localhost:8000/v1"   # any OpenAI-compatible model server
 # model  = "Qwen3-VL-30B"               # a model id your server serves (required)
 # review-port = 5050                    # port for `paratext review`
+# max-tokens  = 8192                    # output ceiling per call; raise for thinking models
 
 # The bundled starter project. `source` is a flat directory of card images.
 [project.cards]
 source     = "data/cards"
 output     = "output/cards.jsonl"
 review-out = "review/cards"
+
+# Verbatim passthrough into the request body — for provider parameters paratext
+# doesn't model. Reasoning controls live here, and every provider spells them
+# differently. paratext's own `disable_thinking` sends the vLLM/Qwen form.
+# [project.cards.extra-body]
+# reasoning = { enabled = false }                       # OpenRouter
+# chat_template_kwargs = { enable_thinking = false }    # vLLM / llama.cpp / Lemonade
+# reasoning_effort = "low"                              # OpenAI, and Qwen3.8
 
 # Carbon-aware scheduling for `paratext run --green` (opt-in). Declare your grid
 # region — it's far more precise than national (e.g. South Scotland is often

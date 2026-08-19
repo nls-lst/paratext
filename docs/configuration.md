@@ -36,6 +36,7 @@ Once a project has a section, `paratext run -p my-cards` needs nothing else.
 | `model` | *(required)* | Model id your endpoint serves |
 | `limit` | none | Process at most N inputs |
 | `review-port` | `5050` | Port for `paratext review` |
+| `max-tokens` | `8192` | Output ceiling per call (see [Reasoning models](#reasoning-models)) |
 | `no-structured` | `false` | Fall back to plain completion + JSON parsing |
 | `skip-preflight` | `false` | Skip the endpoint reachability check |
 
@@ -73,6 +74,50 @@ Three things to know:
 
 paratext is a *client*, not a model runner. To use a model nobody hosts,
 self-host it behind vLLM/TGI/llama.cpp and point `base-url` there.
+
+## Reasoning models
+
+A model that thinks before answering spends **output** tokens doing it. Those
+tokens are billed and counted against `max-tokens`, but never appear in the
+response — so a budget that comfortably fits the extraction can still be
+consumed entirely by reasoning, and the call returns nothing:
+
+```
+completion_tokens=2048  reasoning_tokens=2047
+model hit the 2048-token output cap before finishing — 2047 of those went on
+reasoning, leaving nothing for the answer.
+```
+
+Note this is a limit on the *reply*, not the context window: it happens on a
+262k-context model just as readily. Two ways out.
+
+**Give reasoning room.** The default `max-tokens` is 8192, enough for most
+thinking models on a single card. Raise it if you see the error:
+
+```bash
+paratext run -p my-cards --max-tokens 32768
+```
+
+**Or turn reasoning off** — usually what you want for extraction, where the
+answer is copied off an image rather than reasoned toward. There is no portable
+way to do this: each provider spells it differently, and sending the wrong
+dialect is accepted silently and does nothing. Use `extra-body`:
+
+```toml
+[project.my-cards.extra-body]
+reasoning = { enabled = false }                       # OpenRouter
+# chat_template_kwargs = { enable_thinking = false }  # vLLM, llama.cpp, Lemonade
+# reasoning_effort = "low"                            # OpenAI, and Qwen3.8
+```
+
+`extra-body` is merged verbatim into the chat-completions request body, so any
+provider parameter paratext doesn't model can go here. Keys are **not**
+kebab-converted — write them exactly as the provider documents them. A
+top-level `[extra-body]` applies to every project; a per-project table wins.
+
+A project may also set `disable_thinking` in its Python definition. That sends
+the vLLM form above and nothing else, so treat it as a default for local servers
+rather than a guarantee; `extra-body` overrides it.
 
 ## Feature tables
 

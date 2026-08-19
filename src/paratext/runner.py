@@ -8,13 +8,49 @@ import io
 import logging
 
 import stamina
-from openai import APIConnectionError, APITimeoutError, InternalServerError, OpenAI
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    InternalServerError,
+    LengthFinishReasonError,
+    OpenAI,
+)
 from PIL import Image
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 RETRYABLE_ERRORS = (APIConnectionError, APITimeoutError, InternalServerError)
+
+# Output-token ceiling per call. Sized for a reasoning model, not for the
+# extraction itself: a card's JSON is a few hundred tokens, but a model that
+# thinks first spends its budget on reasoning tokens the caller never sees, and
+# a truncated completion parses as nothing at all. You are billed for tokens
+# generated, not for the cap, so a generous ceiling costs nothing on a model
+# that stops early — and rescues one that doesn't.
+DEFAULT_MAX_TOKENS = 8192
+
+
+def _length_error(completion, max_tokens: int) -> ValueError:
+    """Explain a completion that ran out of output budget.
+
+    Worth a bespoke message because the usual cause is invisible: reasoning
+    tokens are billed and counted but never appear in the response, so the
+    failure looks like the model returned nothing for no reason.
+    """
+    usage = getattr(completion, "usage", None)
+    details = getattr(usage, "completion_tokens_details", None)
+    reasoning = getattr(details, "reasoning_tokens", 0) or 0
+    msg = f"model hit the {max_tokens}-token output cap before finishing"
+    if reasoning:
+        msg += f" — {reasoning} of those went on reasoning, leaving nothing for the answer"
+    return ValueError(
+        f"{msg}.\n"
+        f"  Raise it with --max-tokens N (or `max-tokens` in paratext.toml),\n"
+        f"  or turn reasoning off for your provider via "
+        f"[project.<name>.extra-body] — note that the built-in\n"
+        f"  `disable_thinking` speaks vLLM's dialect only. See docs/configuration.md."
+    )
 
 
 def encode_image(img: Image.Image, max_size: int = 1024, quality: int = 85) -> str:
@@ -45,7 +81,7 @@ def call_structured(
     images: list[Image.Image],
     schema: type[BaseModel],
     extra_body: dict | None = None,
-    max_tokens: int = 2048,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
     temperature: float = 0.0,
     image_max_size: int = 1024,
     image_quality: int = 85,
@@ -60,7 +96,10 @@ def call_structured(
     }
     if extra_body:
         kwargs["extra_body"] = extra_body
-    completion = client.beta.chat.completions.parse(**kwargs)
+    try:
+        completion = client.beta.chat.completions.parse(**kwargs)
+    except LengthFinishReasonError as exc:
+        raise _length_error(exc.completion, max_tokens) from exc
     parsed = completion.choices[0].message.parsed
     if parsed is None:
         raise ValueError("Structured output returned None — model may not support response_format")
@@ -74,7 +113,7 @@ def call_plain(
     prompt: str,
     images: list[Image.Image],
     extra_body: dict | None = None,
-    max_tokens: int = 2048,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
     temperature: float = 0.0,
     image_max_size: int = 1024,
     image_quality: int = 85,
@@ -89,6 +128,11 @@ def call_plain(
     if extra_body:
         kwargs["extra_body"] = extra_body
     completion = client.chat.completions.create(**kwargs)
+    # No LengthFinishReasonError here — the plain API doesn't parse, so a
+    # truncated completion arrives looking like ordinary content and only fails
+    # later, in the caller's JSON parse.
+    if completion.choices[0].finish_reason == "length":
+        raise _length_error(completion, max_tokens)
     content = completion.choices[0].message.content
     if content is None:
         raise ValueError("model returned empty content")

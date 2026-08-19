@@ -81,8 +81,16 @@ class Project:
     # materialiser. Or pass `iter_samples` directly for a bespoke reader.
     source: "object | None" = None
     iter_samples: "Callable[[Path, int | None], Iterator[Sample]] | None" = None
-    # Per-project hint for whether `enable_thinking` should be passed to chat APIs.
+    # Ask the server to skip reasoning. **vLLM/Qwen dialect only** — it sends
+    # `chat_template_kwargs.enable_thinking=false`, which OpenAI, Anthropic and
+    # OpenRouter all ignore, so on those the model reasons anyway and the only
+    # symptom is a burnt token budget. For other providers set the reasoning
+    # control under `[project.<name>.extra-body]` in paratext.toml.
     disable_thinking: bool = True
+    # Output-token ceiling per call. None means the framework default
+    # (`runner.DEFAULT_MAX_TOKENS`); raise it here when a project's schema is
+    # genuinely large. A user's --max-tokens / config value still wins.
+    max_tokens: int | None = None
     # Optional review/display contract spec; drives view.json. Defaults to one
     # panel showing every schema field (see default_view / build_view).
     view: "View | None" = None

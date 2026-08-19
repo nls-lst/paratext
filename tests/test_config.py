@@ -117,3 +117,48 @@ def test_api_key_in_file_quiet_when_the_key_is_not_in_the_file(tmp_path, monkeyp
     _write_config(tmp_path, 'model = "m"\n')
     monkeypatch.setenv("PARATEXT_API_KEY", "sk-or-secret")  # env is the right place
     assert cfg.api_key_in_file(None, "https://openrouter.ai/api/v1") is False
+
+
+# ── extra-body passthrough ───────────────────────────────────────────────────
+def test_extra_body_merges_top_level_and_project(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "paratext.toml").write_text(
+        "[extra-body]\n"
+        'provider = { sort = "throughput" }\n'
+        "[project.cards.extra-body]\n"
+        "reasoning = { enabled = false }\n"
+    )
+    assert cfg.extra_body("cards") == {
+        "provider": {"sort": "throughput"},
+        "reasoning": {"enabled": False},
+    }
+
+
+def test_extra_body_does_not_kebab_convert_keys(tmp_path, monkeypatch):
+    # This table is the provider's namespace, not ours — rewriting a key would
+    # silently send a parameter the provider doesn't recognise.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "paratext.toml").write_text(
+        "[project.cards.extra-body]\n"
+        "chat_template_kwargs = { enable_thinking = false }\n"
+    )
+    assert cfg.extra_body("cards") == {
+        "chat_template_kwargs": {"enable_thinking": False}
+    }
+
+
+def test_extra_body_is_empty_without_a_config(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert cfg.extra_body("cards") == {}
+
+
+def test_max_tokens_is_recognised_and_coerced(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "paratext.toml").write_text("max-tokens = 32768\n")
+    assert cfg.coerce_paths(cfg.load_defaults(None))["max_tokens"] == 32768
+
+
+def test_max_tokens_from_the_environment(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PARATEXT_MAX_TOKENS", "16384")
+    assert cfg.coerce_paths(cfg.load_defaults(None))["max_tokens"] == 16384

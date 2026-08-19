@@ -36,6 +36,7 @@ from .config import (
     local_config_path,
     normalise_base_url,
 )
+from .config import extra_body as config_extra_body
 from .extract import run as run_extract
 from .io import read_provenance
 from .packaging import package
@@ -60,6 +61,7 @@ HARDCODED_DEFAULTS: dict = {
     "review_port": DEFAULT_PORT,
     "no_structured": False,
     "skip_preflight": False,
+    "max_tokens": None,  # None → runner.DEFAULT_MAX_TOKENS, or the project's own
 }
 
 
@@ -181,6 +183,8 @@ def _do_extract(args: argparse.Namespace) -> None:
         use_structured=not args.no_structured,
         skip_preflight=args.skip_preflight,
         energy=energy,
+        max_tokens=getattr(args, "max_tokens", None),
+        extra_body=config_extra_body(args.project),
     )
 
 
@@ -632,6 +636,9 @@ def _add_extract_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--base-url", default=None, help="model endpoint base URL (OpenAI-compatible)")
     p.add_argument("--api-key", default=None, help="API key for the endpoint (often unused)")
     p.add_argument("--limit", type=int, default=None, help="Process at most N inputs")
+    p.add_argument("--max-tokens", type=int, default=None, metavar="N",
+                   help="Output-token ceiling per call (default: 8192; raise it for "
+                        "models that reason before answering)")
     p.add_argument(
         "--no-structured",
         action="store_true",

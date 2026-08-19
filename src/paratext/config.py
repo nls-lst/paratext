@@ -62,6 +62,7 @@ RECOGNISED = (
     "limit",
     "no_structured",
     "skip_preflight",
+    "max_tokens",
 )
 
 
@@ -201,12 +202,34 @@ def load_project_section(project: str, section: str) -> dict:
     return _kebab_to_snake(sub) if isinstance(sub, dict) else {}
 
 
+def extra_body(project: str | None) -> dict:
+    """Merge the top-level ``[extra-body]`` table with ``[project.<n>.extra-body]``.
+
+    A verbatim passthrough into the chat-completions request body, for provider
+    parameters paratext doesn't model — chiefly the reasoning controls, which
+    every provider spells differently (``reasoning`` on OpenRouter,
+    ``chat_template_kwargs`` on vLLM, ``reasoning_effort`` on OpenAI). Keys are
+    **not** kebab-converted: this is the provider's namespace, not ours.
+    """
+    toml = _load_toml(local_config_path())
+    out: dict = {}
+    top = toml.get("extra-body")
+    if isinstance(top, dict):
+        out.update(top)
+    projects = toml.get("project")
+    if project and isinstance(projects, dict):
+        section = projects.get(project)
+        if isinstance(section, dict) and isinstance(section.get("extra-body"), dict):
+            out.update(section["extra-body"])
+    return out
+
+
 def coerce_paths(d: dict) -> dict:
     """Convert string source/output values to Path objects."""
     for key in ("source", "output", "review_out"):
         if key in d and isinstance(d[key], str):
             d[key] = Path(d[key])
-    for key in ("limit", "review_port"):
+    for key in ("limit", "review_port", "max_tokens"):
         if key in d and isinstance(d[key], str):
             d[key] = int(d[key])
     for key in ("no_structured", "skip_preflight"):

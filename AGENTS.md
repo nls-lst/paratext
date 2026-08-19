@@ -120,7 +120,12 @@ Optional, in order of how often you'll need them:
 - `curate(rec) -> Curation` — `keep` / `drop` / `quarantine` per record.
 - `build_record(rec, images)` — extra keys in `samples.json`.
 - `ground_truth(rec)` — attach existing catalogue data for side-by-side review.
-- `disable_thinking` — some models need `enable_thinking=False`.
+- `disable_thinking` — asks the server to skip reasoning. **vLLM/Qwen dialect
+  only** (`chat_template_kwargs.enable_thinking`); other providers ignore it and
+  reason anyway. Users cover those with `[project.<name>.extra-body]`.
+- `max_tokens` — per-project output ceiling; `None` uses `runner.DEFAULT_MAX_TOKENS`
+  (8192). A reasoning model spends this budget before writing any answer, so a
+  cap that fits the JSON but not the thinking yields nothing at all.
 
 **Field discipline:** the field names appear in schema, prompt and view with no
 compile-time link. `audit_project(PROJECT)` checks the view's fields exist in the
