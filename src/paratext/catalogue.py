@@ -259,7 +259,8 @@ def _punctuate_isbd(merged: dict[str, ET.Element]) -> None:
 
     The separator belongs to the subfield it *follows*, so what gets punctuated
     depends on which neighbours are present — with no publisher, the comma before
-    a date falls to the place instead.
+    a date falls to the place instead. The date itself always closes the field
+    with a full stop.
     """
     title = merged.get("245")
     if title is not None and title.find("subfield[@code='b']") is not None:
@@ -273,6 +274,10 @@ def _punctuate_isbd(merged: dict[str, ET.Element]) -> None:
         _append_isbd(imprint, "a", " : ")
     if "c" in present and present & {"a", "b"}:
         _append_isbd(imprint, "b" if "b" in present else "a", ", ")
+    if "c" in present:
+        # The imprint statement closes with a full stop, whether or not anything
+        # precedes the date. No trailing space — it terminates the field.
+        _append_isbd(imprint, "c", ".")
 
 
 def _record_to_marc(label: dict, mapping: dict[str, str], control_no: str | None) -> ET.Element:
