@@ -37,7 +37,8 @@ uv run pytest -q
 uv run ruff check
 ```
 
-Python 3.11–3.13 via `uv`. The model endpoint is any OpenAI-compatible server;
+Python 3.11+ via `uv` (which supplies the interpreter). The model endpoint is
+any OpenAI-compatible server;
 set `base-url` in `paratext.toml` or `PARATEXT_BASE_URL`.
 
 **The installed-vs-source trap:** a non-editable install means source edits do
