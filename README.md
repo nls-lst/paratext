@@ -19,8 +19,8 @@ schema, and input handling — so the same code path runs a 50-item pilot and a
 - **An OpenAI-compatible endpoint serving a model that accepts images.** Local
   hosting (llama.cpp, vLLM, LM Studio, [Lemonade](https://lemonade-server.ai/)
   etc) or a hosted provider.
-- **Python 3.11 or newer**, and [uv](https://docs.astral.sh/uv/). (The optional
-  card detector is capped at 3.13 until torch ships 3.14 wheels.)
+- **[uv](https://docs.astral.sh/uv/)** — it fetches a suitable Python (3.11 or
+  newer) for you, so you don't need one installed already.
 
 ## Install
 

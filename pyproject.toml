@@ -6,9 +6,9 @@ name = "paratext-cli"
 version = "0.1.0"
 description = "Modular, project-based metadata extraction from digitised library/archive collections with a multimodal model"
 readme = "README.md"
-# Core is pure-Python + numpy/pillow/pydantic — runs on 3.14. The optional
-# [detector] extra needs torch, which currently ships no cp314 wheels; that
-# constraint is torch's to enforce at install time, not the framework's.
+# Core is pure-Python + numpy/pillow/pydantic. The [detector] extra needs
+# torch/torchvision, which have shipped cp314 wheels since 2.9.0/0.24.0 — no
+# ceiling here; version constraints are the dependencies' to enforce at install.
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
