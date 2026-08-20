@@ -41,21 +41,40 @@ def test_image_source_limit_and_materialise(tmp_path):
     assert (out / "images/a/image.jpg").is_file()
 
 
-def test_crop_falls_back_to_uniform_when_detector_unavailable(tmp_path, monkeypatch):
-    """crop=True with no detector must still crop (uniformly) and say so — the
-    documented fallback, and a notice so the run summary can't look clean."""
+def test_crop_falls_back_to_content_aware_when_detector_unavailable(tmp_path, monkeypatch):
+    """crop=True with no detector must still crop — content-aware, not the old
+    blind 8% margin, which cut into headings on cards sitting near an edge — and
+    raise a notice so the run summary can't look clean."""
+    import paratext.cards as cards
+
+    monkeypatch.setattr(cards, "load_card_detector", lambda **kw: None)
+    # A card on a dark desk, flush to the left edge — the shape the blind margin
+    # got wrong. Text starts at x=2, so any left-hand trim loses it.
+    a = np.full((400, 600), 30, dtype=np.uint8)   # desk
+    a[40:360, 0:430] = 205                        # card, hard against x=0
+    a[120:288, 2:400][:, ::2] = 0                 # strokes
+    Image.fromarray(a, "L").convert("RGB").save(tmp_path / "a.jpg", "JPEG")
+
+    src = image_source(crop=True)
+    samples = list(src.iter_samples(tmp_path, None))
+
+    assert samples[0].metadata["crop"] == "content"
+    assert samples[0].metadata["detected"] is False
+    cropped = samples[0].images[0]
+    assert cropped.size[0] < 600  # the desk on the right is gone
+    assert any("detector unavailable" in n for n in src.notices)
+
+
+def test_a_card_filling_the_frame_is_left_alone(tmp_path, monkeypatch):
+    """No desk to trim means no crop. The old blind 8% margin removed content
+    here regardless."""
     import paratext.cards as cards
 
     monkeypatch.setattr(cards, "load_card_detector", lambda **kw: None)
     _save(tmp_path / "a.jpg", textured=True)
 
-    src = image_source(crop=True)
-    samples = list(src.iter_samples(tmp_path, None))
-
-    assert samples[0].metadata["crop"] == "uniform"
-    assert samples[0].metadata["detected"] is False
-    assert samples[0].images[0].size < (600, 400)  # actually cropped
-    assert any("detector unavailable" in n for n in src.notices)
+    samples = list(image_source(crop=True).iter_samples(tmp_path, None))
+    assert samples[0].images[0].size == (600, 400)
 
 
 def test_no_notices_when_crop_not_requested(tmp_path):

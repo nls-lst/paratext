@@ -112,10 +112,97 @@ def suppress_show_through(
 
 # ── Crop helpers ───────────────────────────────────────────────────────────
 def crop_uniform(img: Image.Image, margin_pct: float = 0.08) -> Image.Image:
-    """Fallback crop when no detector is available: trim a uniform margin."""
+    """Trim a fixed margin off every edge.
+
+    A blind fraction: it cannot tell a margin from a heading, so on scans where
+    the text runs close to an edge it removes content. Kept for callers that
+    want the old behaviour; :func:`crop_content` is the better fallback.
+    """
     w, h = img.size
     mx, my = int(w * margin_pct), int(h * margin_pct)
     return img.crop((mx, my, w - mx, h - my))
+
+
+def _otsu(values: "np.ndarray") -> float:
+    """Otsu's threshold — the grey level splitting the histogram into two classes
+    with the smallest combined spread. Here: card against the darker desk."""
+    hist = np.bincount(values.astype(np.uint8).ravel(), minlength=256).astype(np.float64)
+    levels = np.arange(256)
+    total = hist.sum()
+    if total == 0:
+        return 127.0
+    w_bg = np.cumsum(hist)
+    w_fg = total - w_bg
+    sum_bg = np.cumsum(hist * levels)
+    sum_all = sum_bg[-1]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mean_bg = sum_bg / w_bg
+        mean_fg = (sum_all - sum_bg) / w_fg
+        between = w_bg * w_fg * (mean_bg - mean_fg) ** 2
+    between[~np.isfinite(between)] = 0.0
+    return float(np.argmax(between))
+
+
+def content_box(
+    img: Image.Image,
+    *,
+    pad_pct: float = 0.01,
+    coverage: float = 0.5,
+    min_area: float = 0.15,
+) -> tuple[int, int, int, int] | None:
+    """Locate the card against the darker background; returns an (x0,y0,x1,y1) box.
+
+    Returns None when the result wouldn't be trustworthy, so a caller can leave
+    the scan alone rather than guess. That asymmetry is deliberate: an
+    over-crop silently deletes text and is scored as a misreading, while an
+    under-crop only costs the model some desk to look at.
+
+    A card is bright and fills most of its rows and columns, so a row/column
+    coverage profile over an Otsu mask locates it without any ML. `coverage` is
+    the fraction of a row (or column) that must be card-bright for it to count
+    as inside; `min_area` rejects a box too small to be the card.
+    """
+    w, h = img.size
+    if w < 32 or h < 32:
+        return None
+    # Downscale first: the card boundary is a coarse feature, and this keeps the
+    # profile cheap on a 2400px scan.
+    small = img.convert("L")
+    small.thumbnail((512, 512), Image.Resampling.BILINEAR)
+    grey = np.asarray(small, dtype=np.float32)
+    # Otsu assumes two classes. On a scan with no card/desk contrast — a blank
+    # frame, an all-dark misfeed — it splits noise and "finds" the whole image,
+    # so require a real spread before trusting it.
+    if float(grey.max() - grey.min()) < 20.0:
+        return None
+    mask = grey > _otsu(grey)
+
+    def span(profile: "np.ndarray") -> tuple[int, int] | None:
+        inside = np.flatnonzero(profile >= coverage)
+        return (int(inside[0]), int(inside[-1])) if inside.size else None
+
+    cols = span(mask.mean(axis=0))
+    rows = span(mask.mean(axis=1))
+    if cols is None or rows is None:
+        return None
+
+    sw, sh = small.size
+    x0, x1 = (c * w / sw for c in (cols[0], cols[1] + 1))
+    y0, y1 = (r * h / sh for r in (rows[0], rows[1] + 1))
+    px, py = w * pad_pct, h * pad_pct
+    box = (
+        max(0, int(x0 - px)), max(0, int(y0 - py)),
+        min(w, int(x1 + px)), min(h, int(y1 + py)),
+    )
+    if (box[2] - box[0]) * (box[3] - box[1]) < min_area * w * h:
+        return None
+    return box
+
+
+def crop_content(img: Image.Image, **kw) -> Image.Image | None:
+    """Crop to :func:`content_box`, or None when no trustworthy box was found."""
+    box = content_box(img, **kw)
+    return None if box is None else img.crop(box)
 
 
 def _crop_bbox(img: Image.Image, bbox: list[float], padding_pct: float = 0.02) -> Image.Image:

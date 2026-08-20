@@ -81,13 +81,14 @@ def image_source(
 
             detector = load_card_detector()
             if detector is None:
-                # Documented behaviour is a uniform crop, not "no crop at all" —
-                # and the failure must reach the run summary, not just the log.
+                # Still crop — but content-aware, not a blind margin — and the
+                # failure must reach the run summary, not just the log.
                 notices.append(
-                    "crop: card detector unavailable — fell back to a uniform crop. "
-                    "Install the `detector` extra (paratext[detector]), then point "
-                    "the [detector] config table or PARATEXT_CARD_DETECTOR at "
-                    "weights trained on your own cards."
+                    "crop: card detector unavailable — fell back to a content-aware "
+                    "crop (card located against the background). Install the "
+                    "`detector` extra (paratext[detector]), then point the [detector] "
+                    "config table or PARATEXT_CARD_DETECTOR at weights trained on "
+                    "your own cards."
                 )
         check_verso = None
         if verso_filter:
@@ -109,11 +110,15 @@ def image_source(
                         img = detector.crop(img, bbox=bbox, padding_pct=0.10)
                     meta["detected"] = bbox is not None
                 else:
-                    from .cards import crop_uniform
+                    from .cards import crop_content
 
-                    img = crop_uniform(img)
+                    # Leave the scan alone when the card can't be located: an
+                    # over-crop deletes text and is scored as a misreading, an
+                    # under-crop only gives the model more desk to look at.
+                    cropped = crop_content(img)
+                    img = cropped if cropped is not None else img
                     meta["detected"] = False
-                    meta["crop"] = "uniform"
+                    meta["crop"] = "content" if cropped is not None else "none"
             if suppress_show_through:
                 # After cropping, so levels are measured on the card not the desk.
                 from .cards import suppress_show_through as _suppress
