@@ -357,3 +357,82 @@ def test_title_full_stop_does_not_disturb_the_nonfiling_count():
     df = next(d for d in root.iter(f"{MARC_NS}datafield") if d.get("tag") == "245")
     assert df.get("ind2") == "4"
     assert [sf.text for sf in df] == ["The Bruce."]
+
+
+# ── AI-assistance note (MARC 588 / DC description) ────────────────────────────
+def _marc_datafields(tree):
+    """Reparse so the collection's xmlns becomes a real namespace, as elsewhere here."""
+    root = ET.fromstring(ET.tostring(tree.getroot()))
+    return list(root.iter(f"{MARC_NS}datafield"))
+
+
+def _marc_note_fields(tree):
+    return [df for df in _marc_datafields(tree) if df.get("tag") == "588"]
+
+
+def test_no_ai_note_by_default():
+    tree = catalogue.build_marc([_rec({"title": "T"})], {"title": "245$a"})
+    assert _marc_note_fields(tree) == []
+
+
+def test_ai_note_emits_588_with_first_indicator_zero():
+    tree = catalogue.build_marc([_rec({"title": "T"})], {"title": "245$a"}, "Made with AI")
+    (df,) = _marc_note_fields(tree)
+    assert df.get("ind1") == "0"
+    assert df.get("ind2") == " "
+    assert df.find(f"{MARC_NS}subfield[@code='a']").text == "Made with AI"
+
+
+def test_ai_note_sorts_into_tag_order():
+    tree = catalogue.build_marc(
+        [_rec({"title": "T", "publisher": "P"})],
+        {"title": "245$a", "publisher": "264$b"},
+        "note",
+    )
+    tags = [df.get("tag") for df in _marc_datafields(tree)]
+    assert tags == sorted(tags)
+    assert tags[-1] == "588"
+
+
+def test_ai_note_in_dublin_core_is_a_description():
+    tree = catalogue.build_dc([_rec({"title": "T"})], {"title": "title"}, "Made with AI")
+    root = ET.fromstring(ET.tostring(tree.getroot()))
+    notes = [e.text for e in root.iter(f"{DC_NS}description")]
+    assert notes == ["Made with AI"]
+
+
+def test_resolve_ai_note_default_wording_and_date(monkeypatch):
+    import datetime
+
+    monkeypatch.setattr(catalogue, "load_project_section", lambda *a, **k: {})
+    out = catalogue.resolve_ai_note("proj", True, date=datetime.date(2026, 8, 24))
+    assert out == "Some metadata created with AI assistance on 24/08/26"
+
+
+def test_resolve_ai_note_custom_text_overrides_wording(monkeypatch):
+    monkeypatch.setattr(catalogue, "load_project_section", lambda *a, **k: {})
+    assert catalogue.resolve_ai_note("proj", "Machine-generated") == "Machine-generated"
+
+
+def test_resolve_ai_note_absent_by_default(monkeypatch):
+    monkeypatch.setattr(catalogue, "load_project_section", lambda *a, **k: {})
+    assert catalogue.resolve_ai_note("proj") is None
+
+
+def test_resolve_ai_note_reads_config(monkeypatch):
+    monkeypatch.setattr(
+        catalogue, "load_project_section", lambda *a, **k: {"ai_note": "From config"}
+    )
+    assert catalogue.resolve_ai_note("proj") == "From config"
+
+
+def test_cli_flag_beats_config(monkeypatch):
+    monkeypatch.setattr(
+        catalogue, "load_project_section", lambda *a, **k: {"ai_note": "From config"}
+    )
+    assert catalogue.resolve_ai_note("proj", "From flag") == "From flag"
+
+
+def test_config_false_suppresses_the_note(monkeypatch):
+    monkeypatch.setattr(catalogue, "load_project_section", lambda *a, **k: {"ai_note": False})
+    assert catalogue.resolve_ai_note("proj") is None

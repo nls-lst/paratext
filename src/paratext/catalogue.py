@@ -121,6 +121,29 @@ def resolve_mapping(project: str, fmt: str) -> tuple[dict[str, str], list[str]]:
     return mapping, unmapped
 
 
+def resolve_ai_note(project: str, override: str | None = None, *, date=None) -> str | None:
+    """Text for the AI-assistance note, or None when the record should carry none.
+
+    Precedence: an explicit `override` (the CLI flag or the export modal) beats
+    `ai-note` under `[project.<name>.export]`. `true` there means the default
+    wording; a string replaces it; `false`/absent means no note. `{date}` in the
+    wording is filled with dd/mm/yy.
+    """
+    from datetime import date as _date
+
+    value: object
+    if override is not None:
+        value = override
+    else:
+        value = load_project_section(project, "export").get("ai_note")
+    if value is None or value is False:
+        return None
+    text = DEFAULT_AI_NOTE if value is True else str(value).strip()
+    if not text:
+        return None
+    return text.replace("{date}", (date or _date.today()).strftime("%d/%m/%y"))
+
+
 # ── Wizard ────────────────────────────────────────────────────────────────────
 def run_wizard(project: str, fmt: str, unmapped: list[str]) -> dict[str, str]:
     """Interactively map the `unmapped` fields; returns the chosen field->target
@@ -237,6 +260,14 @@ def _first_value(label: dict, mapping: dict[str, str], tag: str, sub: str) -> st
 LEADER = "00000nam a22000005i 4500"
 
 
+# Provenance note for AI-assisted records, written as MARC 588 (ind1=0, "source
+# of description note") and Dublin Core `description`. Opt-in: nothing is added
+# unless a note is configured or requested, because a record with no machine
+# involvement should not carry the claim. `{date}` is substituted at export time.
+DEFAULT_AI_NOTE = "Some metadata created with AI assistance on {date}"
+AI_NOTE_TAG = "588"
+
+
 def _append_text(sub: ET.Element | None, separator: str) -> None:
     """Append an ISBD `separator` to one subfield, if it has text.
 
@@ -290,7 +321,9 @@ def _punctuate_isbd(merged: dict[str, ET.Element]) -> None:
         _append_isbd(imprint, "c", ".")
 
 
-def _record_to_marc(label: dict, mapping: dict[str, str], control_no: str | None) -> ET.Element:
+def _record_to_marc(
+    label: dict, mapping: dict[str, str], control_no: str | None, ai_note: str | None = None
+) -> ET.Element:
     rec = ET.Element("record")
     ET.SubElement(rec, "leader").text = LEADER
     if control_no:
@@ -325,12 +358,20 @@ def _record_to_marc(label: dict, mapping: dict[str, str], control_no: str | None
         df[:] = sorted(df, key=lambda sf: sf.get("code", ""))
     _punctuate_isbd(merged)
     ordered = list(merged.items()) + extras
+    if ai_note:
+        # ind1=0 is "source of description note"; joins the sort so it lands in
+        # tag order with everything else rather than being appended at the end.
+        note = ET.Element("datafield", tag=AI_NOTE_TAG, ind1="0", ind2=" ")
+        ET.SubElement(note, "subfield", code="a").text = ai_note
+        ordered.append((AI_NOTE_TAG, note))
     for _tag, df in sorted(ordered, key=lambda x: x[0]):
         rec.append(df)
     return rec
 
 
-def _record_to_dc(label: dict, mapping: dict[str, str], identifier: str | None) -> ET.Element:
+def _record_to_dc(
+    label: dict, mapping: dict[str, str], identifier: str | None, ai_note: str | None = None
+) -> ET.Element:
     ns = "http://purl.org/dc/elements/1.1/"
     el = ET.Element("{http://www.openarchives.org/OAI/2.0/oai_dc/}dc")
     if identifier:
@@ -340,6 +381,8 @@ def _record_to_dc(label: dict, mapping: dict[str, str], identifier: str | None) 
             if f in ("isbn", "issn"):
                 v = f"{f.upper()}:{v}"
             ET.SubElement(el, f"{{{ns}}}{element}").text = v
+    if ai_note:
+        ET.SubElement(el, f"{{{ns}}}description").text = ai_note
     return el
 
 
@@ -347,25 +390,32 @@ def _indent(elem: ET.Element) -> None:
     ET.indent(elem, space="  ")
 
 
-def build_marc(records, mapping) -> ET.ElementTree:
+def build_marc(records, mapping, ai_note: str | None = None) -> ET.ElementTree:
     root = ET.Element("collection", xmlns="http://www.loc.gov/MARC21/slim")
     for rec in records:
-        root.append(_record_to_marc(rec.label, mapping, rec.document_id or rec.sid))
+        root.append(_record_to_marc(rec.label, mapping, rec.document_id or rec.sid, ai_note))
     _indent(root)
     return ET.ElementTree(root)
 
 
-def build_dc(records, mapping) -> ET.ElementTree:
+def build_dc(records, mapping, ai_note: str | None = None) -> ET.ElementTree:
     ET.register_namespace("oai_dc", "http://www.openarchives.org/OAI/2.0/oai_dc/")
     ET.register_namespace("dc", "http://purl.org/dc/elements/1.1/")
     root = ET.Element("records")
     for rec in records:
-        root.append(_record_to_dc(rec.label, mapping, rec.document_id or rec.sid))
+        root.append(_record_to_dc(rec.label, mapping, rec.document_id or rec.sid, ai_note))
     _indent(root)
     return ET.ElementTree(root)
 
 
-def run(dataset_dir: Path, project: str, fmt: str, *, no_wizard: bool = False) -> CatalogueSummary:
+def run(
+    dataset_dir: Path,
+    project: str,
+    fmt: str,
+    *,
+    no_wizard: bool = False,
+    ai_note: str | None = None,
+) -> CatalogueSummary:
     """Select gold records and write a MARCXML / DC collection file. Fills unmapped
     fields via the wizard (interactive only) and persists the mapping."""
     mapping, unmapped = resolve_mapping(project, fmt)
@@ -384,8 +434,13 @@ def run(dataset_dir: Path, project: str, fmt: str, *, no_wizard: bool = False) -
             f"[project.{project}.export.{fmt}] in paratext.toml or run interactively."
         )
 
+    note = resolve_ai_note(project, ai_note)
     sel = select_records(dataset_dir, project)  # gold only (good_enough + corrected)
-    tree = build_marc(sel.records, mapping) if fmt == "marc" else build_dc(sel.records, mapping)
+    tree = (
+        build_marc(sel.records, mapping, note)
+        if fmt == "marc"
+        else build_dc(sel.records, mapping, note)
+    )
 
     EXPORT_ROOT.mkdir(parents=True, exist_ok=True)
     ext = "marcxml" if fmt == "marc" else "dc.xml"
@@ -453,6 +508,7 @@ def export_bytes(
     scope: str,
     db_path: Path | None = None,
     mapping: dict | None = None,
+    ai_note: str | None = None,
 ) -> tuple[bytes, int]:
     """Build a MARCXML / DC collection for one scope and return (xml_bytes, n).
     `mapping` (field -> target) overrides the inferred mapping when given — this
@@ -466,8 +522,13 @@ def export_bytes(
         mapping = {f: t for f, t in mapping.items() if (t or "").strip()}
     if not mapping:
         raise ValueError(f"no fields mapped to {fmt.upper()} for {project}")
+    note = resolve_ai_note(project, ai_note)
     records = records_for_scope(dataset_dir, project, scope, db_path=db_path)
-    tree = build_marc(records, mapping) if fmt == "marc" else build_dc(records, mapping)
+    tree = (
+        build_marc(records, mapping, note)
+        if fmt == "marc"
+        else build_dc(records, mapping, note)
+    )
     buf = io.BytesIO()
     tree.write(buf, encoding="utf-8", xml_declaration=True)
     return buf.getvalue(), len(records)

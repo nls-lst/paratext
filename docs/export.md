@@ -95,6 +95,45 @@ personal_authors = "creator"
 publication_date = "date"
 ```
 
+### AI-assistance note
+
+Records can carry a provenance note saying the metadata was machine-assisted. It is
+**opt-in** — nothing is added unless you ask for it, because a record with no machine
+involvement should not carry the claim.
+
+```bash
+paratext export -p monographs --format marc --ai-note
+paratext export -p monographs --format marc --ai-note "Machine-generated, reviewed {date}"
+```
+
+The bare flag uses the default wording, `Some metadata created with AI assistance on {date}`.
+Pass your own text to replace it. `{date}` is filled with today's date as `dd/mm/yy`; text
+without `{date}` is used verbatim.
+
+To make it the default for a project, set it in `paratext.toml`:
+
+```toml
+[project.monographs.export]
+ai-note = true                                   # default wording
+ai-note = "Some metadata created with AI assistance on {date}"   # or your own
+```
+
+`--ai-note` on the command line beats the config value; `ai-note = false` (or leaving it out)
+suppresses the note entirely.
+
+The note is written as:
+
+| format | where |
+|---|---|
+| MARC | `588` with first indicator `0` ("source of description note"), text in `$a` |
+| Dublin Core | an additional `dc:description` |
+
+```xml
+<datafield tag="588" ind1="0" ind2=" ">
+  <subfield code="a">Some metadata created with AI assistance on 24/08/26</subfield>
+</datafield>
+```
+
 ## Exporting from the review UI
 
 The Stats page has an **Export…** button offering the same three formats, plus

@@ -361,13 +361,15 @@ def _cmd_export(args: argparse.Namespace) -> int:
         raise SystemExit(f"not a packaged dataset: {dataset_dir}")
 
     fmt = _pick_format(args.format)
+    if fmt == "hf" and args.ai_note is not None:
+        print("note: --ai-note applies to the marc/dc formats only; ignored for hf.")
     if fmt in ("marc", "dc"):
         from . import catalogue
 
         if args.to or args.public or args.license:
             print(f"note: --to/--public/--license apply to the hf format only; "
                   f"ignored for {fmt}.")
-        summary = catalogue.run(dataset_dir, project, fmt)
+        summary = catalogue.run(dataset_dir, project, fmt, ai_note=args.ai_note)
         print(f"{fmt.upper()}: wrote {summary.records} record(s) → {summary.path}")
         detail = f"Mapped {len(summary.mapped)} field(s)"
         if summary.skipped:
@@ -751,6 +753,13 @@ def _build_parser() -> tuple[
                     help="Rights statement for the card's Rights section (hf only; "
                          "overrides the licence-aware default). Also settable as "
                          "`rights` in config.")
+    ex.add_argument("--ai-note", nargs="?", const=True, default=None,
+                    metavar="TEXT",
+                    help="Add an AI-assistance provenance note (marc/dc only): MARC 588 "
+                         "ind1=0, or a Dublin Core `description`. Bare flag uses the "
+                         "default wording; pass TEXT to replace it. `{date}` in the text "
+                         "is filled with today as dd/mm/yy. Also settable as `ai-note` "
+                         "under [project.<name>.export].")
     ex.add_argument("--dry-run", action="store_true",
                     help="Build the dataset folder locally without pushing")
     ex.set_defaults(func=_cmd_export)
