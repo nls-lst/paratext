@@ -121,6 +121,10 @@ ai-note = "Some metadata created with AI assistance on {date}"   # or your own
 `--ai-note` on the command line beats the config value; `ai-note = false` (or leaving it out)
 suppresses the note entirely.
 
+The review UI's export modal has the same control: a checkbox and an editable text box below
+the mapping table, seeded from the config value and date-substituted so the box shows exactly
+what will be written. Unticking it suppresses the note even when config sets one.
+
 The note is written as:
 
 | format | where |

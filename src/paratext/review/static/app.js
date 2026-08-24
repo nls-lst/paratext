@@ -1392,12 +1392,16 @@ async function openExportModal() {
   dlg.className = "export-dialog";
   document.body.appendChild(dlg);
   const ex = { fmt: "marc", scope: "everything", meta: { marc: null, dc: null },
-    edits: { marc: {}, dc: {} }, hf: {}, hfCfg: null };
+    edits: { marc: {}, dc: {} }, hf: {}, hfCfg: null, aiNote: null };
 
   async function meta(fmt) {
     if (!ex.meta[fmt]) {
       const res = await fetch(api("api/export/fields", { fmt }));
       ex.meta[fmt] = await res.json();
+    }
+    // Seeded once from config, then owned by the user for the rest of the session.
+    if (ex.aiNote === null && ex.meta[fmt].ai_note) {
+      ex.aiNote = { ...ex.meta[fmt].ai_note };
     }
     return ex.meta[fmt];
   }
@@ -1434,9 +1438,23 @@ async function openExportModal() {
       <tbody>${rows}</tbody></table></div>`;
   }
 
+  function aiNoteRow() {
+    const n = ex.aiNote || { enabled: false, text: "" };
+    return `<div class="ex-ainote">
+      <label class="ex-ainote-toggle">
+        <input type="checkbox" data-ainote-on${n.enabled ? " checked" : ""}>
+        Add an AI-assistance note
+        <span class="hint">${ex.fmt === "marc" ? "MARC 588, first indicator 0" : "an extra dc:description"}</span>
+      </label>
+      <input class="ex-ainote-text" type="text" data-ainote-text
+        value="${escapeHtml(n.text || "")}"${n.enabled ? "" : " disabled"}
+        aria-label="AI-assistance note text">
+    </div>`;
+  }
+
   function bodyHtml(m) {
     if (ex.fmt === "hf") return hfBody();
-    return mappingTable(m);
+    return mappingTable(m) + aiNoteRow();
   }
 
   function hfBody() {
@@ -1557,13 +1575,20 @@ async function openExportModal() {
     dlg.querySelectorAll("[data-field]").forEach((el) => {
       ex.edits[ex.fmt][el.dataset.field] = ex.skips[ex.fmt][el.dataset.field] ? "" : el.value.trim();
     });
+    // Keep typed note text across a re-render (a format or scope switch).
+    const note = dlg.querySelector("[data-ainote-text]");
+    if (note) ex.aiNote = { ...(ex.aiNote || {}), text: note.value };
   }
 
   async function download() {
     captureEdits();
     const res = await fetch(api(`api/export/${ex.fmt}`), {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ scope: ex.scope, mapping: ex.edits[ex.fmt] }),
+      body: JSON.stringify({
+        scope: ex.scope,
+        mapping: ex.edits[ex.fmt],
+        ai_note: ex.aiNote && ex.aiNote.enabled ? ex.aiNote.text : "",
+      }),
     });
     if (!res.ok) { alert("Export failed: " + (await res.text())); return; }
     const blob = await res.blob();
@@ -1589,6 +1614,12 @@ async function openExportModal() {
       ex.skips[ex.fmt][cb.dataset.skip] = cb.checked;
       render();
     }));
+    const noteOn = dlg.querySelector("[data-ainote-on]");
+    if (noteOn) noteOn.onchange = () => {
+      captureEdits();
+      ex.aiNote = { ...(ex.aiNote || {}), enabled: noteOn.checked };
+      render();
+    };
     const dl = dlg.querySelector("[data-download]");
     if (dl) dl.onclick = download;
     // JSONL is always the full round — the review.jsonl alongside it is what

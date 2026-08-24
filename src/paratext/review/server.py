@@ -155,6 +155,9 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
             if body.get("scope"):
                 qs["scope"] = [body["scope"]]
+            # Present-but-empty means "no note"; absent means "let config decide".
+            if "ai_note" in body:
+                qs["ai_note"] = [body["ai_note"] or ""]
             return self._api_export_catalogue(
                 self._dataset(qs), u.path.rsplit("/", 1)[1], qs, mapping=body.get("mapping")
             )
@@ -321,7 +324,7 @@ class Handler(BaseHTTPRequestHandler):
     def _api_export_fields(self, ds, qs):
         """The mapping table for the export modal: every schema field and its
         inferred MARC tag / DC element (editable in the UI). `fmt=marc|dc`."""
-        from ..catalogue import infer_target, records_for_scope
+        from ..catalogue import infer_target, records_for_scope, resolve_ai_note
         from ..inspect import describe
         from ..projects import get_project
 
@@ -341,7 +344,18 @@ class Handler(BaseHTTPRequestHandler):
             s: len(records_for_scope(ds["dir"], ds["schema"], s, db_path=self.store.db_path))
             for s in ("good_enough", "needs_tweaks", "everything")
         }
-        self._json({"dataset": ds["name"], "format": fmt, "fields": rows, "scopes": scopes})
+        # The modal seeds its note control from config, so a project that has set
+        # `ai-note` gets it pre-filled and ticked rather than silently applied.
+        # Both are date-substituted, so the box always shows exactly what will be
+        # written rather than a literal "{date}" for the unconfigured case.
+        configured = resolve_ai_note(ds["schema"])
+        self._json({
+            "dataset": ds["name"], "format": fmt, "fields": rows, "scopes": scopes,
+            "ai_note": {
+                "enabled": configured is not None,
+                "text": configured or resolve_ai_note(ds["schema"], True),
+            },
+        })
 
     def _api_export_catalogue(self, ds, fmt, qs, mapping=None):
         """Stream a MARCXML / Dublin Core collection as a browser download.
@@ -350,10 +364,13 @@ class Handler(BaseHTTPRequestHandler):
         from ..catalogue import export_bytes
 
         scope = (qs.get("scope") or ["everything"])[0]
+        # `ai_note` absent -> config decides; "" -> explicitly no note; text -> that text.
+        raw_note = qs.get("ai_note")
+        ai_note = raw_note[0] if raw_note else None
         try:
             xml, n = export_bytes(
                 ds["dir"], ds["schema"], fmt, scope,
-                db_path=self.store.db_path, mapping=mapping,
+                db_path=self.store.db_path, mapping=mapping, ai_note=ai_note,
             )
         except ValueError as e:
             return self._json({"error": str(e)}, 400)

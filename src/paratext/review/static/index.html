@@ -151,6 +151,12 @@
       .ex-map input.marc { width: 6rem; }  /* Oat inputs are width:100% */
       .ex-map td.skip, .ex-map th.skip { text-align: center; width: 4rem; }
       .ex-map .skipped .fname, .ex-map .skipped select { opacity: .5; text-decoration: line-through; }
+      /* AI-assistance note. Oat styles the checkbox and input; layout only. */
+      .ex-ainote { margin-top: 1rem; display: flex; flex-direction: column; gap: .5rem; }
+      .ex-ainote-toggle { display: flex; align-items: center; gap: .5rem;
+        font-size: var(--text-8); font-weight: 600; }
+      .ex-ainote-toggle .hint { font-weight: 400; color: var(--muted-foreground); }
+      .ex-ainote-text[disabled] { opacity: .5; }
       /* Hugging Face tab. */
       .ex-hf { display: flex; flex-direction: column; gap: 1rem; }
       .ex-hf-id { display: flex; align-items: center; gap: .75rem; margin: 0; }

@@ -436,3 +436,30 @@ def test_cli_flag_beats_config(monkeypatch):
 def test_config_false_suppresses_the_note(monkeypatch):
     monkeypatch.setattr(catalogue, "load_project_section", lambda *a, **k: {"ai_note": False})
     assert catalogue.resolve_ai_note("proj") is None
+
+
+def test_export_bytes_ai_note_override(tmp_path, monkeypatch):
+    """export_bytes takes the note override the review modal sends: text adds a
+    588, "" suppresses one the config would otherwise apply."""
+    from paratext.catalogue import export_bytes
+
+    d = tmp_path / "card-template-r1"
+    d.mkdir()
+    (d / "samples.json").write_text(json.dumps([{"id": "1", "model_output": {"heading": "A"}}]))
+    (d / "provenance.json").write_text(json.dumps({"project": "card-template"}))
+    gold_db = tmp_path / "gold.db"
+    Store(gold_db)
+    monkeypatch.setattr(
+        catalogue, "load_project_section",
+        lambda p, s: {"marc": {"heading": "245$a"}, "ai_note": "From config"},
+    )
+    common = dict(db_path=gold_db)
+
+    xml, _ = export_bytes(d, "card-template", "marc", "everything", **common)
+    assert b"From config" in xml  # config applies when no override
+
+    xml, _ = export_bytes(d, "card-template", "marc", "everything", ai_note="Typed", **common)
+    assert b"Typed" in xml and b"From config" not in xml
+
+    xml, _ = export_bytes(d, "card-template", "marc", "everything", ai_note="", **common)
+    assert b'tag="588"' not in xml  # unticked in the modal beats the config
