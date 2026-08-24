@@ -19,8 +19,7 @@ schema, and input handling — so the same code path runs a 50-item pilot and a
 - **An OpenAI-compatible endpoint serving a model that accepts images.** Local
   hosting (llama.cpp, vLLM, LM Studio, [Lemonade](https://lemonade-server.ai/)
   etc) or a hosted provider.
-- **[uv](https://docs.astral.sh/uv/)** — it fetches a suitable Python (3.11 or
-  newer) for you, so you don't need one installed already.
+- [uv](https://docs.astral.sh/uv/)
 
 ## Install
 
@@ -28,12 +27,7 @@ schema, and input handling — so the same code path runs a 50-item pilot and a
 uv tool install paratext-cli
 ```
 
-The distribution is **`paratext-cli`**; the command and the import package are
-both `paratext`. Installing plain `paratext` gets you an unrelated PyPI project
-of the same name, which provides no `paratext` command.
-
-Upgrade with `uv tool upgrade paratext-cli`. Your projects live in their own
-package, so upgrading the framework leaves them untouched.
+Upgrade with `uv tool upgrade paratext-cli`.
 
 ## Quickstart
 
@@ -206,7 +200,7 @@ Run `paratext <command> -h` for that command's flags.
 
 - **A run finished but preprocessing didn't happen.** `run` prints a `!` notice
   for anything that degraded rather than failed — most often a card crop falling
-  back to a uniform crop because no detector was available.
+  back to a content-aware crop because no detector was available.
 - **An edit to `schema.py` or `prompt.md` had no effect.** `paratext inspect`
   reports the *installed* project. If it disagrees with your editor, reinstall
   (`uv sync`). An editable install avoids this entirely.

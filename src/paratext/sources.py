@@ -59,7 +59,7 @@ def image_source(
     ``verso_filter`` drops blank card backs before the model (pre-classifies them
     as ``image_type="verso"`` — the project's ``curate`` decides to drop them).
     ``crop`` crops each scan to the detected card region (needs the
-    ``[detector]`` extra; falls back to a uniform crop). ``suppress_show_through`` flattens
+    ``[detector]`` extra; falls back to a content-aware crop). ``suppress_show_through`` flattens
     faint ink bleeding through from stacked cards, so the model is less likely
     to transcribe it as a real entry. All three come from ``paratext.cards``.
 

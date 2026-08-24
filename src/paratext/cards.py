@@ -286,7 +286,7 @@ def load_card_detector(
     conf: float = 0.5,
 ) -> CardDetector | None:
     """Load the RetinaNet card detector, or return ``None`` to fall back to a
-    uniform crop.
+    content-aware crop.
 
     Weights resolution, highest first: the ``weights`` argument →
     ``PARATEXT_CARD_DETECTOR`` env var → ``weights`` in the ``[detector]`` table
@@ -311,10 +311,10 @@ def load_card_detector(
 
             path = hf_hub_download(repo_id=repo_id, filename=filename)
         except Exception as e:
-            logger.warning("card detector weights unavailable (%s); using uniform crop.", e)
+            logger.warning("card detector weights unavailable (%s); using content-aware crop.", e)
             return None
     try:
         return CardDetector(path, device=device, conf=conf)
     except Exception as e:
-        logger.warning("card detector runtime unavailable (%s); using uniform crop.", e)
+        logger.warning("card detector runtime unavailable (%s); using content-aware crop.", e)
         return None
