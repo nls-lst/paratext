@@ -71,7 +71,9 @@ read a reviewed round without starting a web server.
 
 Output is JSONL with a `_provenance` header (git commit, prompt hash, model,
 schema version, timestamp), and is resumable: re-running with the same `--output`
-skips ids already present.
+skips ids already present. A changed prompt or model is refused rather than
+resumed — pass `--re-extract` to discard the old records, or `--output` a new
+file to keep both.
 
 ---
 
@@ -264,3 +266,36 @@ alongside `_api_export_catalogue`.
   them. Snake_case still parses so old configs work, but generate kebab-case.
 - **Bump `schema_version`** when a schema changes.
 - **Commits:** short messages, no Co-Authored-By trailer.
+
+## Backlog tasks are public
+
+This repository is public, and `backlog/` is committed with it. Task titles,
+descriptions and notes are visible to anyone.
+
+Keep repo tasks to engineering work. Anything naming NLS internals, staff,
+suppliers, unannounced plans or licensing negotiations belongs in the
+`paratext-nls` backlog or the roadmap at `/opt/backlog` instead.
+
+<!-- BACKLOG.MD GUIDELINES START -->
+<!-- backlog.md-instructions-version: 1.50.1 -->
+<CRITICAL_INSTRUCTION>
+
+## Backlog.md Workflow
+
+This project uses Backlog.md for task and project management.
+
+**For every user request in this project, run `backlog instructions overview` before answering or taking action.**
+
+Use the overview to decide whether to search, read, create, or update Backlog tasks.
+
+Before task lifecycle actions, read the matching detailed guide:
+- `backlog instructions task-creation` before creating or splitting tasks
+- `backlog instructions task-execution` before planning, changing status or assignee, adding a plan or implementation notes, or implementing task work
+- `backlog instructions task-finalization` before checking acceptance criteria, writing final summaries, or moving tasks to terminal statuses
+
+Use `backlog <command> --help` before running unfamiliar commands. Help shows options, fields, and examples.
+
+Do not edit Backlog task, draft, document, decision, or milestone markdown files directly. Use the `backlog` CLI so metadata, relationships, and history stay consistent.
+
+</CRITICAL_INSTRUCTION>
+<!-- BACKLOG.MD GUIDELINES END -->

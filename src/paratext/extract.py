@@ -17,6 +17,7 @@ from .io import (
     append_jsonl,
     preflight_check,
     read_processed_ids,
+    read_provenance,
     write_provenance_header,
 )
 from .projects import Project
@@ -53,6 +54,34 @@ def _parse_loose_json(text: str) -> dict | None:
     return None
 
 
+def _guard_stale_output(output: Path, header: dict, project: str, re_extract: bool) -> None:
+    """Refuse to resume into extractions made with a different prompt or model.
+
+    Resume skips by sample id, so without this a prompt edit re-runs to
+    completion having called the model zero times — the change silently lost.
+    """
+    prior = read_provenance(output)
+    if not prior:
+        return
+    changed = [k for k in ("prompt_hash", "model")
+               if prior.get(k) and prior[k] != header.get(k)]
+    if not changed:
+        return
+    if re_extract:
+        output.unlink()
+        return
+    what = " and ".join(c.replace("_hash", "") for c in changed)
+    detail = ", ".join(f"{c.replace('_hash', '')} {prior[c]} -> {header.get(c)}"
+                       for c in changed)
+    raise SystemExit(
+        f"The {what} changed since {output} was written ({detail}).\n"
+        f"Those records answer a different question, and resume would skip every\n"
+        f"sample and call the model zero times. Either:\n"
+        f"  paratext run -p {project} --re-extract           # redo them\n"
+        f"  paratext run -p {project} --output <new>.jsonl   # keep both"
+    )
+
+
 def run(
     project: Project,
     source: Path,
@@ -67,8 +96,14 @@ def run(
     energy: dict | None = None,
     max_tokens: int | None = None,
     extra_body: dict | None = None,
+    re_extract: bool = False,
 ) -> None:
-    """Execute the extraction pipeline and write JSONL to `output`."""
+    """Execute the extraction pipeline and write JSONL to `output`.
+
+    Resume keys on sample id, so an existing `output` is topped up rather than
+    redone. `re_extract` discards it instead — needed when the prompt or model
+    changed, since those records answer a different question.
+    """
     if not skip_preflight:
         preflight_check(base_url)
 
@@ -94,6 +129,8 @@ def run(
     }
     if energy is not None:
         header["energy"] = energy  # carbon reading captured by --green gating
+
+    _guard_stale_output(Path(output), header, project.name, re_extract)
     write_provenance_header(output, header)
     seen = read_processed_ids(output, id_field="id")
     if seen:

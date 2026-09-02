@@ -110,3 +110,58 @@ def test_extra_body_is_none_when_there_is_nothing_to_send(tmp_path, captured):
 def test_max_tokens_is_recorded_in_provenance(tmp_path, captured):
     _run(_project(), tmp_path, max_tokens=4096)
     assert read_provenance(tmp_path / "out.jsonl")["max_tokens"] == 4096
+
+
+def _header(prompt_hash="aaa", model="m1"):
+    return {"project": "p", "schema_version": "v1", "prompt_hash": prompt_hash,
+            "prompt": "…", "model": model, "base_url": "u", "max_tokens": 8}
+
+
+def test_guard_allows_a_matching_resume(tmp_path):
+    from paratext.extract import _guard_stale_output
+    from paratext.io import write_provenance_header
+
+    out = tmp_path / "x.jsonl"
+    write_provenance_header(out, _header())
+    _guard_stale_output(out, _header(), "p", False)  # no raise
+    assert out.exists()
+
+
+def test_guard_refuses_a_changed_prompt(tmp_path):
+    import pytest
+
+    from paratext.extract import _guard_stale_output
+    from paratext.io import write_provenance_header
+
+    out = tmp_path / "x.jsonl"
+    write_provenance_header(out, _header(prompt_hash="aaa"))
+    with pytest.raises(SystemExit, match="prompt changed"):
+        _guard_stale_output(out, _header(prompt_hash="bbb"), "p", False)
+
+
+def test_guard_refuses_a_changed_model(tmp_path):
+    import pytest
+
+    from paratext.extract import _guard_stale_output
+    from paratext.io import write_provenance_header
+
+    out = tmp_path / "x.jsonl"
+    write_provenance_header(out, _header(model="m1"))
+    with pytest.raises(SystemExit, match="model changed"):
+        _guard_stale_output(out, _header(model="m2"), "p", False)
+
+
+def test_re_extract_discards_the_stale_file(tmp_path):
+    from paratext.extract import _guard_stale_output
+    from paratext.io import write_provenance_header
+
+    out = tmp_path / "x.jsonl"
+    write_provenance_header(out, _header(prompt_hash="aaa"))
+    _guard_stale_output(out, _header(prompt_hash="bbb"), "p", True)
+    assert not out.exists()
+
+
+def test_guard_is_a_no_op_for_a_new_file(tmp_path):
+    from paratext.extract import _guard_stale_output
+
+    _guard_stale_output(tmp_path / "nope.jsonl", _header(), "p", False)

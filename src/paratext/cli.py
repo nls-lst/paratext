@@ -214,6 +214,7 @@ def _do_extract(args: argparse.Namespace) -> None:
         energy=energy,
         max_tokens=getattr(args, "max_tokens", None),
         extra_body=config_extra_body(args.project),
+        re_extract=getattr(args, "re_extract", False),
     )
 
 
@@ -674,6 +675,9 @@ def _add_extract_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--base-url", default=None, help="model endpoint base URL (OpenAI-compatible)")
     p.add_argument("--api-key", default=None, help="API key for the endpoint (often unused)")
     p.add_argument("--limit", type=int, default=None, help="Process at most N inputs")
+    p.add_argument("--re-extract", action="store_true",
+                   help="Discard existing extractions and call the model again "
+                        "(needed when the prompt or model has changed)")
     p.add_argument("--max-tokens", type=int, default=None, metavar="N",
                    help="Output-token ceiling per call (default: 8192; raise it for "
                         "models that reason before answering)")
