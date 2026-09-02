@@ -257,6 +257,14 @@ def _first_value(label: dict, mapping: dict[str, str], tag: str, sub: str) -> st
 #   19  ' '  multipart resource record level: not specified
 # NB position 19 is a literal space. MARC documentation writes blank as "#", but
 # the character on the wire is 0x20 — an actual "#" would be invalid data.
+# A record has at most one main entry. When a schema supplies both a personal
+# and a corporate creator each would otherwise claim a 1xx, which is invalid
+# MARC -- it happened on 45 of 110 real records. The first tag listed here wins
+# the main entry and the rest are demoted to their added-entry form, following
+# the usual preference for a personal creator over a corporate one.
+MAIN_ENTRY_PRIORITY = ("100", "110", "111", "130")
+ADDED_ENTRY_FOR = {"100": "700", "110": "710", "111": "711", "130": "730"}
+
 LEADER = "00000nam a22000005i 4500"
 
 
@@ -321,6 +329,29 @@ def _punctuate_isbd(merged: dict[str, ET.Element]) -> None:
         _append_isbd(imprint, "c", ".")
 
 
+def _demote_extra_main_entries(
+    ordered: list[tuple[str, ET.Element]],
+) -> list[tuple[str, ET.Element]]:
+    """Leave one 1xx; move any others to their added-entry tag.
+
+    Order of preference is MAIN_ENTRY_PRIORITY, so a personal creator keeps the
+    main entry and a corporate one becomes a 710.
+    """
+    present = [t for t in MAIN_ENTRY_PRIORITY if any(tag == t for tag, _ in ordered)]
+    if len(present) < 2:
+        return ordered
+    keep = present[0]
+    out = []
+    for tag, df in ordered:
+        if tag in MAIN_ENTRY_PRIORITY and tag != keep:
+            added = ADDED_ENTRY_FOR[tag]
+            df.set("tag", added)
+            out.append((added, df))
+        else:
+            out.append((tag, df))
+    return out
+
+
 def _record_to_marc(
     label: dict, mapping: dict[str, str], control_no: str | None, ai_note: str | None = None
 ) -> ET.Element:
@@ -357,7 +388,7 @@ def _record_to_marc(
     for df in merged.values():  # tidy subfield order within a datafield (264 → $a$b$c)
         df[:] = sorted(df, key=lambda sf: sf.get("code", ""))
     _punctuate_isbd(merged)
-    ordered = list(merged.items()) + extras
+    ordered = _demote_extra_main_entries(list(merged.items()) + extras)
     if ai_note:
         # ind1=0 is "source of description note"; joins the sort so it lands in
         # tag order with everything else rather than being appended at the end.

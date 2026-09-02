@@ -463,3 +463,49 @@ def test_export_bytes_ai_note_override(tmp_path, monkeypatch):
 
     xml, _ = export_bytes(d, "card-template", "marc", "everything", ai_note="", **common)
     assert b'tag="588"' not in xml  # unticked in the modal beats the config
+
+
+# ── one main entry per record ─────────────────────────────────────────────────
+# A schema supplying both a personal and a corporate creator would otherwise
+# emit 100 and 110 in the same record, which is invalid: 45 of 110 real
+# monograph records did exactly that before this.
+def test_only_one_main_entry_survives():
+    label = {"personal_authors": ["Smith, John"], "corporate_authors": ["Education Scotland"],
+             "title": "T"}
+    mapping = {"personal_authors": "100$a|700$a", "corporate_authors": "110$a|710$a",
+               "title": "245$a"}
+    root = ET.fromstring(ET.tostring(catalogue.build_marc([_rec(label)], mapping).getroot()))
+    tags = [df.get("tag") for df in root.iter(f"{MARC_NS}datafield")]
+    assert tags.count("100") == 1
+    assert "110" not in tags, "the corporate creator must become an added entry"
+    assert tags.count("710") == 1
+
+
+def test_the_demoted_entry_keeps_its_content():
+    label = {"personal_authors": ["Smith, John"], "corporate_authors": ["Education Scotland"],
+             "title": "T"}
+    mapping = {"personal_authors": "100$a|700$a", "corporate_authors": "110$a|710$a",
+               "title": "245$a"}
+    root = ET.fromstring(ET.tostring(catalogue.build_marc([_rec(label)], mapping).getroot()))
+    df = next(d for d in root.iter(f"{MARC_NS}datafield") if d.get("tag") == "710")
+    assert df.find(f"{MARC_NS}subfield").text == "Education Scotland"
+    assert df.get("ind1") == "2", "corporate name in direct order"
+
+
+def test_a_corporate_creator_alone_keeps_the_main_entry():
+    label = {"corporate_authors": ["Education Scotland"], "title": "T"}
+    mapping = {"corporate_authors": "110$a|710$a", "title": "245$a"}
+    root = ET.fromstring(ET.tostring(catalogue.build_marc([_rec(label)], mapping).getroot()))
+    tags = [df.get("tag") for df in root.iter(f"{MARC_NS}datafield")]
+    assert "110" in tags and "710" not in tags
+
+
+def test_additional_authors_are_unaffected():
+    label = {"personal_authors": ["Smith, John", "Brown, A."],
+             "corporate_authors": ["Education Scotland"], "title": "T"}
+    mapping = {"personal_authors": "100$a|700$a", "corporate_authors": "110$a|710$a",
+               "title": "245$a"}
+    root = ET.fromstring(ET.tostring(catalogue.build_marc([_rec(label)], mapping).getroot()))
+    names = [sf.text for df in root.iter(f"{MARC_NS}datafield")
+             if df.get("tag") in ("100", "700", "710") for sf in df]
+    assert names == ["Smith, John", "Brown, A.", "Education Scotland"]
