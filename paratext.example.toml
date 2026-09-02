@@ -15,7 +15,10 @@ base-url = "http://localhost:8000/v1"   # any OpenAI-compatible model server
 [project.cards]
 source     = "data/cards"
 output     = "output/cards.jsonl"
-review-out = "review/cards"
+# review-out pins one directory and turns OFF round auto-naming, so editing the
+# prompt no longer opens a new round to compare against. Leave it unset unless
+# that's what you want.
+# review-out = "review/cards"
 
 # Verbatim passthrough into the request body — for provider parameters paratext
 # doesn't model. Reasoning controls live here, and every provider spells them
