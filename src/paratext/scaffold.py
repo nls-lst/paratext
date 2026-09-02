@@ -220,9 +220,19 @@ def _offer_bootstrap(mod: str) -> bool:
     return True
 
 
+def _prompt(question: str, default: str = "") -> str:
+    """Read one answer. Falls back to the default on EOF, so a scaffold driven
+    from a prebuild or CI completes instead of dying half-written."""
+    try:
+        return input(question).strip()
+    except EOFError:
+        print(f"(no input available — using default: {default or 'none'})")
+        return default
+
+
 def _ask(question: str, default: bool) -> bool:
     suffix = " [Y/n] " if default else " [y/N] "
-    ans = input(question + suffix).strip().lower()
+    ans = _prompt(question + suffix, "y" if default else "n").lower()
     if not ans:
         return default
     return ans in ("y", "yes")
@@ -233,7 +243,7 @@ def init(name: str | None = None, *, install: bool = True) -> int:
     the project files under ./<module>/, offers to add a paratext.toml config
     entry, then (unless ``install`` is False) registers the entry point in
     pyproject.toml and runs ``uv sync``."""
-    name = name or input("Project name: ").strip()
+    name = name or _prompt("Project name: ")
     if not name:
         raise SystemExit("a project name is required")
 
@@ -252,7 +262,7 @@ def init(name: str | None = None, *, install: bool = True) -> int:
             crop = _ask("    Crop each scan to the card region"
                         " (needs the [detector] extra)?", default=False)
 
-    raw = input("Metadata fields, comma-separated (e.g. title, author, date) [title]: ")
+    raw = _prompt("Metadata fields, comma-separated (e.g. title, author, date) [title]: ")
     fields = [f.strip() for f in raw.split(",") if f.strip()] or ["title"]
 
     mod = to_module_name(name)
@@ -386,15 +396,15 @@ def _offer_config(ep_name: str) -> None:
         print(f"  paratext.toml already has [project.{ep_name}] — leaving it as is.")
         return
 
-    source = input("  Source directory (images or PDFs) []: ").strip()
+    source = _prompt("  Source directory (images or PDFs) []: ")
 
     block: list[str] = []
     if not existing.strip():
         block.append("# paratext config")
     if not any(k in parsed for k in ("base-url", "base_url")):
-        base = input("  model base URL [http://localhost:8000/v1]: ").strip() \
+        base = _prompt("  model base URL [http://localhost:8000/v1]: ") \
             or "http://localhost:8000/v1"
-        model = input("  Model id served by that endpoint []: ").strip()
+        model = _prompt("  Model id served by that endpoint []: ")
         block.append(f'base-url = "{base}"')
         if model:
             block.append(f'model = "{model}"')

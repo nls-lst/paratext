@@ -189,3 +189,58 @@ def test_bootstrap_leaves_an_existing_pyproject_alone(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "mine"\n')
     assert scaffold._offer_bootstrap("my_cards") is False
     assert (tmp_path / "pyproject.toml").read_text() == '[project]\nname = "mine"\n'
+
+
+def _eof(*a):
+    raise EOFError
+
+
+def test_ask_falls_back_to_the_default_without_a_tty(monkeypatch):
+    from paratext import scaffold
+
+    monkeypatch.setattr("builtins.input", _eof)
+    assert scaffold._ask("PDFs?", default=False) is False
+    assert scaffold._ask("Bootstrap?", default=True) is True
+
+
+def test_offer_config_completes_without_a_tty(tmp_path, monkeypatch):
+    import tomllib
+
+    from paratext import scaffold
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("builtins.input", _eof)
+    scaffold._offer_config("my-cards")
+
+    parsed = tomllib.loads((tmp_path / "paratext.toml").read_text())
+    assert "my-cards" in parsed["project"]
+    assert parsed["base-url"] == "http://localhost:8000/v1"
+
+
+def test_init_scaffolds_a_whole_project_without_a_tty(tmp_path, monkeypatch):
+    import tomllib
+
+    from paratext import scaffold
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("builtins.input", _eof)
+    assert scaffold.init("my-cards", install=False) == 0
+
+    # The whole scaffold lands, not the half-written state an EOF used to leave.
+    for rel in ("my_cards/prompt.md", "my_cards/schema.py", "my_cards/__init__.py",
+                "tests/test_my_cards_audit.py"):
+        assert (tmp_path / rel).exists(), rel
+    parsed = tomllib.loads((tmp_path / "paratext.toml").read_text())
+    assert "my-cards" in parsed["project"]
+
+
+def test_init_without_a_name_or_a_tty_exits_cleanly(tmp_path, monkeypatch):
+    import pytest
+
+    from paratext import scaffold
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("builtins.input", _eof)
+    with pytest.raises(SystemExit, match="name is required"):
+        scaffold.init(None)
+    assert not list(tmp_path.iterdir())
