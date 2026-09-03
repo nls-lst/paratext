@@ -134,7 +134,9 @@ prompt version, keyed on the prompt's hash:
   `-r3`, …). The UI shows the two most recent rounds side by side and highlights
   what changed. The flag is needed because a run resumes on sample id: without
   it the existing extractions are already there, so the model is never called.
-  paratext stops and says so rather than resuming into a stale file.
+  paratext stops and says so rather than resuming into a stale file. On a small
+  collection, `re-extract = true` in `paratext.toml` makes it the default and
+  the loop needs no flag.
 - **Re-run the same prompt** (a resume, or a bigger `--limit`) → the current round
   is updated in place, keeping the annotations you've already made.
 

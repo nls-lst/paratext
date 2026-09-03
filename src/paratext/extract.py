@@ -78,7 +78,9 @@ def _guard_stale_output(output: Path, header: dict, project: str, re_extract: bo
         f"Those records answer a different question, and resume would skip every\n"
         f"sample and call the model zero times. Either:\n"
         f"  paratext run -p {project} --re-extract           # redo them\n"
-        f"  paratext run -p {project} --output <new>.jsonl   # keep both"
+        f"  paratext run -p {project} --output <new>.jsonl   # keep both\n"
+        f"On a small, cheap collection you can make the first the default:\n"
+        f"  re-extract = true   under [project.{project}] in paratext.toml"
     )
 
 

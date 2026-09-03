@@ -62,6 +62,7 @@ RECOGNISED = (
     "limit",
     "no_structured",
     "skip_preflight",
+    "re_extract",
     "max_tokens",
 )
 
@@ -232,7 +233,7 @@ def coerce_paths(d: dict) -> dict:
     for key in ("limit", "review_port", "max_tokens"):
         if key in d and isinstance(d[key], str):
             d[key] = int(d[key])
-    for key in ("no_structured", "skip_preflight"):
+    for key in ("no_structured", "skip_preflight", "re_extract"):
         if key in d and isinstance(d[key], str):
             d[key] = d[key].lower() in ("1", "true", "yes", "on")
     return d

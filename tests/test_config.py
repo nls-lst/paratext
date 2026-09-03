@@ -162,3 +162,11 @@ def test_max_tokens_from_the_environment(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PARATEXT_MAX_TOKENS", "16384")
     assert cfg.coerce_paths(cfg.load_defaults(None))["max_tokens"] == 16384
+
+
+def test_re_extract_is_recognised_and_coerced():
+    from paratext.config import RECOGNISED, coerce_paths
+
+    assert "re_extract" in RECOGNISED
+    assert coerce_paths({"re_extract": "true"})["re_extract"] is True
+    assert coerce_paths({"re_extract": "no"})["re_extract"] is False

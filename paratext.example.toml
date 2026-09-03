@@ -19,6 +19,11 @@ output     = "output/cards.jsonl"
 # prompt no longer opens a new round to compare against. Leave it unset unless
 # that's what you want.
 # review-out = "review/cards"
+# Editing the prompt makes existing extractions stale, and paratext stops rather
+# than resuming into them. On a small collection where a re-run is cheap, this
+# discards them and calls the model again instead — the run/edit/re-run loop
+# then needs no flag. Leave it off for anything big or metered.
+# re-extract = true
 
 # Verbatim passthrough into the request body — for provider parameters paratext
 # doesn't model. Reasoning controls live here, and every provider spells them
