@@ -279,27 +279,31 @@ suppliers, unannounced plans or licensing negotiations belongs in the
 <!-- HELICAL START -->
 ## Tasks
 
-This project's tasks live in `.helical/tasks/` and are managed with the `helical`
-command. Read them before starting, and record what you find.
+This project's tasks live in `.helical/tasks/` as markdown, managed with the
+`helical` command. Read them before starting, and record what you find.
 
 ```bash
-helical ls -p <project>              # open work here
+helical ls                           # open work in the project you are in
 helical show <ID>                    # one task in full
 helical set <ID> --status doing      # todo | doing | done
 helical set <ID> --horizon next      # now | next | future
 helical set <ID> --flow waiting --blocker "why"
-helical new "Title" -p <project> --horizon next
+helical new "Title" --horizon next -l some-label
 ```
 
-`--json` works on every command. A task carries both a **status** (how far along)
-and a **horizon** (when it matters); the routemap across all projects is built from
-horizons, so set one deliberately.
+`-p <project>` targets another project; without it, helical uses the one whose
+directory you are standing in. `--json` works on every command.
+
+A task carries both a **status** (how far along) and a **horizon** (when it
+matters). The routemap across all projects is built from horizons, so set one
+deliberately rather than taking the default.
 
 **Flow** says who can unstick a task: `waiting` sits with someone else and needs
 chasing, `blocked` sits with us and needs a decision. Neither is accepted without
 `--blocker` explaining it.
 
-Labels come from a fixed vocabulary; `helical new --help` lists it.
+Labels are free-form. `helical ls --json` shows what is already in use — prefer an
+existing one over inventing a near-duplicate.
 
 Boards: <https://helical.ai.nls.uk> · read-only <https://projects.ai.nls.uk>
 <!-- HELICAL END -->
