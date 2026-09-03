@@ -267,35 +267,39 @@ alongside `_api_export_catalogue`.
 - **Bump `schema_version`** when a schema changes.
 - **Commits:** short messages, no Co-Authored-By trailer.
 
-## Backlog tasks are public
+## Tasks in this repo are public
 
-This repository is public, and `backlog/` is committed with it. Task titles,
+This repository is public, and `.helical/` is committed with it. Task titles,
 descriptions and notes are visible to anyone.
 
 Keep repo tasks to engineering work. Anything naming NLS internals, staff,
 suppliers, unannounced plans or licensing negotiations belongs in the
-`paratext-nls` backlog or the roadmap at `/opt/backlog` instead.
+`paratext-nls` board or the `admin` project instead.
 
-<!-- BACKLOG.MD GUIDELINES START -->
-<!-- backlog.md-instructions-version: 1.50.1 -->
-<CRITICAL_INSTRUCTION>
+<!-- HELICAL START -->
+## Tasks
 
-## Backlog.md Workflow
+This project's tasks live in `.helical/tasks/` and are managed with the `helical`
+command. Read them before starting, and record what you find.
 
-This project uses Backlog.md for task and project management.
+```bash
+helical ls -p <project>              # open work here
+helical show <ID>                    # one task in full
+helical set <ID> --status doing      # todo | doing | done
+helical set <ID> --horizon next      # now | next | future
+helical set <ID> --flow waiting --blocker "why"
+helical new "Title" -p <project> --horizon next
+```
 
-**For every user request in this project, run `backlog instructions overview` before answering or taking action.**
+`--json` works on every command. A task carries both a **status** (how far along)
+and a **horizon** (when it matters); the routemap across all projects is built from
+horizons, so set one deliberately.
 
-Use the overview to decide whether to search, read, create, or update Backlog tasks.
+**Flow** says who can unstick a task: `waiting` sits with someone else and needs
+chasing, `blocked` sits with us and needs a decision. Neither is accepted without
+`--blocker` explaining it.
 
-Before task lifecycle actions, read the matching detailed guide:
-- `backlog instructions task-creation` before creating or splitting tasks
-- `backlog instructions task-execution` before planning, changing status or assignee, adding a plan or implementation notes, or implementing task work
-- `backlog instructions task-finalization` before checking acceptance criteria, writing final summaries, or moving tasks to terminal statuses
+Labels come from a fixed vocabulary; `helical new --help` lists it.
 
-Use `backlog <command> --help` before running unfamiliar commands. Help shows options, fields, and examples.
-
-Do not edit Backlog task, draft, document, decision, or milestone markdown files directly. Use the `backlog` CLI so metadata, relationships, and history stay consistent.
-
-</CRITICAL_INSTRUCTION>
-<!-- BACKLOG.MD GUIDELINES END -->
+Boards: <https://helical.ai.nls.uk> · read-only <https://projects.ai.nls.uk>
+<!-- HELICAL END -->
