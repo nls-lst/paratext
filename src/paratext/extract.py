@@ -84,6 +84,27 @@ def _guard_stale_output(output: Path, header: dict, project: str, re_extract: bo
     )
 
 
+def _report_failures(attempted: int, succeeded: int, last_error: str, output: Path) -> None:
+    """A run where the model never answered is a failure, not an empty result.
+
+    Every call failing means one cause — a bad key, a wrong base-url, a model the
+    endpoint doesn't serve — so it stops with that cause instead of reporting
+    success over an empty file.
+    """
+    failed = attempted - succeeded
+    if not failed:
+        return
+    errors = output.with_name(output.stem + "_errors" + output.suffix)
+    if succeeded:
+        print(f"\n!  {failed} of {attempted} sample(s) failed — see {errors}")
+        return
+    raise SystemExit(
+        f"\nAll {attempted} sample(s) failed — the model was never reached.\n"
+        f"  last error: {last_error}\n"
+        f"  Check --base-url, --model and the API key, then see {errors}."
+    )
+
+
 def run(
     project: Project,
     source: Path,
@@ -138,9 +159,12 @@ def run(
     if seen:
         logger.info("Resuming run — skipping %d already-processed sample(s)", len(seen))
 
+    attempted = succeeded = 0
+    last_error = ""
     for sample in tqdm(project.iter_samples(source, limit), unit="sample"):
         if sample.id in seen:
             continue
+        attempted += 1
         # A sample can be pre-classified by iter_samples (e.g. a deterministic
         # verso filter) to skip the model call entirely.
         pre = (sample.metadata or {}).get("preclassified")
@@ -154,6 +178,7 @@ def run(
                     "elapsed_s": 0.0,
                 },
             )
+            succeeded += 1
             continue
         t0 = time.monotonic()
         try:
@@ -188,6 +213,7 @@ def run(
         except Exception as e:
             append_error(output, sample.id, str(e))
             logger.warning("[%s] failed: %s", sample.id, e)
+            last_error = str(e)
             continue
         elapsed = time.monotonic() - t0
         record = {
@@ -197,6 +223,9 @@ def run(
             "elapsed_s": round(elapsed, 3),
         }
         append_jsonl(output, record)
+        succeeded += 1
+
+    _report_failures(attempted, succeeded, last_error, Path(output))
 
     for notice in getattr(project.source, "notices", []):
         logger.warning("%s", notice)

@@ -165,3 +165,44 @@ def test_guard_is_a_no_op_for_a_new_file(tmp_path):
     from paratext.extract import _guard_stale_output
 
     _guard_stale_output(tmp_path / "nope.jsonl", _header(), "p", False)
+
+
+def test_report_failures_is_silent_when_all_succeeded(tmp_path, capsys):
+    from paratext.extract import _report_failures
+
+    _report_failures(3, 3, "", tmp_path / "out.jsonl")
+    assert capsys.readouterr().out == ""
+
+
+def test_report_failures_notes_a_partial_failure(tmp_path, capsys):
+    from paratext.extract import _report_failures
+
+    _report_failures(5, 3, "boom", tmp_path / "out.jsonl")
+    out = capsys.readouterr().out
+    assert "2 of 5" in out and "out_errors.jsonl" in out
+
+
+def test_report_failures_stops_when_nothing_succeeded(tmp_path):
+    import pytest
+
+    from paratext.extract import _report_failures
+
+    with pytest.raises(SystemExit, match="All 4 sample"):
+        _report_failures(4, 0, "401 unauthorized", tmp_path / "out.jsonl")
+
+
+def test_report_failures_names_the_last_error(tmp_path):
+    import pytest
+
+    from paratext.extract import _report_failures
+
+    with pytest.raises(SystemExit, match="401 unauthorized"):
+        _report_failures(1, 0, "401 unauthorized", tmp_path / "out.jsonl")
+
+
+def test_report_failures_ignores_a_run_with_nothing_to_do(tmp_path, capsys):
+    from paratext.extract import _report_failures
+
+    # A full resume attempts nothing; that is not a failure.
+    _report_failures(0, 0, "", tmp_path / "out.jsonl")
+    assert capsys.readouterr().out == ""
