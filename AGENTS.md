@@ -287,7 +287,7 @@ helical ls                           # open work in the project you are in
 helical show <ID>                    # one task in full
 helical set <ID> --status doing      # todo | doing | done
 helical set <ID> --horizon next      # now | next | future
-helical set <ID> --flow waiting --blocker "why"
+helical set <ID> --flow blocked --blocker "why"
 helical new "Title" --horizon next -l some-label
 ```
 
@@ -298,8 +298,8 @@ A task carries both a **status** (how far along) and a **horizon** (when it
 matters). The routemap across all projects is built from horizons, so set one
 deliberately rather than taking the default.
 
-**Flow** says who can unstick a task: `waiting` sits with someone else and needs
-chasing, `blocked` sits with us and needs a decision. Neither is accepted without
+**Flow** says who can unstick a task: `blocked` sits with someone else and needs
+chasing, `undecided` sits with us and needs a call. Neither is accepted without
 `--blocker` explaining it.
 
 Labels are free-form. `helical ls --json` shows what is already in use — prefer an

@@ -3,7 +3,7 @@ id: PTX-41
 title: Remove the silent hf default from --format
 status: todo
 horizon: next
-flow: blocked
+flow: undecided
 blocker: 'Needs a decision: does a non-interactive export keep defaulting to hf, or error? Erroring breaks existing scripts.'
 priority: med
 labels:
