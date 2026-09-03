@@ -1,0 +1,1 @@
+A framework for extracting structured metadata from digitised material with multimodal models, and reviewing what it produces. Public and Apache-2.0; the NLS-specific projects and data live downstream in paratext-nls.

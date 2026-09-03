@@ -1124,7 +1124,7 @@ function renderFieldsPanel(rounds) {
             changed === 1 ? "" : "s"
           } this round`;
 
-  return `<details style="margin:1rem 0;" ${changed ? "open" : ""}>
+  return `<details style="margin:1rem 0;">
     <summary><strong>Fields</strong> <small style="color:var(--muted-foreground);">(${escapeHtml(
       summary,
     )})</small></summary>
