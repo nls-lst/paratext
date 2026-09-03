@@ -439,6 +439,7 @@ def _cmd_review(args: argparse.Namespace) -> int:
         # A missing default root means "nothing run yet", not a mistake — serve
         # anyway so Projects and the homepage guidance are reachable.
         allow_empty=args.data_dir == REVIEW_ROOT,
+        workshop=args.workshop,
     )
     return 0
 
@@ -779,6 +780,10 @@ def _build_parser() -> tuple[
                          "nginx; use 0.0.0.0 to expose directly on the network)")
     rv.add_argument("--db", type=Path, default=None,
                     help="Annotations SQLite path (default: <data_dir>/annotations.db)")
+    rv.add_argument("--workshop", metavar="DIR", default=None,
+                    help="Workshop mode: give each browser its own workspace under DIR "
+                         "(prompt, fields, rounds and verdicts), seeded with the rounds "
+                         "served here")
     rv.add_argument("--no-open", action="store_true", help="Don't open a browser")
     rv.set_defaults(func=_cmd_review)
 

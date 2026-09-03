@@ -18,6 +18,7 @@ import io
 import json
 import logging
 import webbrowser
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -32,6 +33,7 @@ from ..datasets import (
     schema_history,
 )
 from ..store import Store, default_db_path
+from .sessions import COOKIE_NAME, Sessions
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +69,52 @@ _MIME = {
 
 
 class Handler(BaseHTTPRequestHandler):
-    data_dir: Path
-    store: Store
+    # The single-tenant defaults. In workshop mode `data_dir` and `store` below
+    # resolve per request instead, so one container serves a room of people
+    # without them overwriting each other.
+    base_data_dir: Path
+    base_store: Store
+    sessions: Sessions | None = None
 
     def log_message(self, *a):  # quiet by default
         pass
+
+    # -- per-request session --
+    def _session(self):
+        """The caller's workshop session, creating one on first request. None
+        outside workshop mode, where the server is single-tenant."""
+        if self.sessions is None:
+            return None
+        if getattr(self, "_session_cache", None) is None:
+            cookie = SimpleCookie(self.headers.get("cookie") or "")
+            morsel = cookie.get(COOKIE_NAME)
+            session, created = self.sessions.get_or_create(morsel.value if morsel else None)
+            self._session_cache = session
+            self._set_cookie = created
+        return self._session_cache
+
+    @property
+    def data_dir(self) -> Path:
+        session = self._session()
+        return session.data_dir if session else type(self).base_data_dir
+
+    @property
+    def store(self) -> Store:
+        session = self._session()
+        if not session:
+            return type(self).base_store
+        if getattr(self, "_store_cache", None) is None:
+            self._store_cache = session.store()
+        return self._store_cache
+
+    def _session_headers(self) -> None:
+        """Hand the browser its session on the response that created it."""
+        if getattr(self, "_set_cookie", False):
+            self.send_header(
+                "set-cookie",
+                f"{COOKIE_NAME}={self._session_cache.id}; Path=/; SameSite=Lax; Max-Age=86400",
+            )
+            self._set_cookie = False
 
     # -- helpers --
     def _json(self, obj, status=200):
@@ -79,6 +122,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("content-type", "application/json")
         self.send_header("content-length", str(len(body)))
+        self._session_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -88,6 +132,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("content-length", str(len(body)))
         for k, v in (headers or {}).items():
             self.send_header(k, v)
+        self._session_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -630,6 +675,7 @@ def serve(
     host: str = "127.0.0.1",
     db_path: Path | None = None,
     allow_empty: bool = False,
+    workshop: Path | str | None = None,
 ) -> None:
     """Serve the review UI over ``data_dir``.
 
@@ -648,11 +694,20 @@ def serve(
                 f"or pass a dataset directory: paratext review <dir>"
             )
         data_dir.mkdir(parents=True, exist_ok=True)
-    Handler.data_dir = data_dir
+    Handler.base_data_dir = data_dir
     # Default the annotation store to <data_dir>/annotations.db; --db can point it
     # elsewhere (e.g. an existing DB when swapping in for another review app).
-    Handler.store = Store(default_db_path(data_dir, Path(db_path).resolve() if db_path else None))
+    Handler.base_store = Store(
+        default_db_path(data_dir, Path(db_path).resolve() if db_path else None)
+    )
     datasets = discover_datasets(data_dir)
+    # Workshop mode: every browser gets its own workspace, seeded with the rounds
+    # shipped here so an attendee's own runs sit beside the worked example.
+    Handler.sessions = (
+        Sessions(Path(workshop).resolve(), examples=[d["dir"] for d in datasets])
+        if workshop
+        else None
+    )
     httpd = ThreadingHTTPServer((host, port), Handler)
     # When bound to all interfaces there's no single canonical URL; show
     # localhost for clicking and note the bind address.
@@ -663,6 +718,8 @@ def serve(
     print(
         f"  data dir: {data_dir}  ({len(datasets)} dataset(s): {names})"
     )
+    if workshop:
+        print(f"  workshop mode: per-session workspaces under {Handler.sessions.root}")
     if open_browser:
         try:
             webbrowser.open(url)
