@@ -148,6 +148,23 @@ corrected rows ship as gold alongside the approved ones when you export.
 
 Everything is saved to a SQLite `annotations.db` you can query directly.
 
+## Workshop mode
+
+`paratext review --workshop DIR` turns the review UI into something a room of
+people can share. Each browser gets its own workspace — its own prompt, fields,
+rounds and verdicts — under `DIR`, seeded with the rounds already being served,
+so nobody overwrites anybody. A **Prompt editor** tab appears where you edit the
+prompt and the fields as a table and run a handful of items against the
+configured endpoint, watching the progress and landing in the round you just
+made.
+
+Fields are edited as data, not Python: leave a type on `auto` and it is inferred
+from the field name and shown back to you. Runs are capped (8 items a run, 40
+runs a session, one at a time) because a shared instance spends real money.
+
+None of this is reachable without the flag — no flag, and the server behaves
+exactly as it always has.
+
 ## Configure
 
 A `paratext.toml` in the working directory holds your defaults, and
@@ -175,7 +192,7 @@ Full reference, including hosted endpoints and auth: **[docs/configuration.md](d
 | `paratext run -p <project>` | Extract **and** package in one step (the common path) |
 | `paratext extract -p <project>` | Run the model, write JSONL only |
 | `paratext package <jsonl>` | Re-package an existing JSONL (no model calls) |
-| `paratext review [dir]` | Launch the review UI (default: `./review`) |
+| `paratext review [dir]` | Launch the review UI (default: `./review`); `--workshop DIR` for a shared instance |
 | `paratext export -p <project>` | Export a reviewed round (`--format hf`/`marc`/`dc`) |
 | `paratext inspect [-p <project>]` | Show what an installed project does |
 | `paratext new [name]` | Scaffold a new project package |
