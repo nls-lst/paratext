@@ -114,6 +114,31 @@
       .proj-meta { margin: .25rem 0 .75rem; font-size: .8125rem; word-break: break-word; }
       .prompt-text { white-space: pre-wrap; font-size: .8125rem; max-height: 30rem;
         overflow-y: auto; }
+      /* Eval-set call to action. The gold set is the point of reviewing, so it
+         is a button, not a statistic. The hover ring is a conic gradient rotated
+         through a registered @property — a plain gradient can't be animated. */
+      .eval-cta { margin: 1.25rem 0 1.5rem; }
+      .eval-cta-note { font-size: var(--text-8); margin: .5rem 0 0; }
+      .gold-cta { position: relative; font-size: 1rem; padding: .6875rem 1.25rem;
+        display: inline-flex; align-items: center; gap: .625rem; }
+      .gold-cta .gold-count { font-variant-numeric: tabular-nums; font-weight: 700;
+        background: rgb(255 255 255 / .18); border-radius: var(--radius, .375rem);
+        padding: .0625rem .5rem; }
+      @property --gold-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+      .gold-cta::before {
+        content: ""; position: absolute; inset: -2px; border-radius: inherit; z-index: -1;
+        background: conic-gradient(from var(--gold-angle),
+          transparent 0turn .45turn, #b8860b .62turn, #ffd76e .75turn,
+          #fff3c4 .8turn, #ffd76e .85turn, #b8860b .95turn, transparent 1turn);
+        opacity: 0; transition: opacity .18s ease;
+      }
+      .gold-cta:hover::before, .gold-cta:focus-visible::before {
+        opacity: 1; animation: gold-sweep 2.2s linear infinite;
+      }
+      @keyframes gold-sweep { to { --gold-angle: 1turn; } }
+      @media (prefers-reduced-motion: reduce) {
+        .gold-cta:hover::before, .gold-cta:focus-visible::before { animation: none; }
+      }
       /* Export modal. Oat styles the dialog (pads > header / > div / > footer, the
          body div scrolls) plus inputs, selects, switches and tables. Inline CSS is
          UNLAYERED and beats Oat's @layer rules, so this stays narrow: the bespoke

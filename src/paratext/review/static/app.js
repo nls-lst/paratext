@@ -286,8 +286,8 @@ function renderPicker() {
          review round under <code>review/</code>, then reload — or point
          <code>paratext review</code> at a directory that contains one.</p>
     <p class="page-foot">
-      <a href="#/projects">Project configuration</a> — the fields, prompt and
-      source options each installed project runs with.
+      <code>paratext inspect</code> shows the fields, prompt and source options
+      each installed project runs with.
     </p>`;
     return;
   }
@@ -339,8 +339,8 @@ function renderPicker() {
     <h2>Choose a dataset to review</h2>
     <div style="max-width:32rem;">${cards}</div>
     <p class="page-foot">
-      <a href="#/projects">Project configuration</a> — the fields, prompt and
-      source options each installed project runs with.
+      <code>paratext inspect</code> shows the fields, prompt and source options
+      each installed project runs with.
     </p>
   `;
   document.querySelectorAll("[data-dataset]").forEach((btn) => {
@@ -1140,17 +1140,45 @@ function renderFieldsPanel(rounds) {
   </details>`;
 }
 
+
+// ── Prompt drift ──────────────────────────────────────────────────────
+// The one diagnostic the Projects page carried that nothing else does: does
+// the *installed* prompt still match what this round was run with? Silent when
+// no matching project is installed — reviewing a packaged round on a machine
+// that never ran it is normal.
+function renderDriftPanel(projects, schema) {
+  const p = (projects ?? []).find((x) => x.name === schema);
+  if (!p) return "";
+  const lr = p.latest_round;
+  const audit = (p.audit ?? []).length ? auditPill(p.audit) : "";
+  if (!lr) return audit ? `<p class="mt-2">${audit}</p>` : "";
+  const label = `round ${escapeHtml(String(lr.round))}`;
+  if (lr.matches_installed) {
+    return `<p class="text-light" style="font-size:.875rem;">
+      Prompt matches the installed project ${audit}</p>`;
+  }
+  return `<div class="mt-2">
+    <p class="bad"><strong>Prompt differs</strong> from ${label}
+      (<code>${escapeHtml(lr.dataset)}</code>) — a new run will not reproduce it. ${audit}</p>
+    <details class="mt-2"><summary>Diff — ${label} → installed</summary>
+      <pre class="mt-2" style="font-size:.8125rem;">${renderDiff(lr.prompt, p.prompt)}</pre>
+    </details>
+  </div>`;
+}
+
 async function renderStats() {
-  const [statsRes, tableRes, promptsRes, schemaRes] = await Promise.all([
+  const [statsRes, tableRes, promptsRes, schemaRes, projectsRes] = await Promise.all([
     fetch(api("api/stats")),
     fetch(api("api/table")),
     fetch(api("api/prompts")),
     fetch(api("api/schema")),
+    fetch("api/projects"),
   ]);
   const s = await statsRes.json();
   const rows = await tableRes.json();
   const promptsData = await promptsRes.json();
   const schemaData = await schemaRes.json();
+  const projects = await projectsRes.json().catch(() => []);
   document.getElementById("progress").textContent = "";
 
   const badge = (v) => {
@@ -1194,10 +1222,18 @@ async function renderStats() {
       <div class="field-row"><dt>Needs tweaks</dt><dd class="warn">${s.model.needs_tweaks}</dd></div>
       <div class="field-row"><dt>Not accurate</dt><dd class="bad">${s.model.not_accurate}</dd></div>
       ${hasFlag ? `<div class="field-row"><dt>Flagged</dt><dd>${s.flagged_marc}</dd></div>` : ""}
-      <div class="field-row"><dt>Eval gold set</dt><dd><strong>${s.eval_gold ?? s.model.good_enough}</strong>
-        <small class="text-light">(${s.model.good_enough} good-enough + ${s.corrected ?? 0} human-corrected ·
-        <a href="#/eval">build →</a>)</small></dd></div>
     </dl>
+
+    <div class="eval-cta">
+      <a href="#/eval" class="button primary gold-cta">
+        Build eval set
+        <span class="gold-count">${s.eval_gold ?? s.model.good_enough}</span>
+      </a>
+      <p class="text-light eval-cta-note">${s.model.good_enough} good-enough +
+        ${s.corrected ?? 0} human-corrected — the records that ship as gold.</p>
+    </div>
+
+    ${renderDriftPanel(projects, s.schema)}
 
     ${renderFieldsPanel(schemaData.rounds ?? [])}
 
@@ -1268,124 +1304,6 @@ async function renderStats() {
       }
     });
   });
-}
-
-// ── Projects (read-only inspector) ────────────────────────────────────
-// Describes the *installed* projects. Read-only: editing a project means
-// editing a Python package, and this server may be shared.
-// Styling is Oat's (.card / .badge / .table); only grid layout is local.
-function fieldTypeDetail(f) {
-  if (f.options)
-    return `<span class="text-light">{ ${f.options.map(escapeHtml).join(" | ")} }</span>`;
-  if (f.item_fields)
-    return `<span class="text-light">[ ${f.item_fields
-      .map((i) => escapeHtml(i.key))
-      .join(", ")} ]</span>`;
-  return "";
-}
-
-// Audit is green almost always, so it reads as a pill. Only a failure earns
-// detail — and then it earns all of it.
-function auditPill(problems) {
-  if (!problems.length) return `<span class="badge" data-variant="success">Audit ok</span>`;
-  return `<span class="badge" data-variant="danger">Audit failed</span>
-    <ul class="mt-2">${problems.map((a) => `<li class="bad">${escapeHtml(a)}</li>`).join("")}</ul>`;
-}
-
-function projectCard(p) {
-  if (p.error) {
-    return `<article class="card proj mb-4">
-      <h3>${escapeHtml(p.name)}</h3>
-      <p class="bad">Failed to load: ${escapeHtml(p.error)}</p>
-    </article>`;
-  }
-  const ep = p.entry_point || {};
-  const src = p.source || {};
-  const srcOpts = Object.entries(src)
-    .filter(([k]) => k !== "kind" && k !== "exts")
-    .map(([k, v]) => `${escapeHtml(k)}=${escapeHtml(String(v))}`)
-    .join(", ");
-
-  const fields = (p.view.panels || [])
-    .flatMap((panel) => panel.fields || [])
-    .map(
-      (f) => `<tr>
-        <td><code>${escapeHtml(f.key)}</code></td>
-        <td>${escapeHtml(f.type)} ${fieldTypeDetail(f)}</td>
-        <td class="text-light">${f.collapsed ? "collapsed" : ""}</td>
-      </tr>`,
-    )
-    .join("");
-
-  // One line per fact rather than a label/value grid — the labels were doing
-  // less work than the space they took.
-  const meta = [
-    `<code>${escapeHtml(ep.value || "?")}</code>`,
-    `${escapeHtml(ep.package || "")} ${escapeHtml(ep.version || "")}`.trim(),
-    `${escapeHtml(src.kind || "custom")}${srcOpts ? ` (${srcOpts})` : ""}`,
-    `images ${escapeHtml(String(p.images.max_size))}px q${escapeHtml(
-      String(p.images.quality),
-    )}`,
-    `prompt <code>${escapeHtml(p.prompt_hash)}</code> · ${p.prompt.split("\n").length} lines`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
-  const lr = p.latest_round;
-  const roundLabel = (r) =>
-    `round ${escapeHtml(String(r.round))}` +
-    (r.prompt_hash ? ` <code>${escapeHtml(r.prompt_hash)}</code>` : "");
-  let drift = "";
-  if (lr && !lr.matches_installed) {
-    drift = `<p class="bad mt-2"><strong>Prompt differs</strong> from ${roundLabel(lr)}
-        (<code>${escapeHtml(lr.dataset)}</code>) — a new run will not reproduce it.</p>
-      <details class="mt-2"><summary>Diff — ${roundLabel(lr)} → installed</summary>
-        <pre class="mt-2" style="font-size:.8125rem;">${renderDiff(
-          lr.prompt,
-          p.prompt,
-        )}</pre>
-      </details>`;
-  } else if (lr) {
-    drift = `<p class="text-light mt-2">Prompt matches ${roundLabel(lr)}.</p>`;
-  }
-
-  return `<article class="card proj mb-4">
-    <h3>${escapeHtml(p.name)}
-      <span class="badge outline">${escapeHtml(p.schema_version)}</span>
-      ${auditPill(p.audit)}</h3>
-    <p class="proj-meta text-light">${meta}</p>
-    ${drift}
-    <div class="table"><table><thead><tr><th>Field</th><th>Type</th><th></th></tr></thead>
-      <tbody>${fields}</tbody></table></div>
-    <details class="mt-4"><summary>Prompt</summary>
-      <pre class="prompt-text">${escapeHtml(p.prompt)}</pre></details>
-  </article>`;
-}
-
-async function renderProjects() {
-  const el = document.getElementById("view");
-  el.innerHTML = `<p class="text-light">Loading projects…</p>`;
-  let projects;
-  try {
-    // Relative path, no dataset param: this endpoint is about what's installed,
-    // and the prefix must survive being served behind /verify/.
-    const res = await fetch("api/projects");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    projects = await res.json();
-  } catch (e) {
-    el.innerHTML = `<p class="bad">Could not load projects: ${escapeHtml(String(e))}</p>`;
-    return;
-  }
-
-  if (!projects.length) {
-    el.innerHTML = `<h2>Project configuration</h2>
-      <p>No projects installed. Scaffold one with <code>paratext new</code>.</p>`;
-    return;
-  }
-
-  el.innerHTML = `<h2>Project configuration</h2>
-    ${projects.map(projectCard).join("")}
-    <p class="mt-4"><a href="#/select" class="button outline small">← Back to datasets</a></p>`;
 }
 
 // ── Export modal ──────────────────────────────────────────────────────
@@ -1748,7 +1666,6 @@ async function openExportModal() {
 function currentRoute() {
   if (location.hash === "#/select") return "select";
   if (location.hash === "#/stats") return "stats";
-  if (location.hash === "#/projects") return "projects";
   if (location.hash === "#/eval" || location.hash.startsWith("#/eval/")) return "eval";
   return "review";
 }
@@ -1760,14 +1677,6 @@ function isEval() {
 async function route() {
   if (!state.datasets.length) {
     await loadDatasets();
-  }
-
-  // Projects describes what's installed, not what's been run — so it must not
-  // sit behind dataset selection (a fresh install has no datasets at all).
-  if (currentRoute() === "projects") {
-    renderHeader();
-    await renderProjects();
-    return;
   }
 
   // Resolve the current dataset:
