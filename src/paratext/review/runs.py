@@ -29,7 +29,7 @@ from ..workshop import build_schema
 
 logger = logging.getLogger(__name__)
 
-MAX_CARDS = 5          # per run
+MAX_CARDS = 8          # per run
 MAX_RUNS_PER_SESSION = 40
 
 

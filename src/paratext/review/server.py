@@ -155,6 +155,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(e)}, 429)
         self._json(job.as_dict(), 202)
 
+    def _api_workshop_reset(self):
+        """Throw this session away and start again — the facilitator's answer to
+        an attendee who has painted themselves into a corner. Deletes only the
+        caller's own workspace; there is deliberately no way to reset someone
+        else's from the browser."""
+        session = self._workshop_or_404()
+        self.sessions.reset(session.id)
+        fresh = self.sessions.create()
+        self._session_cache, self._set_cookie = fresh, True
+        self._store_cache = None
+        self._json({"ok": True, "session": fresh.id})
+
     def _api_workshop_job(self, job_id):
         self._workshop_or_404()
         job = self.runs.get(job_id)
@@ -317,6 +329,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         u = urlparse(self.path)
         qs = parse_qs(u.query)
+        if u.path == "/api/workshop/session":
+            return self._api_workshop_reset()
         if u.path == "/api/reset":
             if self._body().get("confirm") is not True:
                 return self._json({"error": "Pass {confirm: true} to reset."}, 400)
@@ -776,8 +790,11 @@ def _workshop_defaults(datasets: list[dict], endpoint: dict) -> dict:
             view = json.loads((newest["dir"] / "view.json").read_text())
             for panel in view.get("panels", []):
                 if panel.get("source") == "model_output":
+                    # Type left empty on purpose: it resolves to "auto" in the
+                    # editor, so the first save shows what was inferred rather
+                    # than presenting every field as text.
                     fields = [
-                        {"name": f["key"], "type": "text", "description": ""}
+                        {"name": f["key"], "type": "", "description": ""}
                         for f in panel.get("fields", [])
                     ]
         except (OSError, json.JSONDecodeError):

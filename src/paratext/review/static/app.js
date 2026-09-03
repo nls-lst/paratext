@@ -1747,6 +1747,11 @@ function renderWorkshop() {
     </div>
 
     <div id="ws-status" class="mt-4"></div>
+
+    <p class="mt-4" style="font-size:.875rem;">
+      <button class="button outline small" id="ws-reset">Start over</button>
+      <span class="text-light"> — throws away your prompt, fields and rounds.</span>
+    </p>
   `;
 
   document.getElementById("ws-add").addEventListener("click", () => {
@@ -1758,6 +1763,16 @@ function renderWorkshop() {
     if (btn) btn.closest("tr").remove();
   });
   document.getElementById("ws-run").addEventListener("click", startWorkshopRun);
+  document.getElementById("ws-reset").addEventListener("click", async () => {
+    if (!confirm("Start over? Your prompt, fields and rounds are deleted.")) return;
+    await fetch("api/workshop/session", { method: "DELETE" });
+    state.workshop = undefined;
+    state.datasets = [];
+    state.dataset = null;
+    await loadWorkshop();
+    await loadDatasets();
+    renderWorkshop();
+  });
 }
 
 async function startWorkshopRun() {
