@@ -1735,23 +1735,21 @@ function renderWorkshop() {
     </table></div>
     <p><button class="button outline small" id="ws-add">+ Add field</button></p>
 
-    <div class="controls mt-4" style="align-items:center; gap:.75rem;">
-      <label style="margin:0;">Cards
-        <input id="ws-cards" type="number" min="1" max="${w.max_cards ?? 5}"
-               value="${Math.min(5, w.max_cards ?? 5)}" style="width:5rem;">
+    <div class="controls">
+      <label class="ws-cards">Cards
+        <input id="ws-cards" type="number" min="1" max="${w.max_cards ?? 8}"
+               value="${w.max_cards ?? 8}">
       </label>
       <button class="button primary" id="ws-run">Run</button>
-      <span class="text-light" style="font-size:.875rem;">${left} run${
-        left === 1 ? "" : "s"
-      } left</span>
+      <span class="text-light">${left} run${left === 1 ? "" : "s"} left</span>
     </div>
 
-    <div id="ws-status" class="mt-4"></div>
+    <div id="ws-status" class="mb-4"></div>
 
-    <p class="mt-4" style="font-size:.875rem;">
+    <div class="controls">
       <button class="button outline small" id="ws-reset">Start over</button>
-      <span class="text-light"> — throws away your prompt, fields and rounds.</span>
-    </p>
+      <span class="text-light">Throws away your prompt, fields and rounds.</span>
+    </div>
   `;
 
   document.getElementById("ws-add").addEventListener("click", () => {
@@ -1779,7 +1777,7 @@ async function startWorkshopRun() {
   const status = document.getElementById("ws-status");
   const runBtn = document.getElementById("ws-run");
   const { prompt, fields } = readWorkshopForm();
-  const cards = Number(document.getElementById("ws-cards").value) || 5;
+  const cards = Number(document.getElementById("ws-cards").value) || state.workshop.max_cards;
 
   if (!prompt.trim()) return (status.innerHTML = `<p class="bad">The prompt is empty.</p>`);
   if (!fields.length) return (status.innerHTML = `<p class="bad">Add at least one field.</p>`);
