@@ -90,3 +90,37 @@ def test_reset_removes_one_session_only(tmp_path):
     assert s.get(a.id) is None and s.get(b.id) is not None
     assert s.reset(a.id) is False       # already gone
     assert s.all_ids() == [b.id]
+
+
+def _round(tmp_path, name, n, fields, prompt):
+    import json
+
+    d = tmp_path / name
+    (d / "images").mkdir(parents=True)
+    (d / "samples.json").write_text("[]")
+    (d / "provenance.json").write_text(json.dumps({"prompt": prompt}))
+    (d / "view.json").write_text(json.dumps({
+        "schema_version": "v1",
+        "panels": [{"source": "model_output",
+                    "fields": [{"key": k, "label": k, "type": "string"} for k in fields]}],
+    }))
+    return {"name": name, "base": "cards", "round": n, "dir": d}
+
+
+def test_workshop_defaults_seed_from_the_newest_round(tmp_path):
+    from paratext.review.server import _workshop_defaults
+
+    r1 = _round(tmp_path, "cards-r1", 1, ["title"], "old prompt")
+    r2 = _round(tmp_path, "cards-r2", 2, ["title", "author"], "new prompt")
+    d = _workshop_defaults([r1, r2], {"model": "m", "base_url": "u", "source": "/imgs"})
+
+    assert d["prompt"] == "new prompt"
+    assert [f["name"] for f in d["fields"]] == ["title", "author"]
+    assert d["project"] == "cards" and d["model"] == "m" and d["source"] == "/imgs"
+
+
+def test_workshop_defaults_survive_having_no_rounds(tmp_path):
+    from paratext.review.server import _workshop_defaults
+
+    d = _workshop_defaults([], {})
+    assert d["prompt"] == "" and d["fields"] == [] and d["api_key"] == "EMPTY"

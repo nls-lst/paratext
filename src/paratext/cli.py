@@ -427,6 +427,22 @@ def _cmd_carbon(args: argparse.Namespace) -> int:
 
 
 # ── Review ────────────────────────────────────────────────────────────────
+def _workshop_endpoint(args: argparse.Namespace) -> dict:
+    """Where workshop runs send their model calls. Comes from the same
+    config/env layer as `run`, so a Space configures it with PARATEXT_* vars."""
+    merged = {**HARDCODED_DEFAULTS, **coerce_paths(load_defaults(None))}
+    base_url, note = normalise_base_url(str(merged.get("base_url") or ""))
+    if note:
+        print(note)
+    source = args.workshop_source or merged.get("source")
+    return {
+        "base_url": base_url,
+        "api_key": merged.get("api_key"),
+        "model": merged.get("model"),
+        "source": str(source) if source else None,
+    }
+
+
 def _cmd_review(args: argparse.Namespace) -> int:
     from .review import serve
 
@@ -440,6 +456,7 @@ def _cmd_review(args: argparse.Namespace) -> int:
         # anyway so Projects and the homepage guidance are reachable.
         allow_empty=args.data_dir == REVIEW_ROOT,
         workshop=args.workshop,
+        endpoint=_workshop_endpoint(args) if args.workshop else None,
     )
     return 0
 
@@ -784,6 +801,9 @@ def _build_parser() -> tuple[
                     help="Workshop mode: give each browser its own workspace under DIR "
                          "(prompt, fields, rounds and verdicts), seeded with the rounds "
                          "served here")
+    rv.add_argument("--workshop-source", metavar="DIR", default=None,
+                    help="With --workshop: the images attendees' runs read from "
+                         "(default: the configured `source`)")
     rv.add_argument("--no-open", action="store_true", help="Don't open a browser")
     rv.set_defaults(func=_cmd_review)
 

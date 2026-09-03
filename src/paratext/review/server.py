@@ -33,6 +33,8 @@ from ..datasets import (
     schema_history,
 )
 from ..store import Store, default_db_path
+from ..workshop import normalise_fields
+from .runs import MAX_CARDS, Runs, extract_and_package, workshop_project
 from .sessions import COOKIE_NAME, Sessions
 
 logger = logging.getLogger(__name__)
@@ -75,9 +77,90 @@ class Handler(BaseHTTPRequestHandler):
     base_data_dir: Path
     base_store: Store
     sessions: Sessions | None = None
+    runs: Runs = Runs()
+    workshop_defaults: dict = {}
 
     def log_message(self, *a):  # quiet by default
         pass
+
+    # -- workshop mode --
+    def _workshop_or_404(self):
+        session = self._session()
+        if session is None:
+            raise FileNotFoundError("workshop mode is not enabled on this server")
+        return session
+
+    def _api_workshop_state(self):
+        """The attendee's prompt and fields, falling back to the defaults this
+        server was started with."""
+        session = self._workshop_or_404()
+        state = session.read_state()
+        self._json({
+            "session": session.id,
+            "prompt": state.get("prompt", type(self).workshop_defaults.get("prompt", "")),
+            "fields": state.get("fields", type(self).workshop_defaults.get("fields", [])),
+            "runs_used": self.runs.spent(session.id),
+            "max_runs": self.runs.max_runs,
+            "max_cards": MAX_CARDS,
+        })
+
+    def _api_workshop_save(self):
+        session = self._workshop_or_404()
+        body = self._body()
+        fields = normalise_fields(body.get("fields") or [])
+        if not fields:
+            return self._json({"error": "a schema needs at least one field"}, 400)
+        session.write_state({"prompt": body.get("prompt") or "", "fields": fields})
+        self._json({"ok": True, "fields": fields})
+
+    def _api_workshop_run(self):
+        session = self._workshop_or_404()
+        if self.runs.active(session.id):
+            return self._json({"error": "a run is already going"}, 409)
+
+        body = self._body()
+        prompt = (body.get("prompt") or "").strip()
+        fields = normalise_fields(body.get("fields") or [])
+        if not prompt:
+            return self._json({"error": "the prompt is empty"}, 400)
+        if not fields:
+            return self._json({"error": "a schema needs at least one field"}, 400)
+        cards = max(1, min(int(body.get("cards") or MAX_CARDS), MAX_CARDS))
+
+        cfg = type(self).workshop_defaults
+        if not cfg.get("source") or not Path(cfg["source"]).is_dir():
+            return self._json({"error": "this server has no source images configured"}, 400)
+
+        session.write_state({"prompt": prompt, "fields": fields})
+        name = cfg.get("project", "workshop")
+        proj = workshop_project(name, prompt, fields)
+        # A new round per prompt: the round number is just how many the attendee
+        # has made, so r1/r2/r3 read as their own iteration history.
+        existing = sorted(session.data_dir.glob(f"{name}-r*"))
+        n = len(existing) + 1
+        review_out = session.data_dir / f"{name}-r{n}"
+
+        try:
+            job = self.runs.start(
+                session.id, cards,
+                lambda j: extract_and_package(
+                    j, proj=proj, source=Path(cfg["source"]),
+                    output=session.dir / "output" / f"{name}-r{n}.jsonl",
+                    review_out=review_out,
+                    base_url=cfg["base_url"], api_key=cfg["api_key"],
+                    model=cfg["model"], cards=cards,
+                ),
+            )
+        except ValueError as e:
+            return self._json({"error": str(e)}, 429)
+        self._json(job.as_dict(), 202)
+
+    def _api_workshop_job(self, job_id):
+        self._workshop_or_404()
+        job = self.runs.get(job_id)
+        if not job:
+            raise FileNotFoundError(f"no such job: {job_id}")
+        self._json(job.as_dict())
 
     # -- per-request session --
     def _session(self):
@@ -174,6 +257,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._api_prompts(self._dataset(qs))
             if path == "/api/schema":
                 return self._api_schema(self._dataset(qs))
+            if path == "/api/workshop/state":
+                return self._api_workshop_state()
+            if path.startswith("/api/workshop/job/"):
+                return self._api_workshop_job(path.rsplit("/", 1)[1])
             if path == "/api/export/fields":
                 return self._api_export_fields(self._dataset(qs), qs)
             if path in ("/api/export/marc", "/api/export/dc"):
@@ -209,6 +296,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_export_catalogue(
                 self._dataset(qs), u.path.rsplit("/", 1)[1], qs, mapping=body.get("mapping")
             )
+        if u.path == "/api/workshop/state":
+            return self._api_workshop_save()
+        if u.path == "/api/workshop/run":
+            return self._api_workshop_run()
         if u.path == "/api/oauth/hf/exchange":
             return self._api_hf_exchange()
         if u.path == "/api/export/hf":
@@ -668,6 +759,40 @@ class Handler(BaseHTTPRequestHandler):
         )
 
 
+def _workshop_defaults(datasets: list[dict], endpoint: dict) -> dict:
+    """Seed an attendee's starting prompt and fields from the newest round being
+    served, so the Space needs no separate copy of either. The endpoint comes
+    from the usual config/env layer."""
+    newest = max(datasets, key=lambda d: d.get("round") or 0, default=None)
+    prompt, fields, project = "", [], "workshop"
+    if newest:
+        project = newest.get("base") or project
+        try:
+            prov = json.loads((newest["dir"] / "provenance.json").read_text())
+            prompt = prov.get("prompt", "")
+        except (OSError, json.JSONDecodeError, KeyError):
+            pass
+        try:
+            view = json.loads((newest["dir"] / "view.json").read_text())
+            for panel in view.get("panels", []):
+                if panel.get("source") == "model_output":
+                    fields = [
+                        {"name": f["key"], "type": "text", "description": ""}
+                        for f in panel.get("fields", [])
+                    ]
+        except (OSError, json.JSONDecodeError):
+            pass
+    return {
+        "prompt": prompt,
+        "fields": fields,
+        "project": project,
+        "source": endpoint.get("source"),
+        "base_url": endpoint.get("base_url"),
+        "api_key": endpoint.get("api_key") or "EMPTY",
+        "model": endpoint.get("model"),
+    }
+
+
 def serve(
     data_dir: Path,
     port: int = DEFAULT_PORT,
@@ -676,6 +801,7 @@ def serve(
     db_path: Path | None = None,
     allow_empty: bool = False,
     workshop: Path | str | None = None,
+    endpoint: dict | None = None,
 ) -> None:
     """Serve the review UI over ``data_dir``.
 
@@ -719,7 +845,11 @@ def serve(
         f"  data dir: {data_dir}  ({len(datasets)} dataset(s): {names})"
     )
     if workshop:
+        Handler.workshop_defaults = _workshop_defaults(datasets, endpoint or {})
+        d = Handler.workshop_defaults
         print(f"  workshop mode: per-session workspaces under {Handler.sessions.root}")
+        print(f"    endpoint {d.get('model') or '(no model set)'} at {d.get('base_url')}")
+        print(f"    source   {d.get('source') or '(none — runs disabled)'}")
     if open_browser:
         try:
             webbrowser.open(url)

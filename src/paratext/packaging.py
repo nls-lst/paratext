@@ -25,7 +25,7 @@ from pathlib import Path
 from PIL import Image
 
 from .io import iter_records, read_provenance
-from .projects import KEEP, Curation, build_view, get_project
+from .projects import KEEP, Curation, Project, build_view, get_project
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +71,14 @@ def package(
     *,
     fresh: bool = False,
     image_max_size: int = 1024,
+    proj: "Project | None" = None,
 ) -> tuple[int, dict[str, int]]:
-    """Write samples.json + images/ for `paratext review`. Returns (kept, skipped_by_reason)."""
-    proj = get_project(project)
+    """Write samples.json + images/ for `paratext review`. Returns (kept, skipped_by_reason).
+
+    `proj` overrides entry-point lookup, for a project built at runtime rather
+    than installed — workshop mode, where the schema is edited in the browser.
+    """
+    proj = proj or get_project(project)
     if fresh and out.exists():
         shutil.rmtree(out)
     (out / "images").mkdir(parents=True, exist_ok=True)
