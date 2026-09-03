@@ -199,6 +199,7 @@ Full reference, including hosted endpoints and auth: **[docs/configuration.md](d
 | `paratext sample` | Symlink a random image subset out of a nested tree |
 | `paratext carbon` | Show current grid carbon/renewables |
 | `paratext guide` | Print the agent guide |
+| `paratext skill` | Install that guide as a skill your coding agents find |
 
 Run `paratext <command> -h` for that command's flags.
 
@@ -215,7 +216,8 @@ Run `paratext <command> -h` for that command's flags.
 - **[Publishing](docs/publishing.md)** — cutting a release to PyPI via Trusted
   Publishing.
 - **[AGENTS.md](AGENTS.md)** — the guide for AI coding agents, including how to
-  extend paratext for your own collection.
+  extend paratext for your own collection. `paratext skill` installs it where
+  Claude Code, Codex and the rest look, so an agent finds it without being told.
 
 ## When something looks wrong
 

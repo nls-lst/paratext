@@ -443,6 +443,23 @@ def _workshop_endpoint(args: argparse.Namespace) -> dict:
     }
 
 
+def _cmd_skill(args: argparse.Namespace) -> int:
+    """Install (or remove) the agent guide as a skill the local agents find."""
+    from . import skill
+
+    if args.remove:
+        for where, what in skill.uninstall().items():
+            print(f"  {where:24} {what}")
+        return 0
+    canonical, results = skill.install()
+    print(f"Skill written to {canonical}")
+    for where, what in results.items():
+        print(f"  ~/{where:24} {what}")
+    print("\nAgents pick it up on their next run. `paratext guide` prints the "
+          "same content.")
+    return 0
+
+
 def _cmd_review(args: argparse.Namespace) -> int:
     from .review import serve
 
@@ -806,6 +823,10 @@ def _build_parser() -> tuple[
                          "(default: the configured `source`)")
     rv.add_argument("--no-open", action="store_true", help="Don't open a browser")
     rv.set_defaults(func=_cmd_review)
+
+    sk = sub.add_parser("skill", help="Install the agent guide as a skill for local coding agents")
+    sk.add_argument("--remove", action="store_true", help="Remove the links again")
+    sk.set_defaults(func=_cmd_skill)
 
     ins = sub.add_parser("inspect", help="Show what an installed project does (schema, prompt, "
                                          "source, audit)")
