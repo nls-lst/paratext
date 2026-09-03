@@ -6,6 +6,7 @@ horizon: now
 flow: clear
 priority: high
 labels:
+  - onboarding
   - cli
   - tests
 created: '2026-09-02'

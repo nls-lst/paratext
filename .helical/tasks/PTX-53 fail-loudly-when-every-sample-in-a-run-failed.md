@@ -5,6 +5,8 @@ status: done
 horizon: now
 flow: clear
 labels:
+  - extraction
+  - onboarding
   - cli
 created: '2026-09-03'
 updated: '2026-09-03'

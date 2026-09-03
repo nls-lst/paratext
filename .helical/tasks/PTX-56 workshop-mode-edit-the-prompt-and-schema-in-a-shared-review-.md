@@ -5,6 +5,8 @@ status: done
 horizon: now
 flow: clear
 labels:
+  - workshop
+  - schema
   - ui
   - cli
 created: '2026-09-03'

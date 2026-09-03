@@ -5,6 +5,7 @@ status: done
 horizon: now
 flow: clear
 labels:
+  - agents
   - cli
   - docs
 created: '2026-09-03'

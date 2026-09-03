@@ -5,6 +5,7 @@ status: done
 horizon: now
 flow: clear
 labels:
+  - workshop
   - tests
 created: '2026-09-03'
 updated: '2026-09-03'
