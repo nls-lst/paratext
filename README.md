@@ -18,8 +18,19 @@ schema, and input handling — so the same code path runs a 50-item pilot and a
   item per file; PDFs recursively.
 - **An OpenAI-compatible endpoint serving a model that accepts images.** Local
   hosting (llama.cpp, vLLM, LM Studio, [Lemonade](https://lemonade-server.ai/)
-  etc) or a hosted provider.
+  etc) or a hosted provider — anything that speaks the OpenAI chat API.
 - [uv](https://docs.astral.sh/uv/)
+
+If you have no endpoint in mind, a hosted one takes two lines of config and no
+card — every Hugging Face account has a small monthly allowance:
+
+```toml
+base-url = "https://router.huggingface.co/v1"
+model    = "Qwen/Qwen3-VL-30B-A3B-Instruct"
+```
+
+with your token in `PARATEXT_API_KEY`. A local server is the same shape:
+`base-url = "http://localhost:8000/v1"` and whichever model it serves.
 
 ## Install
 
@@ -27,7 +38,9 @@ schema, and input handling — so the same code path runs a 50-item pilot and a
 uv tool install paratext-cli
 ```
 
-Upgrade with `uv tool upgrade paratext-cli`.
+Upgrade with `uv tool upgrade paratext-cli`. The distribution is
+**`paratext-cli`**; the command and the import are both `paratext`. Plain
+`paratext` on PyPI is an unrelated package and will not give you this tool.
 
 ## Quickstart
 
@@ -36,13 +49,14 @@ Upgrade with `uv tool upgrade paratext-cli`.
 #    registers the entry point, runs `uv sync`. Ready to run.
 #    Works in an empty directory (it offers to create the project for you) or
 #    inside an existing one, where it nests into your package.
-paratext new my-cards
+paratext new my-cards      # also asks for your endpoint and writes paratext.toml
 
 # 2. Check what it will actually do before spending a model run on it.
 paratext inspect -p my-cards
 
-# 3. Extract, package, and review.
-paratext run -p my-cards --limit 50
+# 3. Extract, package, and review. Start small — the first thing you learn is
+#    how wrong the prompt is, and five items tell you that as well as fifty.
+paratext run -p my-cards --limit 5
 paratext review
 ```
 
@@ -58,12 +72,22 @@ of "my change did nothing".
 
 ### Where projects are found
 
+Run paratext from your project directory and it finds your project. That is the
+whole rule in practice — the CLI hands over to the nearest `.venv` that has
+paratext installed, so a bare `paratext run -p my-cards` works.
+
+<details>
+<summary>Why, and what to do if it doesn't</summary>
+
 Projects are discovered through Python entry points, which are **per
 environment**: paratext finds a project when the two are installed into the
-*same* environment. Nothing about it is tied to your working directory.
+*same* environment. Nothing about it is tied to your working directory, and
+`uv tool install` deliberately isolates the tool, so an isolated `paratext`
+would otherwise see only the bundled example.
 
-`uv tool install` deliberately isolates the tool, so a bare `paratext` sees only
-the bundled example. Any of these fixes that:
+The hand-over happens only when the nearest `.venv` really has paratext in it,
+and never over an environment you activated yourself. `PARATEXT_NO_DELEGATE=1`
+turns it off. Failing that, any of these put the two in one environment:
 
 ```bash
 uv run paratext …                          # use the project's own .venv
@@ -71,13 +95,7 @@ source .venv/bin/activate                  # then a bare `paratext` works too
 uv tool install paratext-cli --with .      # inject the project into the tool
 pip install paratext-cli && pip install -e .   # or just share one environment
 ```
-
-You usually don't have to think about it: run from a directory that has a
-`.venv` with paratext in it and the CLI **hands over to that environment
-automatically**, so a bare `paratext run -p my-cards` finds your project. It
-only does this when the nearest `.venv` really has paratext installed, and never
-over an environment you activated yourself. `PARATEXT_NO_DELEGATE=1` turns it
-off.
+</details>
 
 ## Writing a project
 
@@ -148,23 +166,6 @@ corrected rows ship as gold alongside the approved ones when you export.
 
 Everything is saved to a SQLite `annotations.db` you can query directly.
 
-## Workshop mode
-
-`paratext review --workshop DIR` turns the review UI into something a room of
-people can share. Each browser gets its own workspace — its own prompt, fields,
-rounds and verdicts — under `DIR`, seeded with the rounds already being served,
-so nobody overwrites anybody. A **Prompt editor** tab appears where you edit the
-prompt and the fields as a table and run a handful of items against the
-configured endpoint, watching the progress and landing in the round you just
-made.
-
-Fields are edited as data, not Python: leave a type on `auto` and it is inferred
-from the field name and shown back to you. Runs are capped (8 items a run, 40
-runs a session, one at a time) because a shared instance spends real money.
-
-None of this is reachable without the flag — no flag, and the server behaves
-exactly as it always has.
-
 ## Configure
 
 A `paratext.toml` in the working directory holds your defaults, and
@@ -192,7 +193,7 @@ Full reference, including hosted endpoints and auth: **[docs/configuration.md](d
 | `paratext run -p <project>` | Extract **and** package in one step (the common path) |
 | `paratext extract -p <project>` | Run the model, write JSONL only |
 | `paratext package <jsonl>` | Re-package an existing JSONL (no model calls) |
-| `paratext review [dir]` | Launch the review UI (default: `./review`); `--workshop DIR` for a shared instance |
+| `paratext review [dir]` | Launch the review UI (default: `./review`) |
 | `paratext export -p <project>` | Export a reviewed round (`--format hf`/`marc`/`dc`) |
 | `paratext inspect [-p <project>]` | Show what an installed project does |
 | `paratext new [name]` | Scaffold a new project package |
