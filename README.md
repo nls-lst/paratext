@@ -38,9 +38,7 @@ with your token in `PARATEXT_API_KEY`. A local server is the same shape:
 uv tool install paratext-cli
 ```
 
-Upgrade with `uv tool upgrade paratext-cli`. The distribution is
-**`paratext-cli`**; the command and the import are both `paratext`. Plain
-`paratext` on PyPI is an unrelated package and will not give you this tool.
+Upgrade with `uv tool upgrade paratext-cli`.
 
 ## Quickstart
 
