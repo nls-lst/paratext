@@ -41,6 +41,7 @@ const state = {
   index: 0,
   current: null,
   evalDirty: false, // an unsaved edit exists in the correction editor
+  workshop: undefined, // undefined = not asked yet; false = not workshop mode
 };
 
 // Fetch (and cache) the display/review contract for the current dataset.
@@ -1662,9 +1663,167 @@ async function openExportModal() {
   dlg.showModal();
 }
 
+
+// ── Workshop editor ───────────────────────────────────────────────────
+// Only present when the server runs with --workshop. The point of the page is
+// the cycle: change the prompt or the fields, run five cards, look at what
+// came back, change something else. Types are left to the server — send
+// "auto" and the resolved type comes back, so the guess is visible rather
+// than something you had to decide up front.
+
+const FIELD_TYPES = ["auto", "text", "number", "decimal", "yes/no", "list"];
+
+async function loadWorkshop() {
+  try {
+    const res = await fetch("api/workshop/state");
+    state.workshop = res.ok ? await res.json() : false;
+  } catch {
+    state.workshop = false;
+  }
+  return state.workshop;
+}
+
+function fieldRow(f = {}, i = 0) {
+  const type = f.type && FIELD_TYPES.includes(f.type) ? f.type : "auto";
+  const opts = FIELD_TYPES.map(
+    (o) => `<option value="${o}"${o === type ? " selected" : ""}>${o}</option>`,
+  ).join("");
+  return `<tr data-row="${i}">
+    <td><input data-f="name" value="${escapeHtml(f.name ?? "")}" placeholder="field name"></td>
+    <td><select data-f="type">${opts}</select></td>
+    <td><input data-f="description" value="${escapeHtml(f.description ?? "")}"
+        placeholder="optional — a short structural hint"></td>
+    <td><button class="button outline small" data-remove="${i}" aria-label="Remove field">✕</button></td>
+  </tr>`;
+}
+
+function readWorkshopForm() {
+  const prompt = document.getElementById("ws-prompt").value;
+  const fields = [...document.querySelectorAll("#ws-fields tbody tr")]
+    .map((tr) => ({
+      name: tr.querySelector('[data-f="name"]').value,
+      type: tr.querySelector('[data-f="type"]').value,
+      description: tr.querySelector('[data-f="description"]').value,
+    }))
+    .filter((f) => f.name.trim())
+    .map((f) => (f.type === "auto" ? { ...f, type: "" } : f));
+  return { prompt, fields };
+}
+
+function renderWorkshop() {
+  const w = state.workshop;
+  const left = (w.max_runs ?? 0) - (w.runs_used ?? 0);
+  document.getElementById("view").innerHTML = `
+    <h2>Prompt and fields</h2>
+    <p class="text-light" style="max-width:44rem;">
+      The prompt tells the model what to do; the fields decide what shape the
+      answer comes back in. Change either, run a few cards, and compare the new
+      round with the last one.
+    </p>
+
+    <label for="ws-prompt"><strong>Prompt</strong></label>
+    <textarea id="ws-prompt" rows="14" spellcheck="false"
+      style="width:100%; font-family:var(--font-mono); font-size:.8125rem;"
+      >${escapeHtml(w.prompt ?? "")}</textarea>
+
+    <p class="mt-4"><strong>Fields</strong>
+      <span class="text-light" style="font-size:.875rem;">
+        — leave the type on <code>auto</code> and it is guessed from the name.</span></p>
+    <div class="table"><table id="ws-fields">
+      <thead><tr><th>Name</th><th>Holds</th><th>Description</th><th></th></tr></thead>
+      <tbody>${(w.fields ?? []).map((f, i) => fieldRow(f, i)).join("")}</tbody>
+    </table></div>
+    <p><button class="button outline small" id="ws-add">+ Add field</button></p>
+
+    <div class="controls mt-4" style="align-items:center; gap:.75rem;">
+      <label style="margin:0;">Cards
+        <input id="ws-cards" type="number" min="1" max="${w.max_cards ?? 5}"
+               value="${Math.min(5, w.max_cards ?? 5)}" style="width:5rem;">
+      </label>
+      <button class="button primary" id="ws-run">Run</button>
+      <span class="text-light" style="font-size:.875rem;">${left} run${
+        left === 1 ? "" : "s"
+      } left</span>
+    </div>
+
+    <div id="ws-status" class="mt-4"></div>
+  `;
+
+  document.getElementById("ws-add").addEventListener("click", () => {
+    const tbody = document.querySelector("#ws-fields tbody");
+    tbody.insertAdjacentHTML("beforeend", fieldRow({}, tbody.children.length));
+  });
+  document.getElementById("ws-fields").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-remove]");
+    if (btn) btn.closest("tr").remove();
+  });
+  document.getElementById("ws-run").addEventListener("click", startWorkshopRun);
+}
+
+async function startWorkshopRun() {
+  const status = document.getElementById("ws-status");
+  const runBtn = document.getElementById("ws-run");
+  const { prompt, fields } = readWorkshopForm();
+  const cards = Number(document.getElementById("ws-cards").value) || 5;
+
+  if (!prompt.trim()) return (status.innerHTML = `<p class="bad">The prompt is empty.</p>`);
+  if (!fields.length) return (status.innerHTML = `<p class="bad">Add at least one field.</p>`);
+
+  runBtn.disabled = true;
+  status.innerHTML = `<p class="text-light">Starting…</p>`;
+  let job;
+  try {
+    const res = await fetch("api/workshop/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt, fields, cards }),
+    });
+    job = await res.json();
+    if (!res.ok) throw new Error(job.error || `run refused (${res.status})`);
+  } catch (e) {
+    runBtn.disabled = false;
+    return (status.innerHTML = `<p class="bad">${escapeHtml(e.message)}</p>`);
+  }
+
+  const draw = (j) => {
+    status.innerHTML = `
+      <progress value="${j.done}" max="${j.total}" style="width:100%; max-width:24rem;"></progress>
+      <p class="text-light">${j.done} of ${j.total} card${j.total === 1 ? "" : "s"}${
+        j.failures.length ? ` · ${j.failures.length} failed` : ""
+      }</p>`;
+  };
+  draw(job);
+
+  while (job.status === "running") {
+    await new Promise((r) => setTimeout(r, 1200));
+    try {
+      job = await (await fetch(`api/workshop/job/${job.id}`)).json();
+    } catch {
+      break;
+    }
+    draw(job);
+  }
+
+  runBtn.disabled = false;
+  state.workshop.runs_used = (state.workshop.runs_used ?? 0) + 1;
+
+  if (job.status === "error") {
+    status.innerHTML = `<p class="bad"><strong>The run failed.</strong> ${escapeHtml(
+      job.error,
+    )}</p>`;
+    return;
+  }
+  // Straight into the round they just made — the point is to look at it.
+  await loadDatasets();
+  status.innerHTML = `<p class="ok">Done — ${escapeHtml(job.round)} is ready.</p>`;
+  setDataset(job.round);
+  location.hash = "#/review";
+}
+
 // ── Routing ───────────────────────────────────────────────────────────
 function currentRoute() {
   if (location.hash === "#/select") return "select";
+  if (location.hash === "#/workshop") return "workshop";
   if (location.hash === "#/stats") return "stats";
   if (location.hash === "#/eval" || location.hash.startsWith("#/eval/")) return "eval";
   return "review";
@@ -1677,6 +1836,19 @@ function isEval() {
 async function route() {
   if (!state.datasets.length) {
     await loadDatasets();
+  }
+  if (state.workshop === undefined) {
+    await loadWorkshop();
+    const nav = document.getElementById("nav-workshop");
+    if (nav) nav.hidden = !state.workshop;
+  }
+
+  // The editor is about what you're going to run, not what has been run, so it
+  // sits ahead of dataset resolution — a fresh session may have no rounds yet.
+  if (currentRoute() === "workshop" && state.workshop) {
+    renderHeader();
+    renderWorkshop();
+    return;
   }
 
   // Resolve the current dataset:
