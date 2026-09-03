@@ -114,6 +114,8 @@
       .proj-meta { margin: .25rem 0 .75rem; font-size: .8125rem; word-break: break-word; }
       .prompt-text { white-space: pre-wrap; font-size: .8125rem; max-height: 30rem;
         overflow-y: auto; }
+      /* Results closes the loop, so it sits apart from the two doing-steps. */
+      .nav-results { margin-left: .5rem; }
       /* Eval-set call to action. The gold set is the point of reviewing, so it
          is a button, not a statistic. The hover ring is a conic gradient rotated
          through a registered @property — a plain gradient can't be animated. */
@@ -197,10 +199,11 @@
   <body>
     <nav data-topnav>
       <a href="#/select"><strong>paratext</strong></a>
-      <a href="#/review" id="nav-review" class="button outline small">Review</a>
-      <a href="#/stats" id="nav-stats" class="button outline small">Stats</a>
+      <!-- Workflow order: edit, run, look at what came back. -->
       <!-- Workshop mode only; unhidden by the app when /api/workshop/state answers. -->
-      <a href="#/workshop" id="nav-workshop" class="button outline small" hidden>Prompt</a>
+      <a href="#/workshop" id="nav-workshop" class="button outline small" hidden>Prompt editor</a>
+      <a href="#/review" id="nav-review" class="button outline small">Review</a>
+      <a href="#/stats" id="nav-stats" class="button outline small nav-results">Results</a>
       <span id="progress" style="margin-left:auto; font-size:.875rem;"></span>
       <!-- aria-label, NOT title: Oat converts every [title] into a data-tooltip
            whose ::after is absolutely positioned and centred on the element. On

@@ -207,7 +207,7 @@ function renderHeader() {
   const nav = document.querySelector("nav[data-topnav]");
   if (!nav) return;
 
-  // Gate Review/Stats until a dataset is chosen — with no selection they just
+  // Gate Review/Results until a dataset is chosen — with no selection they just
   // fall back to the picker (looking like dead buttons).
   const gated = state.dataset ? "" : "none";
   for (const id of ["nav-review", "nav-stats"]) {
@@ -392,7 +392,7 @@ function render() {
   // At the end of the pass the primary CTA becomes a route to the stats summary,
   // rather than a Next button that silently no-ops.
   const nextControl = atLast
-    ? `<a href="#/stats" class="button primary">Done — see stats →</a>`
+    ? `<a href="#/stats" class="button primary">Done — see results →</a>`
     : `<button id="next" class="primary">Next →</button>`;
   const nav = `
     <div class="controls">
@@ -791,7 +791,7 @@ function renderEditor() {
           <button id="ev-clear" class="outline" ${s.gold ? "" : "disabled"}>Clear correction</button>
           ${
             atLast
-              ? `<a href="#/stats" class="button primary">Done — see stats →</a>`
+              ? `<a href="#/stats" class="button primary">Done — see results →</a>`
               : `<button id="ev-next" class="primary">Save &amp; next →</button>`
           }
         </div>
@@ -1210,7 +1210,7 @@ async function renderStats() {
     .join("");
 
   document.getElementById("view").innerHTML = `
-    <h2>Stats — ${escapeHtml(s.dataset)} <small class="text-light">(${escapeHtml(s.schema)})</small></h2>
+    <h2>Results — ${escapeHtml(s.dataset)} <small class="text-light">(${escapeHtml(s.schema)})</small></h2>
 
     <dl>
       <div class="field-row"><dt>Reviewed</dt><dd>${s.annotated} of ${s.total} (${
