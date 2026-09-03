@@ -1047,15 +1047,110 @@ function renderPromptsPanel(prompts) {
   `;
 }
 
+
+// ── Fields panel ──────────────────────────────────────────────────────
+// The schema in the terms someone meeting one for the first time can read:
+// what the model is asked to fill in, and what changed since last round.
+// A table, not a +/- diff — the audience for this is learning what a field is.
+
+const TYPE_WORDS = {
+  string: "text",
+  integer: "whole number",
+  number: "number",
+  boolean: "yes / no",
+  array: "list",
+  object: "group",
+};
+
+const typeWord = (t) => TYPE_WORDS[t] ?? (t ?? "text");
+
+function renderFieldsPanel(rounds) {
+  if (!rounds || !rounds.length) return "";
+  const latest = rounds[rounds.length - 1];
+  if (!latest.fields.length) return "";
+
+  // Where each field entered, so an unchanged row can still say "since r1".
+  const firstSeen = new Map();
+  for (const r of rounds) {
+    for (const f of r.fields) if (!firstSeen.has(f.key)) firstSeen.set(f.key, r.round);
+  }
+  const c = latest.changes ?? { added: [], removed: [], retyped: [] };
+  const addedKeys = new Set(c.added.map((f) => f.key));
+  const retyped = new Map(c.retyped.map((f) => [f.key, f]));
+
+  const multi = rounds.length > 1;
+  const status = (f) => {
+    if (!multi) return "";
+    if (addedKeys.has(f.key))
+      return `<span class="ok">new this round</span>`;
+    const rt = retyped.get(f.key);
+    if (rt)
+      return `<span class="warn">was ${escapeHtml(typeWord(rt.from))}</span>`;
+    const seen = firstSeen.get(f.key);
+    return `<span class="text-light">since round ${seen ?? 1}</span>`;
+  };
+
+  const rows = latest.fields
+    .map(
+      (f) => `<tr>
+        <td><code>${escapeHtml(f.key)}</code></td>
+        <td>${escapeHtml(f.label ?? f.key)}</td>
+        <td>${escapeHtml(typeWord(f.type))}</td>
+        <td>${status(f)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const gone = (c.removed ?? [])
+    .map(
+      (f) =>
+        `<tr class="text-light"><td><code>${escapeHtml(f.key)}</code></td>
+         <td>${escapeHtml(f.label ?? f.key)}</td>
+         <td>${escapeHtml(typeWord(f.type))}</td>
+         <td class="bad">dropped this round</td></tr>`,
+    )
+    .join("");
+
+  const changed =
+    (c.added?.length ?? 0) + (c.removed?.length ?? 0) + (c.retyped?.length ?? 0);
+  const summary =
+    rounds.length < 2
+      ? `${latest.fields.length} field${latest.fields.length === 1 ? "" : "s"}`
+      : changed === 0
+        ? `${latest.fields.length} fields · unchanged since round ${
+            rounds[rounds.length - 2].round
+          }`
+        : `${latest.fields.length} fields · ${changed} change${
+            changed === 1 ? "" : "s"
+          } this round`;
+
+  return `<details style="margin:1rem 0;" ${changed ? "open" : ""}>
+    <summary><strong>Fields</strong> <small style="color:var(--muted-foreground);">(${escapeHtml(
+      summary,
+    )})</small></summary>
+    <p class="text-light mt-2" style="font-size:.875rem;">
+      One row per piece of metadata the model is asked to produce for every card.
+      Together they are the <em>schema</em>. Change them in
+      <code>schema.py</code>; describe them in <code>prompt.md</code>.
+    </p>
+    <div class="table"><table>
+      <thead><tr><th>Field</th><th>Shown as</th><th>Holds</th><th></th></tr></thead>
+      <tbody>${rows}${gone}</tbody>
+    </table></div>
+  </details>`;
+}
+
 async function renderStats() {
-  const [statsRes, tableRes, promptsRes] = await Promise.all([
+  const [statsRes, tableRes, promptsRes, schemaRes] = await Promise.all([
     fetch(api("api/stats")),
     fetch(api("api/table")),
     fetch(api("api/prompts")),
+    fetch(api("api/schema")),
   ]);
   const s = await statsRes.json();
   const rows = await tableRes.json();
   const promptsData = await promptsRes.json();
+  const schemaData = await schemaRes.json();
   document.getElementById("progress").textContent = "";
 
   const badge = (v) => {
@@ -1103,6 +1198,8 @@ async function renderStats() {
         <small class="text-light">(${s.model.good_enough} good-enough + ${s.corrected ?? 0} human-corrected ·
         <a href="#/eval">build →</a>)</small></dd></div>
     </dl>
+
+    ${renderFieldsPanel(schemaData.rounds ?? [])}
 
     ${renderPromptsPanel(promptsData.prompts ?? [])}
 

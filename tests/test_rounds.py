@@ -130,3 +130,65 @@ def test_changed_prompt_reports_why(tmp_path, monkeypatch):
     _mk_round(review, "demo", 1, "hashA", model="m")
     _, _, reuse, reason = cli._resolve_round("demo", "hashB", None, model="m")
     assert reuse is False and reason == "the prompt changed"
+
+
+def _view(fields, version="v1"):
+    return {
+        "contract_version": 1,
+        "schema": "cards",
+        "schema_version": version,
+        "panels": [{"source": "model_output", "title": "Model output", "fields": fields}],
+    }
+
+
+def _round_dir(tmp_path, name, n, fields):
+    import json
+
+    d = tmp_path / name
+    d.mkdir()
+    (d / "view.json").write_text(json.dumps(_view(fields)))
+    (d / "samples.json").write_text("[]")
+    return {"name": name, "base": "cards", "round": n, "dir": d}
+
+
+def test_diff_fields_reports_added_removed_and_retyped():
+    from paratext.datasets import diff_fields
+
+    before = [{"key": "a", "label": "A", "type": "string"},
+              {"key": "b", "label": "B", "type": "string"}]
+    after = [{"key": "a", "label": "A", "type": "integer"},
+             {"key": "c", "label": "C", "type": "string"}]
+    d = diff_fields(before, after)
+    assert [f["key"] for f in d["added"]] == ["c"]
+    assert [f["key"] for f in d["removed"]] == ["b"]
+    assert d["retyped"] == [{"key": "a", "label": "A", "from": "string", "to": "integer"}]
+
+
+def test_diff_fields_is_empty_when_nothing_moved():
+    from paratext.datasets import diff_fields
+
+    fields = [{"key": "a", "label": "A", "type": "string"}]
+    assert diff_fields(fields, list(fields)) == {"added": [], "removed": [], "retyped": []}
+
+
+def test_schema_history_orders_rounds_and_diffs_each_against_the_last(tmp_path):
+    from paratext.datasets import schema_history
+
+    r1 = _round_dir(tmp_path, "cards-r1", 1, [{"key": "a", "label": "A", "type": "string"}])
+    r2 = _round_dir(tmp_path, "cards-r2", 2, [
+        {"key": "a", "label": "A", "type": "string"},
+        {"key": "b", "label": "B", "type": "integer"},
+    ])
+    # Out of order in, oldest first out.
+    hist = schema_history([r2, r1])
+    assert [r["round"] for r in hist] == [1, 2]
+    assert hist[0]["changes"] is None  # nothing to compare the first round to
+    assert [f["key"] for f in hist[1]["changes"]["added"]] == ["b"]
+
+
+def test_schema_history_of_a_single_round(tmp_path):
+    from paratext.datasets import schema_history
+
+    r1 = _round_dir(tmp_path, "cards-r1", 1, [{"key": "a", "label": "A", "type": "string"}])
+    hist = schema_history([r1])
+    assert len(hist) == 1 and hist[0]["changes"] is None

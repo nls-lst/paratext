@@ -29,6 +29,7 @@ from ..datasets import (
     load_view,
     resolve_dataset,
     review_stats,
+    schema_history,
 )
 from ..store import Store, default_db_path
 
@@ -126,6 +127,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._api_projects()
             if path == "/api/prompts":
                 return self._api_prompts(self._dataset(qs))
+            if path == "/api/schema":
+                return self._api_schema(self._dataset(qs))
             if path == "/api/export/fields":
                 return self._api_export_fields(self._dataset(qs), qs)
             if path in ("/api/export/marc", "/api/export/dc"):
@@ -298,6 +301,12 @@ class Handler(BaseHTTPRequestHandler):
                 }
             )
         self._json(rows)
+
+    def _api_schema(self, ds):
+        siblings = [d for d in discover_datasets(self.data_dir) if d["base"] == ds["base"]]
+        self._json(
+            {"dataset": ds["name"], "base": ds["base"], "rounds": schema_history(siblings)}
+        )
 
     def _api_prompts(self, ds):
         siblings = [d for d in discover_datasets(self.data_dir) if d["base"] == ds["base"]]

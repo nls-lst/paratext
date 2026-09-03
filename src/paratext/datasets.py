@@ -176,6 +176,55 @@ def load_view(dataset: dict, samples: list[dict]) -> dict:
     return synthesise_view(dataset, samples)
 
 
+def _model_fields(view: dict) -> list[dict]:
+    """The model-output field list from a view contract, key/label/type only."""
+    for panel in view.get("panels", []):
+        if panel.get("source") == "model_output":
+            return [
+                {k: f.get(k) for k in ("key", "label", "type")}
+                for f in panel.get("fields", [])
+            ]
+    return []
+
+
+def diff_fields(before: list[dict], after: list[dict]) -> dict:
+    """What changed between two rounds' field lists, keyed on field name."""
+    b = {f["key"]: f for f in before}
+    a = {f["key"]: f for f in after}
+    return {
+        "added": [a[k] for k in a if k not in b],
+        "removed": [b[k] for k in b if k not in a],
+        "retyped": [
+            {"key": k, "label": a[k].get("label"),
+             "from": b[k].get("type"), "to": a[k].get("type")}
+            for k in a
+            if k in b and a[k].get("type") != b[k].get("type")
+        ],
+    }
+
+
+def schema_history(datasets: list[dict]) -> list[dict]:
+    """Field list per round for one dataset family, oldest first, each carrying
+    what changed since the round before it (`changes` is None for the first)."""
+    rounds = []
+    for ds in sorted(datasets, key=lambda d: d.get("round") or 0):
+        vp = ds["dir"] / "view.json"
+        view = json.loads(vp.read_text()) if vp.is_file() else synthesise_view(
+            ds, load_samples(ds)
+        )
+        rounds.append({
+            "round": ds.get("round"),
+            "dataset": ds["name"],
+            "schema_version": view.get("schema_version"),
+            "fields": _model_fields(view),
+        })
+    prev = None
+    for r in rounds:
+        r["changes"] = diff_fields(prev["fields"], r["fields"]) if prev else None
+        prev = r
+    return rounds
+
+
 def review_stats(
     total: int, annotations: list[dict], gold_ids: set[str] | None = None
 ) -> dict:
