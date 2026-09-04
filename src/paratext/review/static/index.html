@@ -106,8 +106,10 @@
         margin-top: .2rem; word-break: break-word; }
       .edit-field.changed > label.k::after { content: " ●"; color: var(--warning); }
       .gold-badge { color: var(--success); font-weight: 600; }
-      .eval-note { margin-top: .625rem; padding: .5rem .625rem; border-left: 3px solid var(--muted);
-        background: var(--muted); border-radius: .25rem; font-size: .875rem; }
+      /* Oat's [role=alert] does the styling; this only spaces it. The note says
+         why the record is in the queue, so it sits above the fields being
+         corrected rather than under the image. */
+      .eval-note { margin-bottom: 1rem; }
       /* Homepage only: reference material, set apart from the task. */
       .page-foot { margin-top: 3rem; padding-top: 1rem;
         border-top: 1px solid var(--border); font-size: .8125rem;

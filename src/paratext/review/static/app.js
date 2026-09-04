@@ -762,9 +762,13 @@ function renderEditor() {
     <div class="split">
       <div class="split-media">
         ${imagesHtml(s, "media")}
-        ${note ? `<p class="text-light eval-note"><strong>Reviewer note:</strong> ${escapeHtml(note)}</p>` : ""}
       </div>
       <div class="split-content">
+        ${note
+          ? `<div role="alert" data-variant="warning" class="eval-note">
+               <div><strong>Reviewer note</strong><br>${escapeHtml(note)}</div>
+             </div>`
+          : ""}
         <form id="editor">${fields}</form>
         <div class="controls">
           <button id="ev-prev" ${atFirst ? "disabled" : ""}>← Previous</button>
