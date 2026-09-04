@@ -118,9 +118,6 @@
       .proj-meta { margin: .25rem 0 .75rem; font-size: .8125rem; word-break: break-word; }
       .prompt-text { white-space: pre-wrap; font-size: .8125rem; max-height: 30rem;
         overflow-y: auto; }
-      /* Oat's own [hidden] rule loses on specificity to its a.button display,
-         so a hidden nav button still shows. This block is unlayered, so it wins. */
-      [hidden] { display: none !important; }
       /* Results closes the loop, so it sits apart from the two doing-steps. */
       .nav-results { margin-left: .5rem; }
       /* Eval-set call to action. The gold set is the point of reviewing, so it
@@ -211,9 +208,8 @@
   <body>
     <nav data-topnav>
       <a href="#/select"><strong>paratext</strong></a>
-      <!-- Workflow order: edit, run, look at what came back. -->
-      <!-- Workshop mode only; unhidden by the app when /api/workshop/state answers. -->
-      <a href="#/workshop" id="nav-workshop" class="button outline small" hidden>Prompt editor</a>
+      <!-- Workflow order: edit, run, look at what came back. The Prompt editor
+           is inserted here by the app when the server runs in workshop mode. -->
       <a href="#/review" id="nav-review" class="button outline small">Review</a>
       <a href="#/stats" id="nav-stats" class="button outline small nav-results">Results</a>
       <span id="progress" style="margin-left:auto; font-size:.875rem;"></span>

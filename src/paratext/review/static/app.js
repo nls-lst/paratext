@@ -1859,8 +1859,15 @@ async function route() {
   }
   if (state.workshop === undefined) {
     await loadWorkshop();
-    const nav = document.getElementById("nav-workshop");
-    if (nav) nav.hidden = !state.workshop;
+    // Built rather than unhidden: Oat sets display on .button in its components
+    // layer, which outranks [hidden] in base whatever the specificity.
+    if (state.workshop && !document.getElementById("nav-workshop")) {
+      const review = document.getElementById("nav-review");
+      review?.insertAdjacentHTML(
+        "beforebegin",
+        `<a href="#/workshop" id="nav-workshop" class="button outline small">Prompt editor</a>`,
+      );
+    }
   }
 
   // The editor is about what you're going to run, not what has been run, so it
