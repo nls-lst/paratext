@@ -2,10 +2,11 @@
   <img src="assets/logo.png" alt="paratext logo" height="100" align="middle">&nbsp; paratext
 </h1>
 
-paratext reads metadata off digitised library and archive collections with a
-multimodal model, and hands every record to the person who knows the material.
-A cataloguer, archivist or curator judges the output against the original — and
-that judgement is what the tool is built around, not a step bolted on after it.
+A modular, project-based pipeline that produces metadata from digitised library
+& archive collections with a multimodal model, built around the judgement of the
+person who knows the material. A cataloguer, archivist or curator reviews every
+record against the original — that is the measure of whether any of this worked,
+not a step bolted on after it.
 
 Their decisions are kept, not just applied. Verdicts and corrections accumulate
 into a gold set, so the next change to the prompt can be **measured** instead of
@@ -14,11 +15,11 @@ round actually got better. Extraction quality lives almost entirely in the
 prompt, which is where domain knowledge ends up — written down, versioned, and
 testable.
 
-The mechanics stay out of the way. One command runs the model over a directory
-of images or PDFs, writes resumable JSONL with provenance, packages it for
-review, and exports the approved results. Each **project** is a self-contained
-module — its own prompt, schema, and input handling — so the same code path runs
-a 50-item pilot and a 250,000-item sweep. Only `--limit` differs.
+One command does the whole loop: run a model over a directory of images or PDFs,
+write resumable JSONL with provenance, package it for review, and export the
+approved results. Each **project** is a self-contained module — its own prompt,
+schema, and input handling — so the same code path runs a 50-item pilot and a
+250,000-item sweep. Only `--limit` differs.
 
 ## What you'll need
 
