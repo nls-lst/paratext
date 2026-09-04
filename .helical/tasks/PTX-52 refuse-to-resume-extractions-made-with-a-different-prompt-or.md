@@ -5,11 +5,11 @@ status: done
 horizon: now
 flow: clear
 labels:
-  - extraction
   - cli
+  - extraction
   - tests
 created: '2026-09-03'
-updated: '2026-09-03'
+updated: '2026-09-04'
 ---
 
 Resume keys on sample id, so editing `prompt.md` and re-running skipped every

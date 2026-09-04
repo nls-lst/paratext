@@ -302,8 +302,9 @@ deliberately rather than taking the default.
 chasing, `undecided` sits with us and needs a call. Neither is accepted without
 `--blocker` explaining it.
 
-Labels are free-form. `helical ls --json` shows what is already in use — prefer an
-existing one over inventing a near-duplicate.
+Labels are free-form, and `--label` adds rather than replaces (`--no-label`
+removes). `helical ls --json` shows what is already in use — prefer an existing
+one over inventing a near-duplicate.
 
 Boards: <https://helical.ai.nls.uk> · read-only <https://projects.ai.nls.uk>
 <!-- HELICAL END -->
