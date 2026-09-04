@@ -65,6 +65,7 @@
       .ws-cards input { width: 5rem; }
       button.selected { outline: 3px solid var(--success); outline-offset: 2px; }
       button.selected.no { outline-color: var(--danger); }
+      button.selected.warn { outline-color: var(--warning); }
       .kbd {
         display: inline-block;
         font-family: monospace;
@@ -111,20 +112,14 @@
       .page-foot { margin-top: 3rem; padding-top: 1rem;
         border-top: 1px solid var(--border); font-size: .8125rem;
         color: var(--muted-foreground); }
-      /* Projects (read-only inspector) — Oat's .card/.badge/.table do the
-         styling; these are layout-only. */
-      .proj h3 { margin-top: 0; }
-      .proj h3 .badge { vertical-align: middle; margin-left: .25rem; font-weight: 500; }
-      .proj-meta { margin: .25rem 0 .75rem; font-size: .8125rem; word-break: break-word; }
       .prompt-text { white-space: pre-wrap; font-size: .8125rem; max-height: 30rem;
         overflow-y: auto; }
       /* Results closes the loop, so it sits apart from the two doing-steps. */
       .nav-results { margin-left: .5rem; }
-      /* Eval-set call to action. The gold set is the point of reviewing, so it
-         is a button, not a statistic. The hover ring is a conic gradient rotated
-         through a registered @property — a plain gradient can't be animated. */
-      /* The eval set is important but off to the side of the review flow, so it
-         sits opposite the heading rather than interrupting the numbers. */
+      /* Eval-set call to action: important, but off to the side of the review
+         flow, so it sits opposite the heading rather than interrupting the
+         numbers. The hover ring is a conic gradient rotated through a
+         registered @property — a plain gradient cannot be animated. */
       .results-head { display: flex; flex-wrap: wrap; align-items: flex-start;
         justify-content: space-between; gap: 1rem; }
       .results-head h2 { margin-block: 0; }
@@ -133,7 +128,7 @@
       .gold-cta { position: relative; font-size: 1rem; padding: .6875rem 1.25rem;
         display: inline-flex; align-items: center; gap: .625rem; }
       .gold-cta .gold-count { font-variant-numeric: tabular-nums; font-weight: 700;
-        background: rgb(255 255 255 / .18); border-radius: var(--radius, .375rem);
+        background: rgb(255 255 255 / .18); border-radius: var(--radius-small);
         padding: .0625rem .5rem; }
       @property --gold-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
       .gold-cta::before {

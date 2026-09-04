@@ -181,11 +181,12 @@ class Verdict:
     hotkey: str
     notes: bool = False  # reveal the notes box when this verdict is chosen
     negative: bool = False  # style as a "bad" verdict
+    warning: bool = False  # style as a "middling" verdict
 
 
 DEFAULT_VERDICTS = [
     Verdict("good_enough", "Good enough", "1"),
-    Verdict("needs_tweaks", "Needs tweaks", "2", notes=True),
+    Verdict("needs_tweaks", "Needs tweaks", "2", notes=True, warning=True),
     Verdict("not_accurate", "Not accurate", "3", notes=True, negative=True),
 ]
 

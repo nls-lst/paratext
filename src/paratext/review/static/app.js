@@ -454,8 +454,10 @@ function scoringButtons(a) {
     <div class="controls">
       ${state.view.scoring.verdicts
         .map((v) => {
-          const sel =
-            a.model_correct === v.value ? (v.negative ? "selected no" : "selected") : "";
+          // Three verdicts, three colours, matching the ok/warn/bad used for the
+          // same values everywhere else.
+          const tone = v.negative ? " no" : v.warning ? " warn" : "";
+          const sel = a.model_correct === v.value ? `selected${tone}` : "";
           return `<button data-scope="model" data-value="${escapeHtml(v.value)}" class="${sel}">${escapeHtml(
             v.label,
           )} <span class="kbd">${escapeHtml(v.hotkey)}</span></button>`;
