@@ -118,12 +118,20 @@
       .proj-meta { margin: .25rem 0 .75rem; font-size: .8125rem; word-break: break-word; }
       .prompt-text { white-space: pre-wrap; font-size: .8125rem; max-height: 30rem;
         overflow-y: auto; }
+      /* Oat's own [hidden] rule loses on specificity to its a.button display,
+         so a hidden nav button still shows. This block is unlayered, so it wins. */
+      [hidden] { display: none !important; }
       /* Results closes the loop, so it sits apart from the two doing-steps. */
       .nav-results { margin-left: .5rem; }
       /* Eval-set call to action. The gold set is the point of reviewing, so it
          is a button, not a statistic. The hover ring is a conic gradient rotated
          through a registered @property — a plain gradient can't be animated. */
-      .eval-cta { margin: 1.25rem 0 1.5rem; }
+      /* The eval set is important but off to the side of the review flow, so it
+         sits opposite the heading rather than interrupting the numbers. */
+      .results-head { display: flex; flex-wrap: wrap; align-items: flex-start;
+        justify-content: space-between; gap: 1rem; }
+      .results-head h2 { margin-block: 0; }
+      .eval-cta { text-align: right; }
       .eval-cta-note { font-size: var(--text-8); margin: .5rem 0 0; }
       .gold-cta { position: relative; font-size: 1rem; padding: .6875rem 1.25rem;
         display: inline-flex; align-items: center; gap: .625rem; }

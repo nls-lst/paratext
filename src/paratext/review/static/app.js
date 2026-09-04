@@ -303,7 +303,9 @@ function renderPicker() {
       return `<article class="card mb-2">
         <h3>${escapeHtml(g.base)}</h3>
         <p class="text-light">
-          <span class="badge outline">${escapeHtml(g.schema)}</span>
+          ${g.schema && g.schema !== g.base
+            ? `<span class="badge outline">${escapeHtml(g.schema)}</span>`
+            : ""}
           <span class="badge outline">round ${a.round}</span>
           ${a.count} sample${a.count === 1 ? "" : "s"}${
             earlier ? ` · ${earlier} earlier round${earlier === 1 ? "" : "s"}` : ""
@@ -317,10 +319,6 @@ function renderPicker() {
   document.getElementById("view").innerHTML = `
     <h2>Choose a dataset to review</h2>
     <div style="max-width:32rem;">${cards}</div>
-    <p class="page-foot">
-      <code>paratext inspect</code> shows the fields, prompt and source options
-      each installed project runs with.
-    </p>
   `;
   document.querySelectorAll("[data-dataset]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1208,7 +1206,18 @@ async function renderStats() {
     .join("");
 
   document.getElementById("view").innerHTML = `
-    <h2>Results — ${escapeHtml(s.dataset)} <small class="text-light">(${escapeHtml(s.schema)})</small></h2>
+    <div class="results-head">
+      <h2>Results — ${escapeHtml(s.dataset)}
+        <small class="text-light">(${escapeHtml(s.schema)})</small></h2>
+      <div class="eval-cta">
+        <a href="#/eval" class="button primary gold-cta">
+          Build eval set
+          <span class="gold-count">${s.eval_gold ?? s.model.good_enough}</span>
+        </a>
+        <p class="text-light eval-cta-note">${s.model.good_enough} good-enough +
+          ${s.corrected ?? 0} human-corrected</p>
+      </div>
+    </div>
 
     ${renderRoundSwitcher(state.datasets.find((d) => d.name === s.dataset) ?? {})}
 
@@ -1224,15 +1233,6 @@ async function renderStats() {
       <div class="field-row"><dt>Not accurate</dt><dd class="bad">${s.model.not_accurate}</dd></div>
       ${hasFlag ? `<div class="field-row"><dt>Flagged</dt><dd>${s.flagged_marc}</dd></div>` : ""}
     </dl>
-
-    <div class="eval-cta">
-      <a href="#/eval" class="button primary gold-cta">
-        Build eval set
-        <span class="gold-count">${s.eval_gold ?? s.model.good_enough}</span>
-      </a>
-      <p class="text-light eval-cta-note">${s.model.good_enough} good-enough +
-        ${s.corrected ?? 0} human-corrected — the records that ship as gold.</p>
-    </div>
 
     ${renderDriftPanel(projects, s.schema)}
 
