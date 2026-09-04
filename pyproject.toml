@@ -3,7 +3,7 @@
 # the plain name on PyPI belongs to an unrelated project, so the distribution
 # carries the `-cli` suffix.
 name = "paratext-cli"
-version = "0.6.0"
+version = "0.6.1"
 description = "Modular, project-based metadata extraction from digitised library/archive collections with a multimodal model"
 readme = "README.md"
 # Core is pure-Python + numpy/pillow/pydantic. The [detector] extra needs
