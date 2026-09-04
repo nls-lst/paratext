@@ -144,6 +144,32 @@ def project_names() -> list[str]:
     return sorted(_entry_points())
 
 
+def schema_fields_for(project: str, dataset_dir=None) -> list[str]:
+    """The output field names for a project, preferring the packaged round.
+
+    A review server can be serving rounds produced elsewhere — a shared demo, a
+    colleague's export — and has no entry point for them. `view.json` records
+    the fields the round was built with, which is what export needs and is
+    truer to the round than a project that happens to be installed now.
+    """
+    if dataset_dir is not None:
+        import json
+        from pathlib import Path
+
+        vp = Path(dataset_dir) / "view.json"
+        if vp.is_file():
+            try:
+                view = json.loads(vp.read_text())
+            except (OSError, ValueError):
+                view = {}
+            for panel in view.get("panels", []):
+                if panel.get("source") == "model_output":
+                    keys = [f["key"] for f in panel.get("fields", []) if f.get("key")]
+                    if keys:
+                        return keys
+    return list(get_project(project).schema.model_fields)
+
+
 def get_project(name: str) -> Project:
     eps = _entry_points()
     ep = eps.get(name)

@@ -21,7 +21,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from .config import load_project_section, local_config_path
-from .projects import get_project
+from .projects import schema_fields_for
 from .records import select_records
 
 # Where export artifacts are written (shared with hf_export's EXPORT_ROOT default).
@@ -96,14 +96,19 @@ def infer_target(field_name: str, fmt: str) -> str | None:
     return entry.get(fmt) if entry else None
 
 
-def resolve_mapping(project: str, fmt: str) -> tuple[dict[str, str], list[str]]:
+def resolve_mapping(
+    project: str, fmt: str, dataset_dir=None
+) -> tuple[dict[str, str], list[str]]:
     """Return (field -> target) for every schema field of `project` in format `fmt`.
+
+    `dataset_dir` lets the fields come from a packaged round, so a server can map
+    a project it does not have installed.
 
     Precedence per field: an explicit config value under
     `[project.<name>.export.<fmt>]` (a `""` there means *skip*, kept out of the map),
     else canonical inference, else it stays unmapped (returned in the second list).
     """
-    schema_fields = list(get_project(project).schema.model_fields)
+    schema_fields = schema_fields_for(project, dataset_dir)
     cfg = load_project_section(project, "export").get(fmt) or {}
     mapping: dict[str, str] = {}
     unmapped: list[str] = []
@@ -449,7 +454,7 @@ def run(
 ) -> CatalogueSummary:
     """Select gold records and write a MARCXML / DC collection file. Fills unmapped
     fields via the wizard (interactive only) and persists the mapping."""
-    mapping, unmapped = resolve_mapping(project, fmt)
+    mapping, unmapped = resolve_mapping(project, fmt, dataset_dir)
     if unmapped and not no_wizard:
         chosen = run_wizard(project, fmt, unmapped)
         if chosen:
@@ -519,7 +524,7 @@ def records_for_scope(
     from .store import Store, default_db_path
 
     samples = json.loads((dataset_dir / "samples.json").read_text())
-    schema_fields = list(get_project(project).schema.model_fields)
+    schema_fields = schema_fields_for(project, dataset_dir)
     store = Store(default_db_path(dataset_dir, db_path))
     name = dataset_dir.name
     out: list = []
@@ -548,7 +553,7 @@ def export_bytes(
     import io
 
     if mapping is None:
-        mapping, _unmapped = resolve_mapping(project, fmt)
+        mapping, _unmapped = resolve_mapping(project, fmt, dataset_dir)
     else:
         mapping = {f: t for f, t in mapping.items() if (t or "").strip()}
     if not mapping:

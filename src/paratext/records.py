@@ -15,7 +15,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .projects import get_project
+from .projects import schema_fields_for
 from .store import Store, default_db_path
 
 # Verdict ordering for the min-verdict gate (higher = more approved).
@@ -85,8 +85,7 @@ def select_records(
     if pfile.is_file():
         provenance = json.loads(pfile.read_text())
 
-    proj = get_project(project)
-    schema_fields = list(proj.schema.model_fields)
+    schema_fields = schema_fields_for(project, dataset_dir)
     # Gold may live in a store outside the dataset dir (the review service runs
     # with --db elsewhere), so callers can point at it explicitly.
     store = Store(default_db_path(dataset_dir, db_path))

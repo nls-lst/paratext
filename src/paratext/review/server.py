@@ -502,12 +502,12 @@ class Handler(BaseHTTPRequestHandler):
         """The mapping table for the export modal: every schema field and its
         inferred MARC tag / DC element (editable in the UI). `fmt=marc|dc`."""
         from ..catalogue import infer_target, records_for_scope, resolve_ai_note
-        from ..inspect import describe
-        from ..projects import get_project
+        from ..datasets import model_output_fields
 
         fmt = (qs.get("fmt") or ["marc"])[0]
-        project = get_project(ds["schema"])
-        fields = describe(project)["view"]["panels"][0]["fields"]
+        # From the round, not an installed project: this server may be serving
+        # rounds it never produced and has no entry point for.
+        fields = model_output_fields(load_view(ds, load_samples(ds)))
         rows = [
             {
                 "key": f["key"],

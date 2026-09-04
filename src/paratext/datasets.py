@@ -176,7 +176,7 @@ def load_view(dataset: dict, samples: list[dict]) -> dict:
     return synthesise_view(dataset, samples)
 
 
-def _model_fields(view: dict) -> list[dict]:
+def model_output_fields(view: dict) -> list[dict]:
     """The model-output field list from a view contract, key/label/type only."""
     for panel in view.get("panels", []):
         if panel.get("source") == "model_output":
@@ -216,7 +216,7 @@ def schema_history(datasets: list[dict]) -> list[dict]:
             "round": ds.get("round"),
             "dataset": ds["name"],
             "schema_version": view.get("schema_version"),
-            "fields": _model_fields(view),
+            "fields": model_output_fields(view),
         })
     prev = None
     for r in rounds:

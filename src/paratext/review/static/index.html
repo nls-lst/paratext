@@ -124,26 +124,34 @@
         justify-content: space-between; gap: 1rem; }
       .results-head h2 { margin-block: 0; }
       .eval-cta { text-align: right; }
+      .eval-cta-row { display: flex; flex-wrap: wrap; justify-content: flex-end;
+        align-items: center; gap: .5rem; }
       .eval-cta-note { font-size: var(--text-8); margin: .5rem 0 0; }
-      .gold-cta { position: relative; font-size: 1rem; padding: .6875rem 1.25rem;
+      /* The ring lives on a wrapper, not on the button. Oat translates a button
+         by 1px while it is held down, and a transform creates a stacking
+         context, which would make the z-index:-1 gradient paint over the
+         button face instead of behind it. */
+      .gold-ring { position: relative; display: inline-flex;
+        border-radius: var(--radius-medium); }
+      .gold-cta { font-size: 1rem; padding: .6875rem 1.25rem;
         display: inline-flex; align-items: center; gap: .625rem; }
       .gold-cta .gold-count { font-variant-numeric: tabular-nums; font-weight: 700;
         background: rgb(255 255 255 / .18); border-radius: var(--radius-small);
         padding: .0625rem .5rem; }
       @property --gold-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
-      .gold-cta::before {
+      .gold-ring::before {
         content: ""; position: absolute; inset: -2px; border-radius: inherit; z-index: -1;
         background: conic-gradient(from var(--gold-angle),
           transparent 0turn .45turn, #b8860b .62turn, #ffd76e .75turn,
           #fff3c4 .8turn, #ffd76e .85turn, #b8860b .95turn, transparent 1turn);
         opacity: 0; transition: opacity .18s ease;
       }
-      .gold-cta:hover::before, .gold-cta:focus-visible::before {
+      .gold-ring:hover::before, .gold-ring:has(:focus-visible)::before {
         opacity: 1; animation: gold-sweep 2.2s linear infinite;
       }
       @keyframes gold-sweep { to { --gold-angle: 1turn; } }
       @media (prefers-reduced-motion: reduce) {
-        .gold-cta:hover::before, .gold-cta:focus-visible::before { animation: none; }
+        .gold-ring:hover::before, .gold-ring:has(:focus-visible)::before { animation: none; }
       }
       /* Export modal. Oat styles the dialog (pads > header / > div / > footer, the
          body div scrolls) plus inputs, selects, switches and tables. Inline CSS is
