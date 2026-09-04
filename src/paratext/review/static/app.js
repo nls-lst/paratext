@@ -456,7 +456,9 @@ function scoringButtons(a) {
         .map((v) => {
           // Three verdicts, three colours, matching the ok/warn/bad used for the
           // same values everywhere else.
-          const tone = v.negative ? " no" : v.warning ? " warn" : "";
+          // `mid`, not `warn`: .warn is the text-colour utility used in the
+          // stats table, and on a button it would recolour the label too.
+          const tone = v.negative ? " no" : v.warning ? " mid" : "";
           const sel = a.model_correct === v.value ? `selected${tone}` : "";
           return `<button data-scope="model" data-value="${escapeHtml(v.value)}" class="${sel}">${escapeHtml(
             v.label,
