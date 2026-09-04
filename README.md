@@ -3,23 +3,27 @@
 </h1>
 
 A modular, project-based pipeline that produces metadata from digitised library
-& archive collections with a multimodal model, built around the judgement of the
-person who knows the material. A cataloguer, archivist or curator reviews every
-record against the original — that is the measure of whether any of this worked,
-not a step bolted on after it.
+& archive collections with a multimodal model, built around human-in-the-loop.
+A cataloguer, archivist or curator reviews a sample rather than the whole
+collection: run 50, then 100, then 150, sharpening the prompt each time, until
+the accuracy is good enough to let it run unsupervised over the remaining
+250,000.
 
-Their decisions are kept, not just applied. Verdicts and corrections accumulate
-into a gold set, so the next change to the prompt can be **measured** instead of
-argued about: run again, and see whether the thing your expert objected to last
-round actually got better. Extraction quality lives almost entirely in the
-prompt, which is where domain knowledge ends up — written down, versioned, and
+Their feedback is kept, not just applied. Verdicts and comments carry into the
+next round, where the reviewer can see exactly what changed in the prompt and
+judge whether it helped. Approved and corrected records also build a gold set,
+which is a separate thing: a fixed benchmark for measuring other models against
+the same material.
+
+Extraction quality lives almost entirely in the prompt and the schema, which is
+where domain knowledge ends up: written down, versioned, deterministic and
 testable.
 
-One command does the whole loop: run a model over a directory of images or PDFs,
-write resumable JSONL with provenance, package it for review, and export the
-approved results. Each **project** is a self-contained module — its own prompt,
-schema, and input handling — so the same code path runs a 50-item pilot and a
-250,000-item sweep. Only `--limit` differs.
+Run a model over a directory of images or PDFs, write resumable JSONL with
+provenance, package it for review, and export the approved results. Each
+**project** is a self-contained module, with its own prompt, schema and input
+handling, so the same code path runs a 50-item pilot and a 250,000-item sweep.
+Only `--limit` differs.
 
 ## What you'll need
 
@@ -208,7 +212,7 @@ Full reference, including hosted endpoints and auth: **[docs/configuration.md](d
 | `paratext sample` | Symlink a random image subset out of a nested tree |
 | `paratext carbon` | Show current grid carbon/renewables |
 | `paratext guide` | Print the agent guide |
-| `paratext skill` | Install that guide as a skill your coding agents find |
+| `paratext skill` | Installs a paratext skill for your coding agent |
 
 Run `paratext <command> -h` for that command's flags.
 
@@ -222,8 +226,6 @@ Run `paratext <command> -h` for that command's flags.
   cropping and show-through suppression for index-card collections.
 - **[Green scheduling](docs/green-scheduling.md)** — wait for a clean electricity
   grid before running a batch.
-- **[Publishing](docs/publishing.md)** — cutting a release to PyPI via Trusted
-  Publishing.
 - **[AGENTS.md](AGENTS.md)** — the guide for AI coding agents, including how to
   extend paratext for your own collection. `paratext skill` installs it where
   Claude Code, Codex and the rest look, so an agent finds it without being told.
