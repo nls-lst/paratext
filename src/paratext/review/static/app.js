@@ -1215,11 +1215,11 @@ async function renderStats() {
         <small class="text-light">(${escapeHtml(s.schema)})</small></h2>
       <div class="eval-cta">
         <div class="eval-cta-row">
-          <button class="button outline" id="open-export">Export…</button>
           <span class="gold-ring"><a href="#/eval" class="button primary gold-cta">
             Build eval set
             <span class="gold-count">${s.eval_gold ?? s.model.good_enough}</span>
           </a></span>
+          <button class="button outline" id="open-export">Export…</button>
         </div>
         <p class="text-light eval-cta-note">${s.model.good_enough} good-enough +
           ${s.corrected ?? 0} human-corrected</p>

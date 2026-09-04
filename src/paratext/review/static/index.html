@@ -133,8 +133,9 @@
          button face instead of behind it. */
       .gold-ring { position: relative; display: inline-flex;
         border-radius: var(--radius-medium); }
-      .gold-cta { font-size: 1rem; padding: .6875rem 1.25rem;
-        display: inline-flex; align-items: center; gap: .625rem; }
+      /* Oat's default button metrics, so it matches Export beside it. The
+         emphasis comes from being the primary variant and from the ring. */
+      .gold-cta { display: inline-flex; align-items: center; gap: .5rem; }
       .gold-cta .gold-count { font-variant-numeric: tabular-nums; font-weight: 700;
         background: rgb(255 255 255 / .18); border-radius: var(--radius-small);
         padding: .0625rem .5rem; }
