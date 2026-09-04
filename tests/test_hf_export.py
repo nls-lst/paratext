@@ -220,3 +220,59 @@ def test_card_renders_energy(tmp_path):
     assert "Environmental provenance" in card
     assert "South Scotland" in card and "85% renewable" in card
     assert "scheduled to a low-carbon window" in card
+
+
+def _round_dir(tmp_path):
+    import json
+
+    d = tmp_path / "cards-r1"
+    d.mkdir()
+    (d / "view.json").write_text(json.dumps({
+        "schema_version": "v1",
+        "panels": [{"source": "model_output", "fields": [
+            {"key": "title", "label": "Title", "type": "string"},
+            {"key": "year", "label": "Year", "type": "integer"},
+        ]}],
+    }))
+    return d
+
+
+def test_schema_table_falls_back_to_the_round(tmp_path):
+    from paratext.hf_export import _schema_table
+
+    table = _schema_table("not-installed", _round_dir(tmp_path))
+    assert "`title`" in table and "`year`" in table
+    assert "| Field | Type | Description |" in table
+
+
+def test_schema_json_falls_back_to_the_round(tmp_path):
+    from paratext.hf_export import _schema_json
+
+    got = _schema_json("not-installed", _round_dir(tmp_path))
+    assert got["properties"] == {"title": {"type": "string"}, "year": {"type": "integer"}}
+
+
+def test_schema_helpers_survive_a_round_with_no_view(tmp_path):
+    from paratext.hf_export import _schema_json, _schema_table
+
+    (tmp_path / "bare").mkdir()
+    assert _schema_json("not-installed", tmp_path / "bare")["properties"] == {}
+    assert "| Field |" in _schema_table("not-installed", tmp_path / "bare")
+
+
+def test_the_installed_project_still_wins(tmp_path):
+    from paratext.hf_export import _schema_json
+
+    got = _schema_json("card-template", _round_dir(tmp_path))
+    # The bundled example has more than the two fields the round recorded.
+    assert set(got["properties"]) != {"title", "year"}
+
+
+def test_the_card_names_no_institution():
+    import inspect
+
+    from paratext import hf_export
+
+    src = inspect.getsource(hf_export)
+    for term in ("NLS", "National Library", "Scotland"):
+        assert term not in src, f"{term} leaked into the published card module"

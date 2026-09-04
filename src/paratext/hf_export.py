@@ -30,7 +30,7 @@ from .records import select_records
 
 # HF Hub licence ids are a controlled, SPDX-like vocabulary — the Hub only renders
 # a tag it recognises (so `cc0`, unversioned, would NOT show as a licence; use
-# `cc0-1.0`). Recommended for NLS outputs: cc0-1.0, cc-by-4.0, apache-2.0. This is
+# `cc0-1.0`). cc0-1.0, cc-by-4.0 and apache-2.0 are the usual choices. This is
 # the common subset we recognise silently; anything else gets a soft warning, not a
 # rejection. Full list: https://huggingface.co/docs/hub/repositories-licenses
 KNOWN_LICENSES = frozenset({
@@ -198,11 +198,54 @@ def _size_category(n: int) -> str:
     return "100K<n<1M"
 
 
+def _round_fields(dataset_dir) -> list[dict]:
+    """Field name/type from a packaged round's view.json, for when the project
+    that produced it is not installed on this machine."""
+    from .datasets import model_output_fields
+
+    vp = Path(dataset_dir) / "view.json"
+    if not vp.is_file():
+        return []
+    try:
+        return model_output_fields(json.loads(vp.read_text()))
+    except (OSError, ValueError):
+        return []
+
+
+def _schema_table(project: str, dataset_dir) -> str:
+    """The card's field table. Prefers the installed project, whose Field
+    descriptions are worth having; falls back to what the round recorded."""
+    rows = ["| Field | Type | Description |", "| --- | --- | --- |"]
+    try:
+        for fname, fdef in get_project(project).schema.model_fields.items():
+            desc = (fdef.description or "").replace("|", "\\|").replace("\n", " ")
+            rows.append(f"| `{fname}` | `{_type_str(fdef.annotation)}` | {desc} |")
+    except ValueError:
+        for f in _round_fields(dataset_dir):
+            rows.append(f"| `{f['key']}` | `{f.get('type', 'string')}` | |")
+    return "\n".join(rows)
+
+
+def _schema_json(project: str, dataset_dir) -> dict:
+    """The machine-readable output schema, from the project or, failing that,
+    reconstructed from what the round recorded."""
+    try:
+        return get_project(project).schema.model_json_schema()
+    except ValueError:
+        fields = _round_fields(dataset_dir)
+        return {
+            "title": project,
+            "type": "object",
+            "properties": {
+                f["key"]: {"type": f.get("type", "string")} for f in fields
+            },
+        }
+
+
 def _dataset_card(
     project: str, cfg: ExportConfig, provenance: dict, stats: dict, n_gold: int,
-    n_verified: int = 0, n_corrected: int = 0,
+    n_verified: int = 0, n_corrected: int = 0, dataset_dir=None,
 ) -> str:
-    proj = get_project(project)
     pretty = project.replace("-", " ").replace("_", " ").title()
     # Front-matter stays honest: `other` when unset (never assert a licence the
     # publisher didn't choose). The Rights section then steers toward CC0.
@@ -241,12 +284,7 @@ def _dataset_card(
         "",
     ]
 
-    # Schema field table from the Pydantic model.
-    rows = ["| Field | Type | Description |", "| --- | --- | --- |"]
-    for fname, fdef in proj.schema.model_fields.items():
-        desc = (fdef.description or "").replace("|", "\\|").replace("\n", " ")
-        rows.append(f"| `{fname}` | `{_type_str(fdef.annotation)}` | {desc} |")
-    schema_table = "\n".join(rows)
+    schema_table = _schema_table(project, dataset_dir)
 
     acc = stats["model"]["accuracy"]
     acc_str = f"{acc:.1f}%" if acc is not None else "n/a"
@@ -350,7 +388,7 @@ def build(
     # objects, optionality) — so a downstream eval/bench harness has the exact
     # response_format the labels follow, not just the card's prose table.
     (dest / "schema.json").write_text(
-        json.dumps(get_project(project).schema.model_json_schema(), indent=2, ensure_ascii=False)
+        json.dumps(_schema_json(project, dataset_dir), indent=2, ensure_ascii=False)
     )
 
     gold_ids = {g["sample_id"] for g in store.all_gold(name)}
@@ -360,7 +398,8 @@ def build(
     negatives = sum(1 for r in rows if r["_label_status"] == "rejected")
     gold = verified + corrected
     (dest / "README.md").write_text(
-        _dataset_card(project, cfg, provenance, stats, gold, verified, corrected)
+        _dataset_card(project, cfg, provenance, stats, gold, verified, corrected,
+                      dataset_dir=dataset_dir)
     )
 
     return ExportSummary(
