@@ -124,3 +124,42 @@ def test_workshop_defaults_survive_having_no_rounds(tmp_path):
 
     d = _workshop_defaults([], {})
     assert d["prompt"] == "" and d["fields"] == [] and d["api_key"] == "EMPTY"
+
+
+class _FakeHandler:
+    """Just enough of the handler to exercise the cookie rule."""
+
+    from paratext.review.server import Handler
+
+    _behind_https = Handler._behind_https
+    session_cookie = Handler.session_cookie
+
+    def __init__(self, headers):
+        self.headers = headers
+
+
+def test_cookie_is_lax_on_a_plain_http_server():
+    c = _FakeHandler({}).session_cookie("abc")
+    assert "SameSite=Lax" in c and "Secure" not in c and "Partitioned" not in c
+
+
+def test_cookie_is_cross_site_safe_behind_https():
+    # A Space opened from its Hub page is an iframe on another origin, so the
+    # cookie must be SameSite=None; without Secure a browser rejects that.
+    c = _FakeHandler({"x-forwarded-proto": "https"}).session_cookie("abc")
+    assert "SameSite=None" in c and "Secure" in c and "Partitioned" in c
+    assert "SameSite=Lax" not in c
+
+
+def test_a_proxy_chain_still_counts_as_https():
+    c = _FakeHandler({"x-forwarded-proto": "https, http"}).session_cookie("abc")
+    assert "SameSite=None" in c
+
+
+def test_http_forwarded_proto_stays_lax():
+    c = _FakeHandler({"x-forwarded-proto": "http"}).session_cookie("abc")
+    assert "SameSite=Lax" in c and "Secure" not in c
+
+
+def test_the_cookie_carries_the_session_id():
+    assert "pt_session=abc123;" in _FakeHandler({}).session_cookie("abc123")

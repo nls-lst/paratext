@@ -202,13 +202,31 @@ class Handler(BaseHTTPRequestHandler):
             self._store_cache = session.store()
         return self._store_cache
 
+    def _behind_https(self) -> bool:
+        """Whether the browser reached us over HTTPS, per the proxy in front."""
+        proto = (self.headers.get("x-forwarded-proto") or "").split(",")[0]
+        return proto.strip().lower() == "https"
+
+    def session_cookie(self, sid: str) -> str:
+        """The Set-Cookie value for a session.
+
+        A Hugging Face Space opened from its Hub page runs in an iframe on
+        another origin, and a SameSite=Lax cookie is not sent cross-site — every
+        request would mint a new session and no verdict would ever be read back.
+        SameSite=None fixes that but requires Secure, which a browser refuses
+        over plain HTTP, so a local server keeps Lax. Partitioned opts into
+        Chrome's third-party cookie partitioning; browsers that don't know it
+        ignore it.
+        """
+        attrs = "Path=/; Max-Age=86400"
+        if self._behind_https():
+            return f"{COOKIE_NAME}={sid}; {attrs}; SameSite=None; Secure; Partitioned"
+        return f"{COOKIE_NAME}={sid}; {attrs}; SameSite=Lax"
+
     def _session_headers(self) -> None:
         """Hand the browser its session on the response that created it."""
         if getattr(self, "_set_cookie", False):
-            self.send_header(
-                "set-cookie",
-                f"{COOKIE_NAME}={self._session_cache.id}; Path=/; SameSite=Lax; Max-Age=86400",
-            )
+            self.send_header("set-cookie", self.session_cookie(self._session_cache.id))
             self._set_cookie = False
 
     # -- helpers --
