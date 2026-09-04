@@ -203,6 +203,18 @@ function entriesBlock(field, entries) {
     ${entriesTable(entryItems(field, entries), entries)}`;
 }
 
+// The sticky nav overlaps anything else sticky, and it wraps, so its height is
+// measured rather than assumed.
+function trackNavHeight() {
+  const nav = document.querySelector("nav[data-topnav]");
+  if (!nav) return;
+  const set = () =>
+    document.documentElement.style.setProperty("--nav-h", `${nav.offsetHeight}px`);
+  set();
+  if (window.ResizeObserver) new window.ResizeObserver(set).observe(nav);
+  else window.addEventListener("resize", set);
+}
+
 function renderHeader() {
   const nav = document.querySelector("nav[data-topnav]");
   if (!nav) return;
@@ -760,7 +772,7 @@ function renderEditor() {
     ${evalHeader()}
     ${readOnlyBanner}
     <div class="split">
-      <div class="split-media eval-media">
+      <div class="split-media">
         ${note
           ? `<div role="alert" data-variant="warning" class="eval-note">
                <div><strong>Reviewer note</strong><br>${escapeHtml(note)}</div>
@@ -1943,4 +1955,5 @@ async function route() {
 }
 
 window.addEventListener("hashchange", route);
+trackNavHeight();
 route();

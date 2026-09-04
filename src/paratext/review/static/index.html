@@ -39,10 +39,13 @@
          ground truth, e.g. index-cards). */
       .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
       .split-content { min-width: 0; }
-      .split-media { position: sticky; top: 1rem; }
+      /* Oat's top nav is sticky at top:0, so anything else sticky must clear it.
+         The nav wraps, so its height is measured into --nav-h at runtime. */
+      .split-media { position: sticky; top: calc(var(--nav-h, 3rem) + .75rem); }
       .split-media a { display: block; }
       .split-media a + a { margin-top: .5rem; }
-      .split-media img { width: 100%; max-height: 85vh; object-fit: contain; border: 1px solid var(--border); }
+      .split-media img { width: 100%; max-height: calc(92vh - var(--nav-h, 3rem));
+        object-fit: contain; border: 1px solid var(--border); }
       /* Editable entries grid: long cell values (folios, descriptions) wrap and
          grow the row (autogrow textareas) instead of clipping past the edge. */
       .entries-editor .entry-table { table-layout: auto; width: 100%; }
@@ -109,9 +112,7 @@
       /* Oat's [role=alert] does the styling; these only place it. The note says
          why the record is in the queue, so it stays pinned above the scan while
          the image scrolls past it. */
-      .eval-note { margin-bottom: 1rem; }
-      .eval-media { position: static; }
-      .eval-media .eval-note { position: sticky; top: 1rem; z-index: 1; }
+      .eval-note { margin-bottom: .75rem; }
       /* Homepage only: reference material, set apart from the task. */
       .page-foot { margin-top: 3rem; padding-top: 1rem;
         border-top: 1px solid var(--border); font-size: .8125rem;
