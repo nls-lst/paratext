@@ -293,49 +293,27 @@ function renderPicker() {
     return;
   }
 
-  const groups = groupDatasets(state.datasets);
-  const cards = groups
+  // One card per project, showing the round you would actually review. Earlier
+  // rounds are history of a dataset, not a different dataset, so they are
+  // reached from Results rather than nested here.
+  const cards = groupDatasets(state.datasets)
     .map((g) => {
       const a = g.active;
-      const roundTag = g.rounds.length > 1
-        ? `<span style="color:var(--muted-foreground);"> · round ${a.round}</span>`
-        : "";
-      const archivedToggle = g.archived.length
-        ? `<details style="margin:.25rem 0 .75rem 1rem;">
-            <summary style="cursor:pointer; color:var(--muted-foreground); font-size:.875rem;">
-              ↓ ${g.archived.length} previous round${g.archived.length === 1 ? "" : "s"}
-            </summary>
-            <div style="margin-top:.25rem;">${g.archived
-              .map(
-                (d) => `
-                <button class="outline" data-dataset="${escapeHtml(d.name)}"
-                        style="display:block; width:100%; text-align:left; padding:.5rem .75rem; margin-bottom:.25rem; opacity:.75;">
-                  <strong>${escapeHtml(d.base)} · round ${d.round}</strong>
-                  <small style="display:block; color:var(--muted-foreground);">
-                    archived (read-only) · ${d.count} sample${d.count === 1 ? "" : "s"}
-                  </small>
-                </button>`,
-              )
-              .join("")}</div>
-          </details>`
-        : "";
-      return `
-        <div style="margin-bottom:.75rem;">
-          <button class="primary" data-dataset="${escapeHtml(a.name)}"
-                  style="display:block; width:100%; text-align:left; padding:1rem;">
-            <strong>${escapeHtml(g.base)}${roundTag}</strong>
-            <small style="display:block; opacity:.75;">
-              ${escapeHtml(g.schema)} · ${a.count} sample${a.count === 1 ? "" : "s"}
-            </small>
-          </button>
-          ${archivedToggle}
-        </div>`;
+      const earlier = g.rounds.length - 1;
+      return `<article class="card mb-2">
+        <h3>${escapeHtml(g.base)}</h3>
+        <p class="text-light">
+          <span class="badge outline">${escapeHtml(g.schema)}</span>
+          <span class="badge outline">round ${a.round}</span>
+          ${a.count} sample${a.count === 1 ? "" : "s"}${
+            earlier ? ` · ${earlier} earlier round${earlier === 1 ? "" : "s"}` : ""
+          }
+        </p>
+        <button class="button primary" data-dataset="${escapeHtml(a.name)}">Review →</button>
+      </article>`;
     })
     .join("");
 
-  // Projects lives here, not in the top nav: it's an orientation surface, not
-  // part of the review loop, and a reviewer mid-round shouldn't be one stray
-  // click from a page of schema internals.
   document.getElementById("view").innerHTML = `
     <h2>Choose a dataset to review</h2>
     <div style="max-width:32rem;">${cards}</div>
@@ -1167,6 +1145,26 @@ function renderDriftPanel(projects, schema) {
   </div>`;
 }
 
+
+// ── Round switcher ────────────────────────────────────────────────────
+// Rounds are history of one dataset, not a choice of dataset, so they live
+// here rather than on the index. The current round is marked; archived ones
+// say so, because they are read-only.
+function renderRoundSwitcher(current) {
+  const group = groupDatasets(state.datasets).find((g) => g.base === current.base);
+  if (!group || group.rounds.length < 2) return "";
+  const chips = group.rounds
+    .map((d) => {
+      const here = d.name === current.name;
+      const cls = here ? "button small" : "button outline small";
+      const tag = d.active === false ? " · archived" : "";
+      return `<button class="${cls}" data-round="${escapeHtml(d.name)}"
+        ${here ? "aria-current=\"page\"" : ""}>round ${d.round}${tag}</button>`;
+    })
+    .join("");
+  return `<div class="controls" role="group" aria-label="Round">${chips}</div>`;
+}
+
 async function renderStats() {
   const [statsRes, tableRes, promptsRes, schemaRes, projectsRes] = await Promise.all([
     fetch(api("api/stats")),
@@ -1211,6 +1209,8 @@ async function renderStats() {
 
   document.getElementById("view").innerHTML = `
     <h2>Results — ${escapeHtml(s.dataset)} <small class="text-light">(${escapeHtml(s.schema)})</small></h2>
+
+    ${renderRoundSwitcher(state.datasets.find((d) => d.name === s.dataset) ?? {})}
 
     <dl>
       <div class="field-row"><dt>Reviewed</dt><dd>${s.annotated} of ${s.total} (${
@@ -1273,6 +1273,13 @@ async function renderStats() {
   `;
 
   document.getElementById("open-export")?.addEventListener("click", openExportModal);
+
+  document.querySelectorAll("[data-round]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setDataset(btn.dataset.round);
+      route();
+    });
+  });
 
   // Wire up "Diff vs latest" toggles in the prompt history panel.
   const promptByHash = new Map(
