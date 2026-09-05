@@ -302,6 +302,13 @@ deliberately rather than taking the default.
 chasing, `undecided` sits with us and needs a call. Neither is accepted without
 `--blocker` explaining it.
 
+A task can wait on other tasks with `--needs <ID>`; it reads as blocked until they
+close, and clears itself when they do. `helical ls --ready` lists work with
+nothing in its way — start there.
+
+Closing a task requires `--done "what happened"` — one line, which is what the
+project summary shows instead of the title.
+
 Labels are free-form, and `--label` adds rather than replaces (`--no-label`
 removes). `helical ls --json` shows what is already in use — prefer an existing
 one over inventing a near-duplicate.
