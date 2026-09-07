@@ -7,7 +7,7 @@ A modular, project-based pipeline that produces metadata from digitised library
 
 A subject matter expert reviews a sample and helps iterate on the prompt until
 the accuracy is good enough to let it run over a full dataset. The focus is on
-'good enough' metadata for large collections rather than _perfect_ metadata.
+_good enough_ metadata for large collections rather than _perfect_ metadata.
 
 Version history for prompts and schemas is kept, so reviewers can see exactly
 what changed in the prompt and judge whether it helped. Extraction quality lives
@@ -78,165 +78,29 @@ describes what is **installed** — so if it disagrees with the files you're
 editing, the package needs reinstalling. That mismatch is the most common cause
 of "my change did nothing".
 
-### Where projects are found
+## Docs
 
-Run paratext from your project directory and it finds your project. That is the
-whole rule in practice — the CLI hands over to the nearest `.venv` that has
-paratext installed, so a bare `paratext run -p my-cards` works.
-
-<details>
-<summary>Why, and what to do if it doesn't</summary>
-
-Projects are discovered through Python entry points, which are **per
-environment**: paratext finds a project when the two are installed into the
-*same* environment. Nothing about it is tied to your working directory, and
-`uv tool install` deliberately isolates the tool, so an isolated `paratext`
-would otherwise see only the bundled example.
-
-The hand-over happens only when the nearest `.venv` really has paratext in it,
-and never over an environment you activated yourself. `PARATEXT_NO_DELEGATE=1`
-turns it off. Failing that, any of these put the two in one environment:
-
-```bash
-uv run paratext …                          # use the project's own .venv
-source .venv/bin/activate                  # then a bare `paratext` works too
-uv tool install paratext-cli --with .      # inject the project into the tool
-pip install paratext-cli && pip install -e .   # or just share one environment
-```
-</details>
-
-## Writing a project
-
-`paratext new` scaffolds three files:
-
-```
-my_cards/
-    prompt.md     # the prompt (prose, for the model)
-    schema.py     # the Pydantic output schema (your metadata fields)
-    __init__.py   # wires them together
-```
-
-`__init__.py` stays small because input handling comes from a **source adapter**:
-
-```python
-from paratext.projects import Project, load_prompt
-from paratext.sources import image_source   # or pdf_source
-
-from .schema import Record
-
-PROJECT = Project(
-    name="my-cards",
-    schema_version="v1",
-    prompt=load_prompt(__file__),
-    schema=Record,
-    source=image_source(),
-)
-```
-
-Register it so it's discovered at runtime:
-
-```toml
-[project.entry-points."paratext.projects"]
-my-cards = "my_cards:PROJECT"
-```
-
-That's the whole contract. The review view defaults to showing every schema
-field; override it only when you want to curate the display. Optional hooks
-(`curate`, `build_record`, `ground_truth`) handle drop rules and ground truth.
-
-Your fields end up named in three places — schema, prompt, and view — with no
-automatic link between them. Keep them in step by calling `audit_project(PROJECT)`
-from a test; `paratext new` generates one. Put behaviour in `prompt.md`, and keep
-the schema's `Field(description=...)` short and structural — those descriptions
-are sent to the model too, and shouldn't restate the prompt in a second voice.
-
-## Review and rounds
-
-Extraction quality lives almost entirely in the prompt, so the workflow is a
-loop: **run → review → edit the prompt → run again**. A **round** captures one
-prompt version, keyed on the prompt's hash:
-
-- **Edit `prompt.md` and re-run with `--re-extract`** → a new round (`-r2`,
-  `-r3`, …). The UI shows the two most recent rounds side by side and highlights
-  what changed. The flag is needed because a run resumes on sample id: without
-  it the existing extractions are already there, so the model is never called.
-  paratext stops and says so rather than resuming into a stale file. On a small
-  collection, `re-extract = true` in `paratext.toml` makes it the default and
-  the loop needs no flag.
-- **Re-run the same prompt** (a resume, or a bigger `--limit`) → the current round
-  is updated in place, keeping the annotations you've already made.
-
-Reviewers give a verdict and a free-text note. The **Build eval set** tab goes
-further: it surfaces the rows the model got wrong and lets you edit the fields
-into the correct answer, stored separately as **gold labels**. Accuracy still
-reflects the model — correcting a row never changes its verdict — but those
-corrected rows ship as gold alongside the approved ones when you export.
-
-Everything is saved to a SQLite `annotations.db` you can query directly.
-
-## Configure
-
-A `paratext.toml` in the working directory holds your defaults, and
-`paratext config` creates and opens it. Keys are kebab-case, matching the CLI
-flag that sets them:
-
-```toml
-base-url = "http://localhost:8000/v1"
-model    = "Qwen3-VL-30B"
-
-[project.my-cards]
-source = "/data/my-cards/images"
-output = "output/my-cards.jsonl"
-```
-
-Once a project has a section, `paratext run -p my-cards` needs nothing else.
-CLI flags override environment variables, which override the file.
-
-Full reference, including hosted endpoints and auth: **[docs/configuration.md](docs/configuration.md)**.
-
-## Commands
-
-| Command | What it does |
-| --- | --- |
-| `paratext run -p <project>` | Extract **and** package in one step (the common path) |
-| `paratext extract -p <project>` | Run the model, write JSONL only |
-| `paratext package <jsonl>` | Re-package an existing JSONL (no model calls) |
-| `paratext review [dir]` | Launch the review UI (default: `./review`) |
-| `paratext export -p <project>` | Export a reviewed round (`--format hf`/`marc`/`dc`) |
-| `paratext inspect [-p <project>]` | Show what an installed project does |
-| `paratext new [name]` | Scaffold a new project package |
-| `paratext config [--show]` | Open `paratext.toml`; `--show` prints resolved defaults |
-| `paratext sample` | Symlink a random image subset out of a nested tree |
-| `paratext carbon` | Show current grid carbon/renewables |
-| `paratext guide` | Print the agent guide |
-| `paratext skill` | Installs a paratext skill for your coding agent |
-
-Run `paratext <command> -h` for that command's flags.
-
-## Going further
-
-- **[Export](docs/export.md)** — Hugging Face datasets, MARCXML, Dublin Core, and
-  what makes up the gold set.
-- **[Configuration](docs/configuration.md)** — full key reference, hosted
-  endpoints, environment variables.
-- **[Scanned cards](docs/scanned-cards.md)** — optional verso filtering, card
-  cropping and show-through suppression for index-card collections.
-- **[Green scheduling](docs/green-scheduling.md)** — wait for a clean electricity
-  grid before running a batch.
-- **[AGENTS.md](AGENTS.md)** — the guide for AI coding agents, including how to
-  extend paratext for your own collection. `paratext skill` installs it where
-  Claude Code, Codex and the rest look, so an agent finds it without being told.
-
-## When something looks wrong
-
-- **A run finished but preprocessing didn't happen.** `run` prints a `!` notice
-  for anything that degraded rather than failed — most often a card crop falling
-  back to a content-aware crop because no detector was available.
-- **An edit to `schema.py` or `prompt.md` had no effect.** `paratext inspect`
-  reports the *installed* project. If it disagrees with your editor, reinstall
-  (`uv sync`). An editable install avoids this entirely.
-- **A field renamed in one place but not another.** `paratext inspect` runs the
-  same audit as `audit_project`. Call it from your tests too.
+- **[Writing a project](docs/writing-a-project.md)** — the three scaffolded files,
+  the `Project` contract, source adapters, and how projects are discovered.
+- **[Review and rounds](docs/review-and-rounds.md)** — the run/review/edit loop,
+  what a round is, verdicts, and building the gold set.
+- **[Commands](docs/commands.md)** — every subcommand and what it is for.
+- **[Configuration](docs/configuration.md)** — `paratext.toml`, resolution order,
+  every key, hosted endpoints and environment variables.
+- **[Export](docs/export.md)** — Hugging Face datasets, MARCXML and Dublin Core,
+  and what makes up the gold set.
+- **[Scanned cards](docs/scanned-cards.md)** — verso filtering, card cropping and
+  show-through suppression for index-card collections.
+- **[Green scheduling](docs/green-scheduling.md)** — wait for clean electricity
+  before running a batch.
+- **[Troubleshooting](docs/troubleshooting.md)** — what to check when the output
+  is not what you expected.
+- **[HF export spec](docs/hf-export-spec.md)** — the dataset layout, card and row
+  fields a published round produces.
+- **[Publishing](docs/publishing.md)** — cutting a paratext release to PyPI.
+- **[AGENTS.md](AGENTS.md)** — the guide for AI coding agents. `paratext skill`
+  installs it where Claude Code, Codex and the rest look, so an agent finds it
+  without being told.
 
 ## Development
 
