@@ -5,7 +5,7 @@
 A modular, project-based pipeline that produces metadata from digitised library
 & archive collections with a multimodal model, built around human-in-the-loop.
 
-A subject matter expert can reviews a sample and help to iterate on a prompt until
+A subject matter expert reviews a sample and helps iterate on the prompt until
 the accuracy is good enough to let it run over a full dataset. The focus is on
 'good enough' metadata for large collections rather than _perfect_ metadata.
 
