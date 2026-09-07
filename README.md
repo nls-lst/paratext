@@ -4,26 +4,23 @@
 
 A modular, project-based pipeline that produces metadata from digitised library
 & archive collections with a multimodal model, built around human-in-the-loop.
-A cataloguer, archivist or curator reviews a sample rather than the whole
-collection: run 50, then 100, then 150, sharpening the prompt each time, until
-the accuracy is good enough to let it run unsupervised over the remaining
-250,000.
 
-Their feedback is kept, not just applied. Verdicts and comments carry into the
-next round, where the reviewer can see exactly what changed in the prompt and
-judge whether it helped. Approved and corrected records also build a gold set,
-which is a separate thing: a fixed benchmark for measuring other models against
-the same material.
+A subject matter expert can reviews a sample and help to iterate on a prompt until
+the accuracy is good enough to let it run over a full dataset. The focus is on
+'good enough' metadata for large collections rather than _perfect_ metadata.
 
-Extraction quality lives almost entirely in the prompt and the schema, which is
-where domain knowledge ends up: written down, versioned, deterministic and
-testable.
+Version history for prompts and schemas is kept, so reviewers can see exactly
+what changed in the prompt and judge whether it helped. Extraction quality lives
+almost entirely in the prompt and the schema, which is where domain knowledge
+ends up: written down, versioned, deterministic and testable.
+
+Approved and corrected records can also build a gold set: a fixed benchmark
+for measuring other models against the same material.
 
 Run a model over a directory of images or PDFs, write resumable JSONL with
 provenance, package it for review, and export the approved results. Each
 **project** is a self-contained module, with its own prompt, schema and input
 handling, so the same code path runs a 50-item pilot and a 250,000-item sweep.
-Only `--limit` differs.
 
 ## What you'll need
 
