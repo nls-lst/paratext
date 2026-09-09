@@ -309,6 +309,10 @@ nothing in its way — start there.
 Closing a task requires `--done "what happened"` — one line, which is what the
 project summary shows instead of the title.
 
+If the work serves a routemap outcome, attach it: `--outcome R-2`. Anything open
+and unattached shows up under "Not on the routemap", which is where it gets
+noticed.
+
 Labels are free-form, and `--label` adds rather than replaces (`--no-label`
 removes). `helical ls --json` shows what is already in use — prefer an existing
 one over inventing a near-duplicate.
