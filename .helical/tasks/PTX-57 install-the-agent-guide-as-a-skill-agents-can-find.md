@@ -4,12 +4,9 @@ title: Install the agent guide as a skill agents can find
 status: done
 horizon: now
 flow: clear
-labels:
-  - agents
-  - cli
-  - docs
+outcome: R-4
 created: '2026-09-03'
-updated: '2026-09-03'
+updated: '2026-09-09'
 ---
 
 `paratext guide` printed the agent guide, but only if you knew to ask. `paratext

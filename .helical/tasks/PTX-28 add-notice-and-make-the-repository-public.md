@@ -4,8 +4,6 @@ title: Add NOTICE and make the repository public
 status: done
 horizon: now
 flow: clear
-labels:
-  - packaging
 created: '2026-08-12'
 updated: '2026-08-12'
 ---

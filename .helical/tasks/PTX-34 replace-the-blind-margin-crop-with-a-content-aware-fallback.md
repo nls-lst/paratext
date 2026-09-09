@@ -4,8 +4,6 @@ title: Replace the blind margin crop with a content-aware fallback
 status: done
 horizon: now
 flow: clear
-labels:
-  - index-cards
 created: '2026-08-20'
 updated: '2026-08-20'
 ---

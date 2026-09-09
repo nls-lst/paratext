@@ -4,8 +4,6 @@ title: Fold the Projects page into Results and promote the eval set
 status: done
 horizon: now
 flow: clear
-labels:
-  - ui
 created: '2026-09-03'
 updated: '2026-09-03'
 ---

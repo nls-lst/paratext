@@ -4,11 +4,9 @@ title: Build the human-corrected gold eval set in review
 status: done
 horizon: now
 flow: clear
-labels:
-  - evaluation
-  - ui
+outcome: R-2
 created: '2026-07-16'
-updated: '2026-07-16'
+updated: '2026-09-09'
 ---
 
 Verdicts say whether an extraction was good enough. They do not say what the right answer was, which is what an eval set needs.

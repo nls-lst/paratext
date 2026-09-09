@@ -5,8 +5,6 @@ status: todo
 horizon: future
 flow: clear
 priority: low
-labels:
-  - packaging
 created: '2026-09-02'
 updated: '2026-09-02'
 ---

@@ -4,11 +4,9 @@ title: Clearer install and first-run path in the README
 status: done
 horizon: now
 flow: clear
-labels:
-  - onboarding
-  - docs
+outcome: R-4
 created: '2026-09-03'
-updated: '2026-09-03'
+updated: '2026-09-09'
 ---
 
 Read as a newcomer, the README had three obstacles. The one prerequisite that

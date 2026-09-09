@@ -4,8 +4,6 @@ title: Make the review server configurable
 status: done
 horizon: now
 flow: clear
-labels:
-  - ui
 created: '2026-06-28'
 updated: '2026-06-28'
 ---

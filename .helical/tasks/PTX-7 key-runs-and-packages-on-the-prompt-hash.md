@@ -4,8 +4,6 @@ title: Key runs and packages on the prompt hash
 status: done
 horizon: now
 flow: clear
-labels:
-  - ui
 created: '2026-07-01'
 updated: '2026-07-01'
 ---

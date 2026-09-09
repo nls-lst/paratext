@@ -4,8 +4,6 @@ title: Remove the WattTime provider
 status: done
 horizon: now
 flow: clear
-labels:
-  - carbon
 created: '2026-07-01'
 updated: '2026-07-01'
 ---

@@ -4,12 +4,9 @@ title: Fail loudly when every sample in a run failed
 status: done
 horizon: now
 flow: clear
-labels:
-  - extraction
-  - onboarding
-  - cli
+outcome: R-4
 created: '2026-09-03'
-updated: '2026-09-03'
+updated: '2026-09-09'
 ---
 
 A run where every call failed printed `Packaged 0 record(s)` and `Review them:`

@@ -4,11 +4,9 @@ title: Emit only one main entry per MARC record
 status: done
 horizon: now
 flow: clear
-labels:
-  - export
-  - marc
+outcome: R-1
 created: '2026-09-02'
-updated: '2026-09-02'
+updated: '2026-09-09'
 ---
 
 Records were being emitted with more than one 1xx field, which is invalid MARC and was caught by cataloguers in review.

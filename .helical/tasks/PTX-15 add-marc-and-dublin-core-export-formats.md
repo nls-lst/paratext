@@ -4,8 +4,6 @@ title: Add MARC and Dublin Core export formats
 status: done
 horizon: now
 flow: clear
-labels:
-  - export
 created: '2026-07-16'
 updated: '2026-07-16'
 ---

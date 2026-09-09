@@ -4,11 +4,9 @@ title: Give clear errors for provider and source misconfiguration
 status: done
 horizon: now
 flow: clear
-labels:
-  - cli
-  - packaging
+outcome: R-4
 created: '2026-08-12'
-updated: '2026-08-12'
+updated: '2026-09-09'
 ---
 
 A malformed base URL or a missing source directory produced a failure far from its cause.

@@ -6,8 +6,6 @@ horizon: next
 flow: clear
 outcome: R-4
 priority: med
-labels:
-  - export
 created: '2026-09-02'
 updated: '2026-09-09'
 ---
