@@ -4,8 +4,6 @@ title: Add the project inspector and fix sqlite thread safety
 status: done
 horizon: now
 flow: clear
-labels:
-  - ui
 created: '2026-07-21'
 updated: '2026-07-21'
 ---

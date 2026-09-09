@@ -4,11 +4,9 @@ title: Burst-test workshop-mode concurrency
 status: done
 horizon: now
 flow: clear
-labels:
-  - workshop
-  - tests
+outcome: R-4
 created: '2026-09-03'
-updated: '2026-09-03'
+updated: '2026-09-09'
 ---
 
 Workshop mode had only ever been driven by one client, leaving the question a

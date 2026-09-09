@@ -4,11 +4,9 @@ title: Bring MARC output up to ISBD punctuation and leader conventions
 status: done
 horizon: now
 flow: clear
-labels:
-  - export
-  - marc
+outcome: R-1
 created: '2026-08-19'
-updated: '2026-08-19'
+updated: '2026-09-09'
 ---
 
 MARC that is structurally valid but punctuated wrongly still fails cataloguer review. Nonfiling indicators, ISBD separators and the leader all carry meaning.

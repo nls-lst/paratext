@@ -4,10 +4,9 @@ title: Rename init to new and document every CLI flag
 status: done
 horizon: now
 flow: clear
-labels:
-  - cli
+outcome: R-4
 created: '2026-06-28'
-updated: '2026-06-28'
+updated: '2026-09-09'
 ---
 
 `init` reads as initialising the tool rather than creating a project, and undocumented flags make the CLI unusable without reading the source.

@@ -4,8 +4,6 @@ title: Rename the distribution to paratext-cli and publish to PyPI
 status: done
 horizon: now
 flow: clear
-labels:
-  - packaging
 created: '2026-08-12'
 updated: '2026-08-12'
 ---

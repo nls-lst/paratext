@@ -4,8 +4,6 @@ title: Warn on incomplete provenance without blocking publication
 status: done
 horizon: now
 flow: clear
-labels:
-  - export
 created: '2026-07-24'
 updated: '2026-07-24'
 ---

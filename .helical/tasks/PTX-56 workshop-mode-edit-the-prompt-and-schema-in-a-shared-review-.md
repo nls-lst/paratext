@@ -4,13 +4,9 @@ title: 'Workshop mode: edit the prompt and schema in a shared review instance'
 status: done
 horizon: now
 flow: clear
-labels:
-  - workshop
-  - schema
-  - ui
-  - cli
+outcome: R-4
 created: '2026-09-03'
-updated: '2026-09-03'
+updated: '2026-09-09'
 ---
 
 `paratext review --workshop DIR` makes one server usable by a room. Each browser

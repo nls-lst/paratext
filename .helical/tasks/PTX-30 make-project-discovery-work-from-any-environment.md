@@ -4,11 +4,9 @@ title: Make project discovery work from any environment
 status: done
 horizon: now
 flow: clear
-labels:
-  - cli
-  - packaging
+outcome: R-4
 created: '2026-08-12'
-updated: '2026-08-12'
+updated: '2026-09-09'
 ---
 
 Projects are found per environment through entry points, and a bare `paratext` invocation was resolving to the wrong interpreter and reporting a confusing argparse error for an unknown project.

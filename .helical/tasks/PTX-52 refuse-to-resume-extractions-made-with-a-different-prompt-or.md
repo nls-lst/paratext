@@ -4,12 +4,9 @@ title: Refuse to resume extractions made with a different prompt or model
 status: done
 horizon: now
 flow: clear
-labels:
-  - cli
-  - extraction
-  - tests
+outcome: R-4
 created: '2026-09-03'
-updated: '2026-09-04'
+updated: '2026-09-09'
 ---
 
 Resume keys on sample id, so editing `prompt.md` and re-running skipped every

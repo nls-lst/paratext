@@ -4,8 +4,6 @@ title: Split Store and dataset loading out of the review server
 status: done
 horizon: now
 flow: clear
-labels:
-  - ui
 created: '2026-07-27'
 updated: '2026-07-27'
 ---

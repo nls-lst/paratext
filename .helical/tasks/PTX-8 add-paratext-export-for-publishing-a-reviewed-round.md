@@ -4,8 +4,6 @@ title: Add paratext export for publishing a reviewed round
 status: done
 horizon: now
 flow: clear
-labels:
-  - export
 created: '2026-07-01'
 updated: '2026-07-01'
 ---

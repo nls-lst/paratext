@@ -4,8 +4,6 @@ title: Move the review UI onto Oat
 status: done
 horizon: now
 flow: clear
-labels:
-  - ui
 created: '2026-07-23'
 updated: '2026-07-23'
 ---

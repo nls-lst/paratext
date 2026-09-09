@@ -4,8 +4,6 @@ title: Render entries as tables, read-only and editable
 status: done
 horizon: now
 flow: clear
-labels:
-  - ui
 created: '2026-07-24'
 updated: '2026-07-24'
 ---

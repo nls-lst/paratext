@@ -288,7 +288,7 @@ helical show <ID>                    # one task in full
 helical set <ID> --status doing      # todo | doing | done
 helical set <ID> --horizon next      # now | next | future
 helical set <ID> --flow blocked --blocker "why"
-helical new "Title" --horizon next -l some-label
+helical new "Title" --horizon next --outcome R-2
 ```
 
 `-p <project>` targets another project; without it, helical uses the one whose
@@ -313,9 +313,8 @@ If the work serves a routemap outcome, attach it: `--outcome R-2`. Anything open
 and unattached shows up under "Not on the routemap", which is where it gets
 noticed.
 
-Labels are free-form, and `--label` adds rather than replaces (`--no-label`
-removes). `helical ls --json` shows what is already in use — prefer an existing
-one over inventing a near-duplicate.
+There are no labels. A task's place in the world is its project, its horizon and
+the outcome it names.
 
 Boards: <https://helical.ai.nls.uk> · read-only <https://projects.ai.nls.uk>
 <!-- HELICAL END -->

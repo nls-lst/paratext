@@ -4,8 +4,6 @@ title: Ship schema.json with each exported dataset
 status: done
 horizon: now
 flow: clear
-labels:
-  - export
 created: '2026-07-16'
 updated: '2026-07-16'
 ---

@@ -7,9 +7,6 @@ flow: undecided
 blocker: 'Needs a decision: does a non-interactive export keep defaulting to hf, or error? Erroring breaks existing scripts.'
 outcome: R-4
 priority: med
-labels:
-  - cli
-  - export
 created: '2026-09-02'
 updated: '2026-09-09'
 ---

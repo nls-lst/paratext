@@ -4,8 +4,6 @@ title: Add a configurable output budget and provider extra-body passthrough
 status: done
 horizon: now
 flow: clear
-labels:
-  - packaging
 created: '2026-08-19'
 updated: '2026-08-19'
 ---
