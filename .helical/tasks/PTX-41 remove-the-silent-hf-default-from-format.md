@@ -5,12 +5,13 @@ status: todo
 horizon: next
 flow: undecided
 blocker: 'Needs a decision: does a non-interactive export keep defaulting to hf, or error? Erroring breaks existing scripts.'
+outcome: R-4
 priority: med
 labels:
   - cli
   - export
 created: '2026-09-02'
-updated: '2026-09-03'
+updated: '2026-09-09'
 ---
 
 `--format` defaults silently to hf, so a user who meant MARC gets a Hugging Face dataset without being told. On a TTY the right behaviour is a menu; otherwise an error.
