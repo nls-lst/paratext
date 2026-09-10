@@ -1,12 +1,12 @@
 ---
 id: PTX-62
 title: Decide how correcting relates to scoring in the review flow
-status: todo
+status: done
 horizon: now
-flow: undecided
-blocker: 'Mike''s call: fold correction into the needs_tweaks verdict, or keep two passes and add a jump-to-editor affordance. Wanted before the workshop.'
+flow: clear
+result: 'Decided 2026-09-10: leave the flow alone — no collapse, and not even the jump-to-editor affordance. Scoring and correcting are separate tasks in day-to-day work, done at different times by different people, and the UI should keep saying so. The free-text note stays the prompt-rewriting signal and the gold label stays the durable target. The friction is real for the workshop and accepted deliberately: the session shows how we actually work, not a slick end-to-end demo.'
 created: '2026-09-09'
-updated: '2026-09-09'
+updated: '2026-09-10'
 ---
 
 Concern raised 2026-09-09 while prepping the workshop: the route to an eval set
