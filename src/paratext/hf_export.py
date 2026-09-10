@@ -67,6 +67,23 @@ def normalise_license(value: str | None) -> str | None:
 EXPORT_ROOT = Path("export")
 
 
+# Written onto every card. `paratext` is provenance (this tool made it) and
+# `glam-eval` is kind (it is a checked-example set), so a bench can filter on
+# what a dataset *is* even once other institutions publish their own.
+BUILTIN_TAGS = ("paratext", "glam-eval", "library-metadata")
+
+
+def merge_tags(project: str, extra: list[str] | None) -> list[str]:
+    """Built-in tags, the project name, then any the publisher added. Order is
+    kept and duplicates dropped, so `--tag paratext` can't double it up."""
+    out: list[str] = []
+    for tag in [*BUILTIN_TAGS, project, *(extra or [])]:
+        tag = str(tag).strip()
+        if tag and tag not in out:
+            out.append(tag)
+    return out
+
+
 @dataclass
 class ExportConfig:
     repo: str | None = None
@@ -76,11 +93,13 @@ class ExportConfig:
     include_negatives: bool = False
     annotators: str = "omit"  # omit | pseudonym | name
     public: bool = False
+    tags: list[str] = field(default_factory=list)
 
 
 def load_config(
     project: str, *, repo: str | None, public: bool,
     license: str | None = None, rights: str | None = None,
+    tags: list[str] | None = None,
 ) -> ExportConfig:
     """Build the export config from `[project.<name>.export]`, with CLI overrides."""
     raw = load_project_section(project, "export")
@@ -92,6 +111,7 @@ def load_config(
         include_negatives=bool(raw.get("include_negatives", False)),
         annotators=raw.get("annotators", "omit"),
         public=public or bool(raw.get("public", False)),
+        tags=[*(raw.get("tags") or []), *(tags or [])],
     )
     return cfg
 
@@ -275,9 +295,7 @@ def _dataset_card(
         "task_categories:",
         "  - image-to-text",
         "tags:",
-        "  - paratext",
-        "  - library-metadata",
-        f"  - {project}",
+        *(f"  - {tag}" for tag in merge_tags(project, cfg.tags)),
         "size_categories:",
         f"  - {_size_category(n_gold)}",
         "---",

@@ -1,9 +1,10 @@
 ---
 id: PTX-63
 title: Let a project add its own tags to the HF export
-status: todo
+status: done
 horizon: next
 flow: clear
+result: 'Added a glam-eval kind tag alongside the paratext provenance tag, plus --tag / tags config. merge_tags() de-duplicates built-ins + project + publisher tags in order; wired through the CLI and the review UI''s push path. Docs in export.md and hf-export-spec.md; 3 new tests, 310 pass. Existing published datasets keep their old tags until re-exported.'
 created: '2026-09-10'
 updated: '2026-09-10'
 ---

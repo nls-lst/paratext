@@ -57,7 +57,14 @@ license     = "cc0-1.0"          # canonical HF id; recommended: cc0-1.0 / cc-by
 min-verdict = "good_enough"      # lowest verdict to include as gold (see policy)
 include-negatives = false        # also export not_accurate rows as hard negatives
 annotators  = "omit"             # omit | pseudonym | name  (privacy default: omit)
+tags        = ["manuscripts"]    # appended after the built-in tags
 ```
+
+Card tags are `paratext`, `glam-eval`, `library-metadata`, the project name,
+then anything from `tags` / `--tag`, de-duplicated in that order. `paratext` is
+a provenance tag and `glam-eval` a kind tag: the two are kept apart so a
+benchmark can find checked-example sets published by anyone, not just the ones
+this tool happened to write.
 
 Defaults if the section is absent: `min-verdict = "good_enough"` (the only
 gold-producing verdict until structured corrections exist),

@@ -52,7 +52,15 @@ license = "cc0-1.0"     # shorthands like `cc0` are normalised
 # min-verdict = "good_enough"
 # include-negatives = false
 # annotators = "omit"     # omit | pseudonym | name
+# tags = ["manuscripts"]  # extra card tags, after the built-ins
 ```
+
+Every card is tagged **`paratext`** (provenance — this tool made it),
+**`glam-eval`** (kind — it is a set of checked examples), `library-metadata`,
+and the project name. Filter on the kind tag to find eval sets regardless of who
+published them: `HfApi().list_datasets(filter="glam-eval")`, or
+`huggingface.co/datasets?other=glam-eval` in a browser. Add your own with
+`--tag` (repeatable) or the `tags` key.
 
 Auth uses your Hugging Face token (`huggingface-cli login` or `HF_TOKEN`). The
 review UI can also push via **Sign in with Hugging Face**, in which case each
