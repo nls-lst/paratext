@@ -721,6 +721,7 @@ class Handler(BaseHTTPRequestHandler):
             include_negatives=bool(raw.get("include_negatives", False)),
             annotators=raw.get("annotators", "omit"),
             public=bool(body.get("public")),
+            tags=list(raw.get("tags") or []),
         )
         dest = Path(tempfile.mkdtemp(prefix="paratext-hf-"))
         try:

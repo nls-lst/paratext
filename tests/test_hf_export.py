@@ -276,3 +276,26 @@ def test_the_card_names_no_institution():
     src = inspect.getsource(hf_export)
     for term in ("NLS", "National Library", "Scotland"):
         assert term not in src, f"{term} leaked into the published card module"
+
+
+def test_builtin_tags_include_kind_and_provenance():
+    # `paratext` says who made it, `glam-eval` says what it is — a bench filters
+    # on the latter once other institutions publish their own sets.
+    tags = hf_export.merge_tags("index-cards", None)
+    assert tags == ["paratext", "glam-eval", "library-metadata", "index-cards"]
+
+
+def test_extra_tags_append_without_duplicating():
+    tags = hf_export.merge_tags("index-cards", ["manuscripts", "paratext", "  ", "index-cards"])
+    assert tags == ["paratext", "glam-eval", "library-metadata", "index-cards", "manuscripts"]
+
+
+def test_card_front_matter_carries_configured_tags(tmp_path):
+    d = _mk_dataset(tmp_path)
+    cfg = hf_export.ExportConfig(tags=["manuscripts"])
+    hf_export.build(d, "card-template", cfg, tmp_path / "out")
+    card = (tmp_path / "out" / "README.md").read_text()
+    front = card.split("---")[1]
+    assert "  - glam-eval\n" in front
+    assert "  - manuscripts\n" in front
+    assert front.count("  - paratext\n") == 1
