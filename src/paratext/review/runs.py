@@ -143,6 +143,14 @@ def extract_and_package(
         base_url=base_url, api_key=api_key,
         timeout=WORKSHOP_TIMEOUT_S, max_retries=WORKSHOP_RETRIES,
     )
+    # `extract.run` builds this from the project; the workshop path calls
+    # call_structured directly, so it has to do the same or the model reasons
+    # anyway and spends the token budget getting to the answer.
+    extra_body = (
+        {"chat_template_kwargs": {"enable_thinking": False}}
+        if proj.disable_thinking
+        else None
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists():
         output.unlink()          # a workshop run is always a fresh round
@@ -162,6 +170,7 @@ def extract_and_package(
                 client, model=model, prompt=proj.prompt, images=sample.images,
                 schema=proj.schema, image_max_size=proj.image_max_size,
                 image_quality=proj.image_quality, max_tokens=WORKSHOP_MAX_TOKENS,
+                extra_body=extra_body,
             )
             append_jsonl(output, {
                 "id": sample.id,
