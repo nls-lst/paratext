@@ -17,7 +17,13 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from openai import OpenAI
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AuthenticationError,
+    OpenAI,
+    RateLimitError,
+)
 
 from ..extract import _prompt_hash
 from ..io import append_jsonl, write_provenance_header
@@ -41,6 +47,52 @@ WORKSHOP_MAX_TOKENS = 1024
 # can hold a run for half an hour with nothing on screen but a progress bar.
 WORKSHOP_TIMEOUT_S = 90
 WORKSHOP_RETRIES = 1
+
+
+def _card_label(sample_id: str) -> str:
+    """"Card 03" for the workshop set, whose files are numbered to fix their
+    order. Anything else keeps its own id — a made-up number would be worse."""
+    head = sample_id.split("_", 1)[0]
+    return f"Card {head}" if head.isdigit() else sample_id
+
+
+def friendly_failure(sample_id: str, exc: Exception) -> str:
+    """Say what went wrong in the terms of the person who caused it.
+
+    The underlying errors are written for someone debugging a pipeline — a
+    pydantic validation trace, a token-cap message quoting `--max-tokens`. In
+    workshop mode neither is reachable or useful: the only things an attendee
+    controls are the prompt and the fields, so the message has to point there.
+    Only the failures that actually happen are translated; anything else keeps
+    its own text rather than getting a diagnosis invented for it.
+    """
+    text = str(exc)
+    low = text.lower()
+
+    if "output cap before finishing" in low or "json_invalid" in low or "eof while parsing" in low:
+        return (
+            f"{_card_label(sample_id)} — the model kept writing until it ran out of room, "
+            f"so its answer was cut off. That usually means it got stuck repeating itself. "
+            f"Look at what the prompt asks for on this card, and at any field that invites "
+            f"a long or open-ended answer."
+        )
+    if isinstance(exc, APITimeoutError):
+        return f"{_card_label(sample_id)} — the model took too long to answer. Try running again."
+    if isinstance(exc, RateLimitError):
+        return (
+            f"{_card_label(sample_id)} — too many requests at once. "
+            f"Wait a moment and run again."
+        )
+    if isinstance(exc, AuthenticationError):
+        return (
+            f"{_card_label(sample_id)} — the server rejected its API key. "
+            f"This one is for the organisers."
+        )
+    if isinstance(exc, APIConnectionError):
+        return f"{_card_label(sample_id)} — couldn't reach the model. Try running again."
+
+    first = text.strip().splitlines()[0]
+    return f"{_card_label(sample_id)} — {first}"
 
 
 @dataclass
@@ -179,7 +231,7 @@ def extract_and_package(
                 "elapsed_s": round(time.monotonic() - t0, 3),
             })
         except Exception as e:                          # noqa: BLE001
-            job.failures.append(f"{sample.id}: {e}")
+            job.failures.append(friendly_failure(sample.id, e))
             logger.warning("[%s] failed: %s", sample.id, e)
         finally:
             job.done += 1
