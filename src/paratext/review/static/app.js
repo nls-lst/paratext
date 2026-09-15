@@ -1745,7 +1745,6 @@ function readWorkshopForm() {
 
 function renderWorkshop() {
   const w = state.workshop;
-  const left = (w.max_runs ?? 0) - (w.runs_used ?? 0);
   document.getElementById("view").innerHTML = `
     <h2>Prompt and fields</h2>
     <p class="text-light" style="max-width:44rem;">
@@ -1774,7 +1773,6 @@ function renderWorkshop() {
                value="${w.max_cards ?? 8}">
       </label>
       <button class="button primary" id="ws-run">Run</button>
-      <span class="text-light">${left} run${left === 1 ? "" : "s"} left</span>
     </div>
 
     <div id="ws-status" class="mb-4"></div>
@@ -1859,8 +1857,33 @@ async function startWorkshopRun() {
     )}</p>`;
     return;
   }
-  // Straight into the round they just made — the point is to look at it.
   await loadDatasets();
+
+  // A failed card carries the reason the model gave up — a runaway hitting the
+  // token cap, or JSON that didn't parse. That is usually the prompt's doing,
+  // so it's worth stopping for: navigating straight on would leave a short
+  // round and no explanation. A clean run still goes through without a click.
+  if (job.failures.length) {
+    status.innerHTML = `
+      <div role="alert" data-variant="warning">
+        <strong>${job.failures.length} of ${job.total} card${
+          job.total === 1 ? "" : "s"
+        } didn't come back.</strong>
+        <ul style="margin:.5rem 0 0; padding-left:1.1rem;">
+          ${job.failures.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}
+        </ul>
+      </div>
+      <div class="controls">
+        <button class="button primary small" id="ws-go">See the round →</button>
+      </div>`;
+    document.getElementById("ws-go").addEventListener("click", () => {
+      setDataset(job.round);
+      location.hash = "#/review";
+    });
+    return;
+  }
+
+  // Straight into the round they just made — the point is to look at it.
   status.innerHTML = `<p class="ok">Done — ${escapeHtml(job.round)} is ready.</p>`;
   setDataset(job.round);
   location.hash = "#/review";

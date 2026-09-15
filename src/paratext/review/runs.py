@@ -32,6 +32,16 @@ logger = logging.getLogger(__name__)
 MAX_CARDS = 8          # per run
 MAX_RUNS_PER_SESSION = 40
 
+# A card measures ~180 output tokens, so 1024 is generous. The point of the low
+# cap is speed of failure: a model that starts repeating runs to the cap, and at
+# the default 8192 that costs ~85s of somebody's workshop before they see why.
+WORKSHOP_MAX_TOKENS = 1024
+
+# The SDK defaults to a 600s read timeout and two retries, so one stalled card
+# can hold a run for half an hour with nothing on screen but a progress bar.
+WORKSHOP_TIMEOUT_S = 90
+WORKSHOP_RETRIES = 1
+
 
 @dataclass
 class Job:
@@ -129,7 +139,10 @@ def extract_and_package(
 ) -> None:
     """Run the model over `cards` samples, then package a round. Updates `job`
     as it goes so the browser can draw a progress bar."""
-    client = OpenAI(base_url=base_url, api_key=api_key)
+    client = OpenAI(
+        base_url=base_url, api_key=api_key,
+        timeout=WORKSHOP_TIMEOUT_S, max_retries=WORKSHOP_RETRIES,
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists():
         output.unlink()          # a workshop run is always a fresh round
@@ -148,7 +161,7 @@ def extract_and_package(
             parsed = call_structured(
                 client, model=model, prompt=proj.prompt, images=sample.images,
                 schema=proj.schema, image_max_size=proj.image_max_size,
-                image_quality=proj.image_quality,
+                image_quality=proj.image_quality, max_tokens=WORKSHOP_MAX_TOKENS,
             )
             append_jsonl(output, {
                 "id": sample.id,
