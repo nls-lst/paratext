@@ -1750,7 +1750,7 @@ function renderWorkshop() {
 
     <label for="ws-prompt"><strong>Prompt</strong></label>
     <textarea id="ws-prompt" rows="14" spellcheck="false"
-      style="width:100%; font-family:var(--font-mono); font-size:.8125rem;"
+      style="width:100%; max-width:82ch; font-family:var(--font-mono); font-size:.8125rem;"
       >${escapeHtml(w.prompt ?? "")}</textarea>
 
     <p class="mt-4"><strong>Fields</strong>
