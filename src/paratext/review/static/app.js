@@ -1259,9 +1259,15 @@ async function renderStats() {
 
     ${renderDriftPanel(projects, s.schema)}
 
+    ${renderPromptsPanel(promptsData.prompts ?? [])}
+
     ${renderFieldsPanel(schemaData.rounds ?? [])}
 
-    ${renderPromptsPanel(promptsData.prompts ?? [])}
+    ${
+      state.workshop
+        ? `<div class="controls"><a href="#/workshop" class="button outline small">Prompt editor</a></div>`
+        : ""
+    }
 
     ${exportLinks ? `<div class="controls">${exportLinks}</div>` : ""}
 
@@ -1877,17 +1883,10 @@ async function route() {
   if (!state.datasets.length) {
     await loadDatasets();
   }
+  // The editor is reached from Results, under the prompt and field history it
+  // follows on from — not from the top nav, which is the review path.
   if (state.workshop === undefined) {
     await loadWorkshop();
-    // Built rather than unhidden: Oat sets display on .button in its components
-    // layer, which outranks [hidden] in base whatever the specificity.
-    if (state.workshop && !document.getElementById("nav-workshop")) {
-      const review = document.getElementById("nav-review");
-      review?.insertAdjacentHTML(
-        "beforebegin",
-        `<a href="#/workshop" id="nav-workshop" class="button outline small">Prompt editor</a>`,
-      );
-    }
   }
 
   // The editor is about what you're going to run, not what has been run, so it
