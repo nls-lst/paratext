@@ -127,6 +127,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "a schema needs at least one field"}, 400)
         cards = max(1, min(int(body.get("cards") or MAX_CARDS), MAX_CARDS))
 
+        # Running is the save. Otherwise an attendee edits, runs, goes to look
+        # at the results, comes back to refine — and finds the default prompt
+        # again, with their version gone.
+        session.write_state({"prompt": prompt, "fields": fields})
+
         cfg = type(self).workshop_defaults
         if not cfg.get("source") or not Path(cfg["source"]).is_dir():
             return self._json({"error": "this server has no source images configured"}, 400)

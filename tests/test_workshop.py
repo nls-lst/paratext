@@ -97,3 +97,26 @@ def test_build_schema_needs_at_least_one_field():
         build_schema([])
     with pytest.raises(ValueError, match="at least one field"):
         build_schema([{"name": "   "}])
+
+
+def test_workshop_run_disables_thinking_like_extract():
+    # extract.run builds this from the project; the workshop path calls
+    # call_structured directly, so it has to send the same hint or the model
+    # reasons anyway and spends the token budget getting to the answer.
+    import inspect
+
+    from paratext.review import runs
+
+    src = inspect.getsource(runs.extract_and_package)
+    assert "enable_thinking" in src
+    assert "extra_body=extra_body" in src
+
+
+def test_workshop_run_caps_tokens_well_below_the_default():
+    from paratext.review import runs
+    from paratext.runner import DEFAULT_MAX_TOKENS
+
+    # A card measures ~180 output tokens. The low cap is what makes a runaway
+    # fail in seconds rather than spending ~85s of a workshop session.
+    assert runs.WORKSHOP_MAX_TOKENS < DEFAULT_MAX_TOKENS
+    assert runs.WORKSHOP_TIMEOUT_S < 600  # the SDK default read timeout
