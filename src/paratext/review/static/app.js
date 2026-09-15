@@ -1800,7 +1800,10 @@ function renderWorkshop() {
     state.dataset = null;
     await loadWorkshop();
     await loadDatasets();
-    renderWorkshop();
+    // Out to the front page, not back to the editor: starting over means
+    // arriving again, and the editor alone would just show the default prompt
+    // with nothing to say the rounds had gone too.
+    location.hash = "#/select";   // hashchange redraws
   });
 }
 
@@ -1915,9 +1918,16 @@ async function route() {
   // The editor is about what you're going to run, not what has been run, so it
   // sits ahead of dataset resolution — a fresh session may have no rounds yet.
   if (currentRoute() === "workshop" && state.workshop) {
-    renderHeader();
-    renderWorkshop();
-    return;
+    // Re-read every time. The prompt and fields live on the server and a run
+    // rewrites them, so the copy cached at page load is stale the moment they
+    // run anything — and the editor would reopen on the default prompt with
+    // their version apparently gone.
+    await loadWorkshop();
+    if (state.workshop) {
+      renderHeader();
+      renderWorkshop();
+      return;
+    }
   }
 
   // Resolve the current dataset:

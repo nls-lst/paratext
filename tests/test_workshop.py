@@ -142,7 +142,8 @@ def test_friendly_failure_translates_a_runaway():
 def test_friendly_failure_translates_the_token_cap():
     from paratext.review.runs import friendly_failure
 
-    msg = friendly_failure("04_x", ValueError("model hit the 1024-token output cap before finishing."))
+    exc = ValueError("model hit the 1024-token output cap before finishing.")
+    msg = friendly_failure("04_x", exc)
     assert "ran out of room" in msg
     assert "--max-tokens" not in msg  # not reachable from a workshop Space
 
