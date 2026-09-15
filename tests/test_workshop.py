@@ -120,3 +120,42 @@ def test_workshop_run_caps_tokens_well_below_the_default():
     # fail in seconds rather than spending ~85s of a workshop session.
     assert runs.WORKSHOP_MAX_TOKENS < DEFAULT_MAX_TOKENS
     assert runs.WORKSHOP_TIMEOUT_S < 600  # the SDK default read timeout
+
+
+def test_friendly_failure_translates_a_runaway():
+    from paratext.review.runs import friendly_failure
+
+    # What the attendee actually hit: the model repeated itself until the JSON
+    # was cut off. The pydantic trace names neither the cause nor the cure.
+    exc = ValueError(
+        "1 validation error for WorkshopRecord Invalid JSON: EOF while parsing "
+        "a string at line 1 column 809 [type=json_invalid, input_value='{\"author\"...']"
+    )
+    msg = friendly_failure("01_003-actors-english-adh_00110", exc)
+    assert msg.startswith("Card 01 —")
+    assert "ran out of room" in msg
+    assert "prompt" in msg
+    assert "json_invalid" not in msg
+    assert "pydantic" not in msg
+
+
+def test_friendly_failure_translates_the_token_cap():
+    from paratext.review.runs import friendly_failure
+
+    msg = friendly_failure("04_x", ValueError("model hit the 1024-token output cap before finishing."))
+    assert "ran out of room" in msg
+    assert "--max-tokens" not in msg  # not reachable from a workshop Space
+
+
+def test_friendly_failure_keeps_an_unknown_error_short():
+    from paratext.review.runs import friendly_failure
+
+    msg = friendly_failure("07_x", ValueError("something odd\nstack line\nstack line"))
+    assert msg == "Card 07 — something odd"
+
+
+def test_card_label_falls_back_to_the_id():
+    from paratext.review.runs import _card_label
+
+    assert _card_label("03_actors_0196") == "Card 03"
+    assert _card_label("advocates-index-card-55") == "advocates-index-card-55"
