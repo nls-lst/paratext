@@ -13,7 +13,7 @@ my_cards/
 
 ```python
 from paratext.projects import Project, load_prompt
-from paratext.sources import image_source   # or pdf_source
+from paratext.sources import image_source   # or pdf_source, hf_dataset_source
 
 from .schema import Record
 
@@ -25,6 +25,21 @@ PROJECT = Project(
     source=image_source(),
 )
 ```
+
+Three adapters ship with paratext:
+
+| | |
+|---|---|
+| `image_source()` | a local directory of images, one sample per file |
+| `pdf_source()` | PDFs rendered to page images |
+| `hf_dataset_source(repo="owner/name")` | an imagefolder-style dataset on the Hugging Face Hub |
+
+`hf_dataset_source` is the round trip on `paratext export`: a published eval set
+can be pulled back and re-run. Leave `repo` unset to take the id from the run's
+source instead, so `--source owner/name` works without rebuilding the project,
+and pass `token=` for a private dataset — nothing reads an ambient credential.
+It reads imagefolder layouts only; a parquet-backed dataset needs the `datasets`
+library and a column map, and would be a separate adapter.
 
 Register it so it's discovered at runtime:
 
