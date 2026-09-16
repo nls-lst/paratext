@@ -123,7 +123,10 @@ def test_workshop_defaults_survive_having_no_rounds(tmp_path):
     from paratext.review.server import _workshop_defaults
 
     d = _workshop_defaults([], {})
-    assert d["prompt"] == "" and d["fields"] == [] and d["api_key"] == "EMPTY"
+    # An unset key reads as unset, not as the "EMPTY" local-server
+    # placeholder: a deployment configuring none must look unauthenticated
+    # so the run is charged to whoever signs in.
+    assert d["prompt"] == "" and d["fields"] == [] and d["api_key"] == ""
 
 
 class _FakeHandler:

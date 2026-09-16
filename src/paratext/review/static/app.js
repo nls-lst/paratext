@@ -1743,8 +1743,35 @@ function readWorkshopForm() {
   return { prompt, fields };
 }
 
+// Said before they authorise, not after: signing in here spends their own
+// inference allowance, which is not what "sign in" usually implies. Plain
+// numbers rather than reassurance — the cost is small and checkable.
+function inferenceNoticeHtml(model, maxCards) {
+  return `
+    <div role="alert" data-variant="warning" style="max-width:44rem;">
+      <strong>Running the model uses your own Hugging Face inference.</strong>
+      <p style="margin:.5rem 0 0;">
+        Sign in and each run is billed to your account, not to whoever set this
+        up. A run reads up to ${maxCards} cards${
+          model ? ` with <code>${escapeHtml(model)}</code>` : ""
+        }, which costs a fraction of a penny; every Hugging Face account gets a
+        small monthly allowance that covers a few hundred cards. Your token
+        stays in this browser tab and is sent with each request — it is never
+        stored on the server.
+      </p>
+      <p style="margin:.5rem 0 0;">
+        Without signing in you can still read the rounds already here, and
+        review and correct them. You just can't run the model.
+      </p>
+      <div class="controls">
+        <button class="button primary small" id="ws-signin">Sign in with Hugging Face</button>
+      </div>
+    </div>`;
+}
+
 function renderWorkshop() {
   const w = state.workshop;
+  const signInNeeded = w.needs_token && !hfAuth?.token;
   document.getElementById("view").innerHTML = `
     <h2>Prompt and fields</h2>
     <p class="text-light" style="max-width:44rem;">
@@ -1772,8 +1799,10 @@ function renderWorkshop() {
         <input id="ws-cards" type="number" min="1" max="${w.max_cards ?? 8}"
                value="${w.max_cards ?? 8}">
       </label>
-      <button class="button primary" id="ws-run">Run</button>
+      <button class="button primary" id="ws-run"${signInNeeded ? " disabled" : ""}>Run</button>
     </div>
+
+    ${signInNeeded ? inferenceNoticeHtml(w.model, w.max_cards ?? 8) : ""}
 
     <div id="ws-status" class="mb-4"></div>
 
@@ -1792,6 +1821,10 @@ function renderWorkshop() {
     if (btn) btn.closest("tr").remove();
   });
   document.getElementById("ws-run").addEventListener("click", startWorkshopRun);
+  document.getElementById("ws-signin")?.addEventListener("click", async () => {
+    await hfSignIn();
+    renderWorkshop();   // redraw: the notice goes, Run comes alive
+  });
   document.getElementById("ws-reset").addEventListener("click", async () => {
     if (!confirm("Start over? Your prompt, fields and rounds are deleted.")) return;
     await fetch("api/workshop/session", { method: "DELETE" });
@@ -1822,7 +1855,12 @@ async function startWorkshopRun() {
   try {
     const res = await fetch("api/workshop/run", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        // The run is charged to whoever is signed in. Same token, same header
+        // and same per-request handling as a push — the server keeps none.
+        ...(hfAuth?.token ? { authorization: `Bearer ${hfAuth.token}` } : {}),
+      },
       body: JSON.stringify({ prompt, fields, cards }),
     });
     job = await res.json();
