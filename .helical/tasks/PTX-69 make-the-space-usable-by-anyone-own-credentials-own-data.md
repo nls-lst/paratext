@@ -39,24 +39,34 @@ assumes. Starting here.
 **Notice on sign-in:** signing in means the prompt editor spends *their*
 inference, and the login must say so plainly before they authorise.
 
-**Model: keep `Qwen/Qwen3-VL-30B-A3B-Instruct` for the Space — on latency, not
-quality.** Qwen3.6-35B-A3B is the framework's model and reads cards correctly:
-with the Space's real prompt it returned `Howe, Mark Antony De Wolfe, 1864-`,
-transcribed as printed. An earlier result suggesting it normalised names was an
-artefact of testing with a bare one-line prompt carrying no transcription rule.
+**Model: pinned to `Qwen/Qwen3-VL-30B-A3B-Instruct`, thinking off.** Decided
+2026-09-16: this is a demo Space, so the model is not a setting. It is the A3B
+(3B active) vision model at $0.000224/card and ~3s a card, and — measured — it
+genuinely honours the thinking-off hint (`reasoning_tokens=0` with the flag,
+identical without, meaning no reasoning either way).
 
-What rules it out for the Space is cost of time, not accuracy: **30.8s a card
-against ~3s**, so an eight-card run would take about four minutes with somebody
-watching. It also needs a 4096-token cap, because `enable_thinking: false` is
-**not honoured** for it on the router — at the workshop's 1024 cap it spent the
-entire budget on reasoning and returned nothing. Both models are A3B.
+**Why that hint is not portable, for whenever a model setting is wanted.**
+`chat_template_kwargs` is applied by the *inference server* rendering the chat
+template, not by the model. Locally llama.cpp renders it and honours the flag;
+the HF router serves nothing itself and fans out to third-party providers
+(featherless-ai, scaleway, deepinfra, ovhcloud, novita), each with its own API
+surface. Measured three calls each on 2026-09-16:
 
-**Blocker found while testing: the thinking-off hint is not portable.**
-`Qwen3.6-27B` returns 400 for `extra arguments: {"chat_template_kwargs":
-{"enable_thinking":false}}`. We hardcoded that in `runs.py` yesterday, so the
-moment someone points the Space at their own endpoint it can fail every card.
-Must be sent defensively — retry without it on a 400, or make it a setting —
-before BYO-endpoint ships.
+- `Qwen3.6-27B` — **400 every time** with the flag, fine without. Its provider
+  rejects unknown extra arguments outright.
+- `Qwen3.6-35B-A3B` — accepts it and **silently ignores it**:
+  `reasoning_tokens=64` with the flag and without, identical.
+
+The silent case is the dangerous one — nothing errors, you just pay for
+reasoning. The `Project.disable_thinking` docstring already warns of exactly
+this for OpenAI/Anthropic/OpenRouter. So if the endpoint ever becomes a setting,
+`runs.py` must retry without the hint on a 400, and a `reasoning_tokens` check
+is worth surfacing because "accepted and ignored" is invisible today.
+
+**Open, now that the model is pinned:** the modal may only need a token, not an
+endpoint. Worth confirming before building — the original ask said "own HF token
+or an endpoint", and pinning the model makes the endpoint field optional rather
+than wrong.
 
 **Consequence accepted:** a first-time visitor with no token cannot run
 anything. They can still review the packaged BPL rounds, which is a reasonable
