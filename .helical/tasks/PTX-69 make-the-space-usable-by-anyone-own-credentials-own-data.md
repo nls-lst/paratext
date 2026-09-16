@@ -1,9 +1,10 @@
 ---
 id: PTX-69
 title: 'Make the Space usable by anyone: own credentials, own data'
-status: todo
+status: done
 horizon: now
 flow: clear
+result: 'First slice shipped as 0.7.0. hf_dataset_source lands in core (imagefolder datasets from the Hub, no new dependency, token never recorded in inspect config). Workshop runs now spend the signed-in user: bearer token per request as publishing already did, inference-api added to the OAuth scopes, PARATEXT_API_KEY secret deleted from the Space, and a notice before consent saying runs are billed to their account. Endpoint field dropped by decision — the model is pinned to Qwen3-VL-30B-A3B, so only a token is needed and the chat_template_kwargs portability problem stays out of scope. Trap found: HARDCODED_DEFAULTS uses ''EMPTY'' as a local-server key placeholder, and being truthy it made a keyless deployment look authenticated; workshop mode now reads it as unset.'
 created: '2026-09-16'
 updated: '2026-09-16'
 ---
