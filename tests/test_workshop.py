@@ -160,3 +160,68 @@ def test_card_label_falls_back_to_the_id():
 
     assert _card_label("03_actors_0196") == "Card 03"
     assert _card_label("advocates-index-card-55") == "advocates-index-card-55"
+
+
+def test_oauth_scopes_cover_inference():
+    # Without `inference-api` the push works and every model call 401s — the
+    # failure is at run time, long after consent, so assert it here.
+    from paratext.review.hf_oauth import SCOPES
+
+    assert "inference-api" in SCOPES.split()
+    assert "write-repos" in SCOPES.split()  # still needed to publish
+
+
+def test_run_prefers_the_callers_token_over_a_configured_key():
+    # A deployment that sets no key makes signing in mandatory; a local
+    # `paratext review --workshop` with a key configured still runs.
+    import inspect
+
+    from paratext.review import server
+
+    src = inspect.getsource(server.Handler._api_workshop_run)
+    assert 'api_key = auth[7:].strip() if auth.lower().startswith("bearer ") else ""' in src
+    assert 'api_key = api_key or cfg.get("api_key") or ""' in src
+    assert "api_key=api_key" in src          # the caller's, not cfg["api_key"]
+    assert 'api_key=cfg["api_key"]' not in src
+
+
+def test_run_refuses_with_401_when_nobody_is_paying():
+    import inspect
+
+    from paratext.review import server
+
+    src = inspect.getsource(server.Handler._api_workshop_run)
+    assert "401" in src
+    assert "your own inference" in src
+
+
+def test_state_tells_the_browser_whether_sign_in_is_required():
+    import inspect
+
+    from paratext.review import server
+
+    src = inspect.getsource(server.Handler._api_workshop_state)
+    assert "needs_token" in src
+
+
+def test_the_local_server_placeholder_is_not_treated_as_a_credential(monkeypatch):
+    # "EMPTY" is what HARDCODED_DEFAULTS uses for local servers that ignore the
+    # key. Left in place it makes a public deployment look authenticated, and
+    # every run gets charged to whoever last configured a real key.
+    import argparse
+
+    from paratext import cli
+
+    args = argparse.Namespace(workshop=True, workshop_source=None)
+    monkeypatch.setattr(cli, "load_defaults", lambda _: {})
+    assert cli._workshop_endpoint(args)["api_key"] is None
+
+
+def test_a_real_configured_key_still_comes_through(monkeypatch):
+    import argparse
+
+    from paratext import cli
+
+    args = argparse.Namespace(workshop=True, workshop_source=None)
+    monkeypatch.setattr(cli, "load_defaults", lambda _: {"api_key": "a-real-key"})
+    assert cli._workshop_endpoint(args)["api_key"] == "a-real-key"

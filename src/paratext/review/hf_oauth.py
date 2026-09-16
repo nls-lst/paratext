@@ -28,7 +28,10 @@ TOKEN = "https://huggingface.co/oauth/token"
 WHOAMI = "https://huggingface.co/api/whoami-v2"
 # Least privilege that still covers *create* a new dataset repo and *push* to an
 # existing one, personal or org (the user picks which orgs to grant at consent).
-SCOPES = "openid profile write-repos contribute-repos"
+# `inference-api` is what lets the same token call the HF router, so a workshop
+# run spends the signed-in user's own inference rather than a key baked into the
+# deployment. Without it the push works and every model call 401s.
+SCOPES = "openid profile write-repos contribute-repos inference-api"
 CALLBACK_PATH = "/oauth/callback/huggingface"
 
 

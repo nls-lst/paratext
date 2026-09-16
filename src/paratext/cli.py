@@ -436,9 +436,15 @@ def _workshop_endpoint(args: argparse.Namespace) -> dict:
     if note:
         print(note)
     source = args.workshop_source or merged.get("source")
+    # "EMPTY" is the placeholder for local servers that ignore the key, not a
+    # credential. In workshop mode it has to read as *no key*, or a public
+    # deployment that configures none looks authenticated and every run is
+    # charged to whoever last set one. Signing in then supplies the real token.
+    # A local no-auth server opts out by setting any other value.
+    key = merged.get("api_key")
     return {
         "base_url": base_url,
-        "api_key": merged.get("api_key"),
+        "api_key": None if key == HARDCODED_DEFAULTS["api_key"] else key,
         "model": merged.get("model"),
         "source": str(source) if source else None,
     }

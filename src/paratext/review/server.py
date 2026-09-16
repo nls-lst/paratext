@@ -102,6 +102,10 @@ class Handler(BaseHTTPRequestHandler):
             "runs_used": self.runs.spent(session.id),
             "max_runs": self.runs.max_runs,
             "max_cards": MAX_CARDS,
+            # No key configured means runs are paid for by whoever is signed in,
+            # so the editor has to say that before they authorise anything.
+            "needs_token": not type(self).workshop_defaults.get("api_key"),
+            "model": type(self).workshop_defaults.get("model", ""),
         })
 
     def _api_workshop_save(self):
@@ -136,7 +140,20 @@ class Handler(BaseHTTPRequestHandler):
         if not cfg.get("source") or not Path(cfg["source"]).is_dir():
             return self._json({"error": "this server has no source images configured"}, 400)
 
-        session.write_state({"prompt": prompt, "fields": fields})
+        # The run spends whoever is signed in, not the deployment. Their token
+        # arrives per request from the browser, exactly as it does for a push,
+        # and is never written down. A configured key is the fallback so a local
+        # `paratext review --workshop` still runs without signing in; a public
+        # deployment simply sets none, and then signing in is required.
+        auth = self.headers.get("authorization") or ""
+        api_key = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        api_key = api_key or cfg.get("api_key") or ""
+        if not api_key:
+            return self._json(
+                {"error": "sign in with Hugging Face to run the model — "
+                          "the run uses your own inference."},
+                401,
+            )
         name = cfg.get("project", "workshop")
         proj = workshop_project(name, prompt, fields)
         # A new round per prompt: the round number is just how many the attendee
@@ -152,7 +169,7 @@ class Handler(BaseHTTPRequestHandler):
                     j, proj=proj, source=Path(cfg["source"]),
                     output=session.dir / "output" / f"{name}-r{n}.jsonl",
                     review_out=review_out,
-                    base_url=cfg["base_url"], api_key=cfg["api_key"],
+                    base_url=cfg["base_url"], api_key=api_key,
                     model=cfg["model"], cards=cards,
                 ),
             )
@@ -829,7 +846,11 @@ def _workshop_defaults(datasets: list[dict], endpoint: dict) -> dict:
         "project": project,
         "source": endpoint.get("source"),
         "base_url": endpoint.get("base_url"),
-        "api_key": endpoint.get("api_key") or "EMPTY",
+        # No "EMPTY" placeholder here: an unset key has to read as unset, or a
+        # deployment that configures none looks like it has one and runs are
+        # charged to nobody. A local server that wants no auth sets the key to
+        # anything (PARATEXT_API_KEY=EMPTY) and says so deliberately.
+        "api_key": endpoint.get("api_key") or "",
         "model": endpoint.get("model"),
     }
 
