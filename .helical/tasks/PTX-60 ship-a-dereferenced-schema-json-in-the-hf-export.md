@@ -4,8 +4,9 @@ title: Ship a dereferenced schema.json in the HF export
 status: todo
 horizon: future
 flow: clear
+outcome: R-4
 created: '2026-09-09'
-updated: '2026-09-09'
+updated: '2026-09-16'
 ---
 
 Consumers must resolve Pydantic's $defs/$ref themselves; do it once here

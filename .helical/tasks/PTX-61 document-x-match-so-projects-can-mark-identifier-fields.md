@@ -4,8 +4,9 @@ title: Document x-match so projects can mark identifier fields
 status: todo
 horizon: future
 flow: clear
+outcome: R-4
 created: '2026-09-09'
-updated: '2026-09-09'
+updated: '2026-09-16'
 ---
 
 The annotation already works via json_schema_extra but nothing says so
