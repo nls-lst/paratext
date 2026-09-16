@@ -1746,22 +1746,20 @@ function readWorkshopForm() {
 // Said before they authorise, not after: signing in here spends their own
 // inference allowance, which is not what "sign in" usually implies. Plain
 // numbers rather than reassurance — the cost is small and checkable.
-function inferenceNoticeHtml(model, maxCards) {
+function inferenceNoticeHtml(model) {
   return `
     <div role="alert" data-variant="warning" style="max-width:44rem;">
       <strong>Running the model uses your own Hugging Face inference.</strong>
       <p style="margin:.5rem 0 0;">
-        Sign in and each run is billed to your account, not to whoever set this
-        up. A run reads up to ${maxCards} cards${
-          model ? ` with <code>${escapeHtml(model)}</code>` : ""
-        }, which costs a fraction of a penny; every Hugging Face account gets a
-        small monthly allowance that covers a few hundred cards. Your token
-        stays in this browser tab and is sent with each request — it is never
-        stored on the server.
+        After sign-in each run is billed to your account. By default the space
+        uses ${
+          model ? `<code>${escapeHtml(model)}</code>` : "a small vision model"
+        }, which costs a fraction of a penny. Your token stays in this browser
+        tab and is sent with each request — it is never stored on the server.
       </p>
       <p style="margin:.5rem 0 0;">
         Without signing in you can still read the rounds already here, and
-        review and correct them. You just can't run the model.
+        review and correct them.
       </p>
       <div class="controls">
         <button class="button primary small" id="ws-signin">Sign in with Hugging Face</button>
@@ -1802,7 +1800,7 @@ function renderWorkshop() {
       <button class="button primary" id="ws-run"${signInNeeded ? " disabled" : ""}>Run</button>
     </div>
 
-    ${signInNeeded ? inferenceNoticeHtml(w.model, w.max_cards ?? 8) : ""}
+    ${signInNeeded ? inferenceNoticeHtml(w.model) : ""}
 
     <div id="ws-status" class="mb-4"></div>
 
