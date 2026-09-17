@@ -4,6 +4,7 @@ title: Give FAST subject headings the right MARC indicators
 status: todo
 horizon: next
 flow: clear
+outcome: R-1
 priority: med
 created: '2026-09-17'
 updated: '2026-09-17'
