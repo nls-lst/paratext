@@ -4,9 +4,10 @@ title: Let a project add its own tags to the HF export
 status: done
 horizon: next
 flow: clear
+outcome: R-8
 result: 'Added a glam-eval kind tag alongside the paratext provenance tag, plus --tag / tags config. merge_tags() de-duplicates built-ins + project + publisher tags in order; wired through the CLI and the review UI''s push path. Docs in export.md and hf-export-spec.md; 3 new tests, 310 pass. Existing published datasets keep their old tags until re-exported.'
 created: '2026-09-10'
-updated: '2026-09-10'
+updated: '2026-09-17'
 ---
 
 The dataset card front matter in `hf_export.py:_dataset_card` hardcodes
