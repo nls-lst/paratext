@@ -280,41 +280,79 @@ suppliers, unannounced plans or licensing negotiations belongs in the
 ## Tasks
 
 This project's tasks live in `.helical/tasks/` as markdown, managed with the
-`helical` command. Read them before starting, and record what you find.
+`helical` command (`hc` for short). Read them before starting, and record what
+you find. Do not edit the files by hand: the CLI keeps ids, filenames and dates
+consistent, and `helical audit` reports it when something has drifted.
 
 ```bash
-helical ls                           # open work in the project you are in
-helical show <ID>                    # one task in full
-helical set <ID> --status doing      # todo | doing | done
-helical set <ID> --horizon next      # now | next | future
-helical set <ID> --flow blocked --blocker "why"
-helical new "Title" --horizon next --outcome R-2
+hc ls                              # open work here — done is hidden
+hc lsa                             # the same, including what is done
+hc board                           # todo / doing / done in columns
+hc show <ID>                       # one task in full
+hc new "Title" --horizon now --outcome R-2
+hc set <ID> --status doing
+hc set <ID> --note "what you learned"
+hc set <ID> --done "what happened"  # closes it
 ```
 
 `-p <project>` targets another project; without it, helical uses the one whose
-directory you are standing in. `--json` works on every command.
+directory you are standing in. `--json` works on every command, and an option
+value may begin with a dash.
 
-A task carries both a **status** (how far along) and a **horizon** (when it
-matters). The routemap across all projects is built from horizons, so set one
-deliberately rather than taking the default.
+### Status, horizon, flow
+
+A task carries a **status** (how far along: todo, doing, done) and a **horizon**
+(when it matters: now, next, future). The routemap is built from horizons, so set
+one deliberately rather than taking the default.
 
 **Flow** says who can unstick a task: `blocked` sits with someone else and needs
 chasing, `undecided` sits with us and needs a call. Neither is accepted without
-`--blocker` explaining it.
+`--blocker` explaining it. Closing a task settles its flow automatically.
 
-A task can wait on other tasks with `--needs <ID>`; it reads as blocked until they
-close, and clears itself when they do. `helical ls --ready` lists work with
+Use `--needs <ID>` when a task waits on other work: it reads as blocked until
+those close, and clears itself when they do. `hc ls --ready` lists work with
 nothing in its way — start there.
 
-Closing a task requires `--done "what happened"` — one line, which is what the
-project summary shows instead of the title.
+### Attach new work to the routemap
 
-If the work serves a routemap outcome, attach it: `--outcome R-2`. Anything open
-and unattached shows up under "Not on the routemap", which is where it gets
-noticed.
+The routemap is a handful of authored outcomes with ids like `R-2`, each a goal
+in plain words. Run `hc routemap` to see them, then attach the task you are
+making to the one it serves:
+
+```bash
+hc new "Title" --outcome R-2
+hc set <ID> --outcome R-2          # or --outcome none to detach
+```
+
+**Attach a task unless you genuinely cannot.** Nothing is enforced and nothing
+will stop you, but an unattached task shows under "Not on the routemap", which is
+where work goes to be forgotten. If no outcome fits, that is worth saying out
+loud rather than working around: either the work is business as usual (there is
+usually an outcome for that — check `hc routemap`), or it is a goal nobody has
+written down yet. Say which; do not invent an outcome to file it under, and do
+not attach it to something adjacent because it was the closest match.
+
+An outcome with a `completed` date has been reached and has left the lanes. Do
+not attach new work to one of those.
+
+### Closing a task
+
+Closing requires `--done "what happened"`. That line is a *predicate* — it is
+read as "this task — what happened to it" — so write what changed, not a restated
+title:
+
+```bash
+hc set PTX-4 --done "Defaults moved into config; the hardcoded paths are gone."
+```
+
+It is what the project summary shows, and a fortnight later it is the only record
+of why the work mattered. Descriptions, notes and results render as markdown.
+
+### Conventions
 
 There are no labels. A task's place in the world is its project, its horizon and
-the outcome it names.
+the outcome it names. Keep one task to one piece of work; if you find yourself
+writing "and" in a title, make two.
 
 Boards: <https://helical.ai.nls.uk> · read-only <https://projects.ai.nls.uk>
 <!-- HELICAL END -->
