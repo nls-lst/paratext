@@ -283,6 +283,7 @@ This project's tasks live in `.helical/tasks/` as markdown, managed with the
 `helical` command (`hc` for short). Read them before starting, and record what
 you find. Do not edit the files by hand: the CLI keeps ids, filenames and dates
 consistent, and `helical audit` reports it when something has drifted.
+`hc <command> --help` lists what each command takes.
 
 ```bash
 hc ls                              # open work here — done is hidden
@@ -292,7 +293,10 @@ hc show <ID>                       # one task in full
 hc new "Title" --horizon now --outcome R-2
 hc set <ID> --status doing
 hc set <ID> --note "what you learned"
+hc set <ID> --accept "criterion"   # add an acceptance item
+hc set <ID> --check 1              # tick it (numbered as hc show lists them)
 hc set <ID> --done "what happened"  # closes it
+hc new "Title" --done "what happened"  # record work already finished
 ```
 
 `-p <project>` targets another project; without it, helical uses the one whose
