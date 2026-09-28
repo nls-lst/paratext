@@ -48,8 +48,8 @@ included) and optionally `start` and `end` in seconds, `poster` and `label`.
 Each clip is sampled to eight evenly spaced frames by default; pass
 `frames=evenly_spaced(n)` (from `paratext.video`) or your own
 `frames(start, end) -> [seconds]` to change that. Each frame carries its time
-on a band below the picture, counted from the start of the file, so ask for
-timecodes in the prompt on that basis. The review UI plays the clip; see
+on a band below the picture, counted from the start of the clip, so ask for
+timecodes in the prompt on that basis; in review, clicking one seeks to it. The review UI plays the clip; see
 [Choosing a review view](review-views.md#video).
 
 Register it so it's discovered at runtime:

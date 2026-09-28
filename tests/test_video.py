@@ -62,6 +62,8 @@ def test_manifest_clips_one_file_into_several(tmp_path):
     p1, p2 = video_source(frames=evenly_spaced(2)).iter_samples(manifest, None)
     assert p1.metadata["frame_times"] == [1.0, 3.0]
     assert p1.metadata["media"]["label"] == "Programme"
+    assert p2.images[0].size[1] == 120 + 20
+    assert p2.metadata["frame_times"] == [5.5, 8.5]  # stamped 00:01 and 00:04
     assert p2.metadata["media"] == {"src": str((tmp_path / "tape.mp4").resolve()),
                                     "start": 4.0, "end": 10.0}
 
