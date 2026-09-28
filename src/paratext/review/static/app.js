@@ -344,9 +344,190 @@ function renderPicker() {
 // variant "thumbs" → small inline gallery (stacked layout); "media" → large
 // images sized to their column (split layout).
 function imagesHtml(s, variant) {
+  if (s.media?.src) return mediaHtml(s.media);
   return `<div class="${variant}">${s.images
     .map((p) => `<a href="${p}" target="_blank"><img src="${p}" alt="page" /></a>`)
     .join("")}</div>`;
+}
+
+// A sample with `media` (a video, optionally an HLS stream clipped to
+// start/end seconds) shows a player instead of images. `media.tracks` adds one
+// timeline strip per source: [{name, approx?, items: [{start, end, text}]}],
+// times in seconds from the start of the file.
+function mediaHtml(m) {
+  const poster = m.poster ? ` poster="${escapeHtml(m.poster)}"` : "";
+  if (m.end == null)
+    return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video></div>`;
+  const tracks = m.tracks?.length ? m.tracks : [{ name: "", items: [] }];
+  const rows = tracks
+    .map(
+      (t, i) => `<div class="media-track">
+          <span class="media-track-name">${escapeHtml(t.name)}${t.approx ? " ≈" : ""}</span>
+          <div class="media-range" data-track="${i}">
+            <div class="media-range-prog"></div><div class="media-range-head"></div>
+          </div>
+        </div>`,
+    )
+    .join("");
+  const approx = tracks.some((t) => t.approx)
+    ? " · ≈ shotlist times count from the start of the film, so may be offset"
+    : "";
+  return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video>
+    <div class="media-timeline" id="media-timeline">${rows}</div>
+    <p class="media-range-label"><span id="media-range-label"></span>${approx}</p></div>`;
+}
+
+function clock(t) {
+  t = Math.max(0, Math.round(t));
+  const h = Math.floor(t / 3600);
+  const mm = String(Math.floor((t % 3600) / 60)).padStart(2, "0");
+  const ss = String(t % 60).padStart(2, "0");
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+// Whole-tape strips: the clip's start–end highlighted, each track's segments as
+// blocks, a playhead. Video handlers are on* properties so a carried-over video
+// isn't given a second set of listeners on every re-render. The hover label is
+// our own element, not Oat's tooltip: shotlist text is long and needs wrapping
+// and clamping to the timeline's edges.
+function bindTimeline(video, s) {
+  const timeline = document.getElementById("media-timeline");
+  const label = document.getElementById("media-range-label");
+  if (!timeline) return;
+  const { start = 0, end } = s.media;
+  const tracks = s.media.tracks?.length ? s.media.tracks : [{ items: [] }];
+  const rows = [...timeline.querySelectorAll(".media-range")];
+  const tip = document.createElement("div");
+  tip.className = "media-tip";
+  tip.style.display = "none";
+  timeline.append(tip);
+
+  const draw = () => {
+    const dur = video.duration;
+    if (!timeline.isConnected || !Number.isFinite(dur) || dur <= 0) return;
+    const pct = (t) => `${Math.min(100, (t / dur) * 100)}%`;
+    rows.forEach((row, i) => {
+      const prog = row.querySelector(".media-range-prog");
+      prog.style.left = pct(start);
+      prog.style.width = `calc(${pct(end - start)} + 2px)`;
+      row.querySelector(".media-range-head").style.left = pct(video.currentTime);
+      if (row.dataset.built) return;
+      row.dataset.built = "1";
+      tracks[i].items.forEach((it) => {
+        const seg = document.createElement("div");
+        seg.className = "media-seg";
+        seg.style.left = pct(it.start);
+        seg.style.width = pct((it.end ?? end) - it.start);
+        row.append(seg);
+      });
+    });
+    label.textContent =
+      `Programme ${clock(start)}–${clock(end)} (${clock(end - start)}) of ${clock(dur)} · now ${clock(video.currentTime)}`;
+  };
+
+  const itemAt = (row, e) => {
+    const r = row.getBoundingClientRect();
+    const t = ((e.clientX - r.left) / r.width) * video.duration;
+    const items = tracks[+row.dataset.track].items;
+    const i = items.findLastIndex((it) => it.start <= t && t < (it.end ?? end));
+    return { t, i, item: items[i] };
+  };
+
+  rows.forEach((row) => {
+    const segs = () => row.querySelectorAll(".media-seg");
+    row.onmousemove = (e) => {
+      if (!Number.isFinite(video.duration)) return;
+      const { t, i, item } = itemAt(row, e);
+      segs().forEach((el, j) => el.classList.toggle("active", j === i));
+      const text = item
+        ? `${clock(item.start)}–${clock(item.end ?? end)} · ${item.text.length > 320 ? item.text.slice(0, 317) + "…" : item.text}`
+        : clock(t);
+      tip.textContent = text;
+      tip.style.display = "block";
+      const box = timeline.getBoundingClientRect();
+      const x = e.clientX - box.left - tip.offsetWidth / 2;
+      tip.style.left = `${Math.max(0, Math.min(x, box.width - tip.offsetWidth))}px`;
+      tip.style.top = `${row.offsetTop - tip.offsetHeight - 6}px`;
+    };
+    row.onmouseleave = () => {
+      tip.style.display = "none";
+      segs().forEach((el) => el.classList.remove("active"));
+    };
+    // A click on a segment plays it from its start; elsewhere, seek to the spot.
+    row.onclick = (e) => {
+      if (!Number.isFinite(video.duration)) return;
+      const { t, item } = itemAt(row, e);
+      video.currentTime = item ? item.start : t;
+    };
+  });
+
+  video.ontimeupdate = draw;
+  video.onloadedmetadata = draw;
+  video.ondurationchange = draw;
+  draw();
+}
+
+let hlsPlayer = null;
+
+// render() rebuilds the view on every verdict click; carry a playing video over
+// rather than reloading it.
+function keepMedia(s, previous) {
+  const fresh = document.getElementById("media");
+  if (!fresh || !s.media?.src) return;
+  if (previous && previous.dataset.sid === String(s.id)) {
+    fresh.replaceWith(previous);
+  } else {
+    if (previous) {
+      previous.removeAttribute("src");
+      previous.load();
+    }
+    fresh.dataset.sid = String(s.id);
+    attachMedia(s.media, fresh);
+  }
+  const video = document.getElementById("media");
+  bindSeek(video, s.media.start ?? 0);
+  bindTimeline(video, s);
+}
+
+async function attachMedia(m, video) {
+  hlsPlayer?.destroy();
+  hlsPlayer = null;
+  const start = m.start ?? 0;
+  const isHls = m.type === "hls" || /\.m3u8(\?|$)/.test(m.src);
+  if (isHls && !video.canPlayType("application/vnd.apple.mpegurl")) {
+    const { default: Hls } = await import("https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.mjs");
+    hlsPlayer = new Hls({ startPosition: start });
+    hlsPlayer.loadSource(m.src);
+    hlsPlayer.attachMedia(video);
+  } else {
+    video.src = m.src;
+    video.addEventListener("loadedmetadata", () => (video.currentTime = start), { once: true });
+  }
+  if (m.end) {
+    video.addEventListener("timeupdate", () => {
+      if (video.currentTime >= m.end && !video.dataset.pastEnd) {
+        video.dataset.pastEnd = "1";
+        video.pause();
+      }
+    });
+    video.addEventListener("seeked", () => {
+      video.dataset.pastEnd = video.currentTime >= m.end ? "1" : "";
+    });
+  }
+}
+
+// Timecodes in entries tables seek, relative to the clip start.
+function bindSeek(video, start) {
+  document.querySelectorAll(".entry-table td").forEach((td) => {
+    const tc = td.textContent.trim().match(/^(?:(\d+):)?(\d{1,2}):(\d{2})$/);
+    if (!tc) return;
+    td.classList.add("seek");
+    td.title = "Play from here";
+    td.addEventListener("click", () => {
+      video.currentTime = start + (+tc[1] || 0) * 3600 + +tc[2] * 60 + +tc[3];
+      video.play();
+    });
+  });
 }
 
 function render() {
@@ -406,11 +587,13 @@ function render() {
           view.panels.length > 1 ? `<div class="panes">${panelsHtml}</div>` : panelsHtml
         }${notesForm(a)}${nav}`;
 
+  const previousMedia = document.getElementById("media");
   document.getElementById("view").innerHTML = `
     <section>${heading}</section>
     ${readOnlyBanner}
     ${body}
   `;
+  keepMedia(s, previousMedia);
 
   document.querySelectorAll("[data-scope]").forEach((btn) => {
     if (state.readOnly) {
