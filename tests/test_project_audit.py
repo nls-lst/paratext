@@ -12,6 +12,7 @@ from paratext.projects import (
     View,
     _field_spec,
     audit_project,
+    build_view,
     get_project,
     project_names,
 )
@@ -56,7 +57,6 @@ def _project(view, prompt="Return the heading and text fields."):
 
 def _view(fields):
     return View(
-        layout="split",
         title="T",
         id_label="ID",
         panels=[Panel(source="model_output", title="M", fields=fields)],
@@ -75,3 +75,19 @@ def test_audit_flags_model_field_missing_from_prompt():
 
 def test_audit_passes_a_consistent_project():
     assert audit_project(_project(_view(["heading", "text"]))) == []
+
+
+def test_layout_follows_panel_count_unless_set():
+    one = _view(["heading"])
+    two = View(
+        title="T",
+        id_label="ID",
+        panels=[
+            Panel(source="ground_truth", title="G", fields=["heading"]),
+            Panel(source="model_output", title="M", fields=["heading"]),
+        ],
+    )
+    assert build_view(_project(one))["layout"] == "split"
+    assert build_view(_project(two))["layout"] == "stacked"
+    one.layout = "stacked"
+    assert build_view(_project(one))["layout"] == "stacked"

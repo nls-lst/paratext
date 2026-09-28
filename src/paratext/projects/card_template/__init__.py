@@ -41,7 +41,6 @@ PROJECT = Project(
     curate=_curate,
     # Show just the transcription fields; image_type is internal triage.
     view=View(
-        layout="split",
         title="Index card",
         id_label="Image ID",
         panels=[Panel(source="model_output", title="Model output", fields=["heading", "text"])],
