@@ -52,7 +52,29 @@ another institution's metadata, give each panel its own list.
 
 ### Video
 
-Video samples are in development on the `video-review` branch.
+A sample with `media` shows a player in place of its images, in either layout.
+A source puts it in the sample's metadata and packaging carries it through,
+checking its shape:
+
+```python
+metadata={"media": {
+    "src": "https://example.org/reel-12.m3u8",  # HLS or a plain video file
+    "start": 120, "end": 279,                    # the clip, in seconds; optional
+    "poster": "https://example.org/reel-12.jpg",
+    "label": "Programme",                        # names the clip on the timeline
+    "tracks": [
+        {"name": "Model", "items": [{"start": 120, "end": 150, "text": "Opening titles"}]},
+        {"name": "Catalogue", "note": "shotlist times are approximate", "items": [...]},
+    ],
+}}
+```
+
+Only `src` is required. Times count from the start of the file, so one long
+tape can yield several clips. Each track draws as a strip under the player:
+hovering a segment shows its text, and clicking one plays from there. A track
+with a `note` is marked ≈, and the note is shown beneath. In the fields,
+timecodes such as `01:23` in a table cell seek the player, relative to the clip
+start.
 
 ## Smaller options
 
