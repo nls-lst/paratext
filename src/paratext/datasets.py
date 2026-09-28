@@ -96,12 +96,15 @@ def resolve_dataset(data_dir: Path, name: str | None) -> dict:
 
 def load_samples(dataset: dict) -> list[dict]:
     records = json.loads((dataset["dir"] / "samples.json").read_text())
+    def served(p: str) -> str:
+        if p.startswith(("/", "http://", "https://")):
+            return p
+        return f"images/{dataset['name']}/{re.sub('^images/', '', p)}"
+
     for s in records:
-        imgs = s.get("images") or []
-        s["images"] = [
-            p if p.startswith("/") else f"images/{dataset['name']}/{re.sub('^images/', '', p)}"
-            for p in imgs
-        ]
+        s["images"] = [served(p) for p in s.get("images") or []]
+        if (s.get("media") or {}).get("src"):
+            s["media"]["src"] = served(s["media"]["src"])
     return records
 
 

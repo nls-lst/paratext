@@ -55,7 +55,9 @@ dataset) → `review` (web UI) → `export` (publish). `run` does extract+packag
 | `cli.py` | Argparse wiring, round resolution, command bodies |
 | `config.py` | `paratext.toml` + `PARATEXT_*` resolution |
 | `projects/` | The `Project` plug-in contract, `View`, `audit_project` |
-| `sources.py` | Input adapters (`image_source`, `pdf_source`) |
+| `sources.py` | Input adapters (`image_source`, `pdf_source`, `hf_dataset_source`, `video_source`) |
+| `video.py` | ffmpeg frame sampling for `video_source` |
+| `media.py` | The `media` a sample carries for the review player |
 | `extract.py` / `runner.py` | Sample loop; model call, retries, image encoding |
 | `packaging.py` | JSONL → `samples.json` + `images/` + `view.json` |
 | `store.py` | SQLite annotations + gold labels — **not** web code |
@@ -141,7 +143,7 @@ model and shouldn't restate the prompt in a second voice.
 
 ## Recipe: a new source adapter
 
-For an input shape neither `image_source` nor `pdf_source` covers — a IIIF
+For an input shape none of the built-in adapters covers — a IIIF
 manifest, a METS/ALTO tree, a CSV of URLs, a database query.
 
 A `Source` is two functions that must agree on the metadata they pass between

@@ -69,6 +69,23 @@ def _default_build_record(rec: dict, images_rel: list[str]) -> dict:
     return r
 
 
+def _copy_local_media(r: dict, out: Path) -> None:
+    """A video on local disk goes into the dataset, so the review server can
+    serve it; hard-linked when it can be, as tapes are large."""
+    src = r["media"]["src"]
+    if src.startswith(("http://", "https://")) or not Path(src).is_file():
+        return
+    rel = f"images/{r['id']}/video{Path(src).suffix.lower()}"
+    dest = out / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.unlink(missing_ok=True)
+    try:
+        dest.hardlink_to(src)
+    except OSError:
+        shutil.copy2(src, dest)
+    r["media"]["src"] = rel
+
+
 def package(
     jsonl: Path,
     out: Path,
@@ -118,6 +135,7 @@ def package(
                 r["media"] = normalise_media(r["media"])
             except MediaError as e:
                 raise MediaError(f"sample {r['id']}: {e}") from None
+            _copy_local_media(r, out)
         if ground_truth is not None:
             gt = ground_truth(rec)
             if gt:

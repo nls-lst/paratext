@@ -17,6 +17,7 @@ import csv
 import io
 import json
 import logging
+import re
 import webbrowser
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -59,6 +60,7 @@ def is_running(port: int = DEFAULT_PORT) -> bool:
 
 
 # ── HTTP handler ────────────────────────────────────────────────────────────
+_RANGE_CHUNK = 8 * 1024 * 1024
 _MIME = {
     ".html": "text/html",
     ".js": "text/javascript",
@@ -68,6 +70,10 @@ _MIME = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".svg": "image/svg+xml",
+    ".mp4": "video/mp4",
+    ".m4v": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
 }
 
 
@@ -797,11 +803,25 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "not found"}, 404)
         if not target.is_file():
             return self._json({"error": "not found"}, 404)
-        self._bytes(
-            target.read_bytes(),
-            _MIME.get(target.suffix.lower(), "application/octet-stream"),
-            headers={"cache-control": "public, max-age=3600"},
-        )
+        mime = _MIME.get(target.suffix.lower(), "application/octet-stream")
+        headers = {"cache-control": "public, max-age=3600", "accept-ranges": "bytes"}
+        size = target.stat().st_size
+        # A video element seeks with Range requests; without them it can't.
+        m = re.fullmatch(r"bytes=(\d*)-(\d*)", self.headers.get("range") or "")
+        if not m or not (m[1] or m[2]):
+            return self._bytes(target.read_bytes(), mime, headers=headers)
+        if m[1]:
+            first = int(m[1])
+            last = min(int(m[2]) if m[2] else first + _RANGE_CHUNK - 1, size - 1)
+        else:
+            first, last = max(size - int(m[2]), 0), size - 1
+        if first > last or first >= size:
+            return self._bytes(b"", mime, 416, {"content-range": f"bytes */{size}"})
+        with target.open("rb") as f:
+            f.seek(first)
+            body = f.read(last - first + 1)
+        headers["content-range"] = f"bytes {first}-{last}/{size}"
+        self._bytes(body, mime, 206, headers)
 
     def _serve_static(self, path):
         rel = "index.html" if path in ("/", "") else path.lstrip("/")

@@ -53,8 +53,9 @@ another institution's metadata, give each panel its own list.
 ### Video
 
 A sample with `media` shows a player in place of its images, in either layout.
-A source puts it in the sample's metadata and packaging carries it through,
-checking its shape:
+`video_source` sets it for you. Any other source can put it in the sample's
+metadata; packaging checks its shape, and copies a local video into the
+dataset so the review server can play it:
 
 ```python
 metadata={"media": {

@@ -8,7 +8,8 @@ A `Source` bundles the two halves that must agree on a metadata shape:
 
 Pass one to ``Project(source=…)`` and the framework wires both. Two are built
 in: ``image_source`` (a flat directory of images, with optional verso filter and
-card crop) and ``pdf_source`` (PDFs rendered to page images).
+card crop), ``pdf_source`` (PDFs rendered to page images), ``hf_dataset_source``
+and ``video_source`` (videos sampled to frames).
 """
 
 from __future__ import annotations
@@ -17,12 +18,15 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import TYPE_CHECKING, Callable, Iterator
 
 from PIL import Image
 
 from .packaging import default_materialise
 from .projects import Sample
+
+if TYPE_CHECKING:
+    from .video import FrameTimes
 
 logger = logging.getLogger(__name__)
 
@@ -327,5 +331,130 @@ def hf_dataset_source(
             "revision": revision,
             "exts": list(exts),
             "token": bool(token),   # never the value
+        },
+    )
+
+
+# ── Video ───────────────────────────────────────────────────────────────────
+VIDEO_EXTS = (".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".mpg", ".mpeg", ".ts")
+
+
+def _is_url(src: str) -> bool:
+    return src.startswith(("http://", "https://"))
+
+
+def _read_manifest(path: Path) -> list[dict]:
+    import csv
+    import json
+
+    if path.suffix.lower() == ".csv":
+        with path.open(newline="") as f:
+            rows = [{k: v for k, v in r.items() if v not in (None, "")} for r in csv.DictReader(f)]
+    else:
+        rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    clips = []
+    for i, r in enumerate(rows):
+        if not r.get("id") or not r.get("src"):
+            raise ValueError(f"{path.name} row {i + 1}: needs an id and a src")
+        src = str(r["src"])
+        if not _is_url(src):
+            src = str((path.parent / src).resolve())
+        clip = {"id": str(r["id"]), "src": src}
+        for k in ("start", "end"):
+            if k in r:
+                clip[k] = float(r[k])
+        for k in ("poster", "label"):
+            if k in r:
+                clip[k] = r[k]
+        clips.append(clip)
+    return clips
+
+
+def video_source(
+    *,
+    frames: "FrameTimes | None" = None,
+    timestamps: bool = True,
+    exts: tuple[str, ...] = VIDEO_EXTS,
+) -> Source:
+    """Videos, one Sample per clip, each sampled to a handful of frames.
+
+    The source is a directory of video files (recursive; id = filename stem) or
+    a manifest, ``.jsonl`` or ``.csv``, with one clip per row: ``id`` and ``src``
+    (a path relative to the manifest, or a URL, HLS included), optionally
+    ``start`` and ``end`` in seconds, ``poster`` and ``label``. A manifest lets
+    one long tape yield several clips.
+
+    ``frames(start, end) -> times`` picks the frames; the default is eight,
+    evenly spaced. ``timestamps`` prints each frame's time below it, so the
+    model can place what it sees. Needs ffmpeg on PATH.
+    """
+    from .video import evenly_spaced, grab_frame, probe_duration, stamp
+
+    pick = frames or evenly_spaced(8)
+
+    def _frames(src: str, times: list[float]) -> list[Image.Image]:
+        imgs = [grab_frame(src, t) for t in times]
+        return [stamp(im, t) for im, t in zip(imgs, times)] if timestamps else imgs
+
+    def _clips(source: Path) -> list[dict]:
+        if source.is_file():
+            return _read_manifest(source)
+        if not source.is_dir():
+            raise FileNotFoundError(f"video source not found: {source}")
+        seen: dict[str, Path] = {}
+        for p in sorted(source.rglob("*")):
+            if p.suffix.lower() in exts:
+                seen.setdefault(p.stem, p)
+        return [{"id": k, "src": str(p.resolve())} for k, p in sorted(seen.items())]
+
+    def _iter(source: Path, limit: int | None) -> Iterator[Sample]:
+        clips = _clips(source)
+        if limit is not None:
+            clips = clips[:limit]
+        for clip in clips:
+            try:
+                start = clip.get("start", 0.0)
+                end = clip.get("end") or probe_duration(clip["src"])
+                times = pick(start, end)
+                images = _frames(clip["src"], times)
+            except Exception as e:
+                logger.warning("frame sampling failed for %s: %s", clip["id"], e)
+                continue
+            media = {"src": clip["src"], "start": start, "end": end}
+            media.update({k: clip[k] for k in ("poster", "label") if k in clip})
+            yield Sample(
+                id=clip["id"],
+                images=images,
+                metadata={"media": media, "frame_times": times},
+            )
+
+    def _materialise(rec: dict, out: Path, max_size: int) -> list[str]:
+        meta = rec.get("metadata") or {}
+        src, times = (meta.get("media") or {}).get("src"), meta.get("frame_times") or []
+        if not src:
+            return []
+        try:
+            images = _frames(src, times)
+        except Exception as e:
+            logger.warning("frames unavailable for %s: %s", rec["id"], e)
+            return []
+        rels: list[str] = []
+        for k, img in enumerate(images):
+            rel = f"images/{rec['id']}/frame_{k}.jpg"
+            dest = out / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+            img.save(dest, format="JPEG", quality=85)
+            rels.append(rel)
+        return rels
+
+    return Source(
+        iter_samples=_iter,
+        materialise=_materialise,
+        config={
+            "kind": "video",
+            "frames": getattr(pick, "__name__", str(pick)),
+            "timestamps": timestamps,
+            "exts": list(exts),
         },
     )
