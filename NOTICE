@@ -5,3 +5,6 @@ This product includes software developed at the
 National Library of Scotland (https://www.nls.uk/).
 
 Licensed under the Apache License, Version 2.0. See LICENSE for the full text.
+
+The review UI bundles hls.js 1.7.3 (src/paratext/review/static/vendor/),
+Copyright (c) 2017 Dailymotion, licensed under the Apache License, Version 2.0.

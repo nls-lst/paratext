@@ -62,6 +62,7 @@ def is_running(port: int = DEFAULT_PORT) -> bool:
 _MIME = {
     ".html": "text/html",
     ".js": "text/javascript",
+    ".mjs": "text/javascript",
     ".css": "text/css",
     ".png": "image/png",
     ".jpg": "image/jpeg",

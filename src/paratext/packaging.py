@@ -25,6 +25,7 @@ from pathlib import Path
 from PIL import Image
 
 from .io import iter_records, read_provenance
+from .media import MediaError, normalise_media
 from .projects import KEEP, Curation, Project, build_view, get_project
 
 logger = logging.getLogger(__name__)
@@ -56,12 +57,16 @@ def default_materialise(rec: dict, out: Path, max_size: int) -> list[str]:
 
 
 def _default_build_record(rec: dict, images_rel: list[str]) -> dict:
-    return {
+    r = {
         "id": rec["id"],
         "document_id": rec["id"],
         "model_output": rec.get("extraction") or {},
         "images": images_rel,
     }
+    media = (rec.get("metadata") or {}).get("media")
+    if media:
+        r["media"] = media
+    return r
 
 
 def package(
@@ -108,6 +113,11 @@ def package(
         r["schema"] = proj.name
         r["prompt"] = prompt_text
         r["prompt_hash"] = prompt_hash
+        if r.get("media"):
+            try:
+                r["media"] = normalise_media(r["media"])
+            except MediaError as e:
+                raise MediaError(f"sample {r['id']}: {e}") from None
         if ground_truth is not None:
             gt = ground_truth(rec)
             if gt:

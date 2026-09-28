@@ -352,8 +352,7 @@ function imagesHtml(s, variant) {
 
 // A sample with `media` (a video, optionally an HLS stream clipped to
 // start/end seconds) shows a player instead of images. `media.tracks` adds one
-// timeline strip per source: [{name, approx?, items: [{start, end, text}]}],
-// times in seconds from the start of the file.
+// timeline strip per source; paratext.media documents the shape.
 function mediaHtml(m) {
   const poster = m.poster ? ` poster="${escapeHtml(m.poster)}"` : "";
   if (m.end == null)
@@ -362,16 +361,17 @@ function mediaHtml(m) {
   const rows = tracks
     .map(
       (t, i) => `<div class="media-track">
-          <span class="media-track-name">${escapeHtml(t.name)}${t.approx ? " ≈" : ""}</span>
+          <span class="media-track-name" title="${escapeHtml(t.note ?? "")}">${escapeHtml(t.name)}${t.note ? " ≈" : ""}</span>
           <div class="media-range" data-track="${i}">
             <div class="media-range-prog"></div><div class="media-range-head"></div>
           </div>
         </div>`,
     )
     .join("");
-  const approx = tracks.some((t) => t.approx)
-    ? " · ≈ shotlist times count from the start of the film, so may be offset"
-    : "";
+  const approx = tracks
+    .filter((t) => t.note)
+    .map((t) => ` · ≈ ${escapeHtml(t.name)}: ${escapeHtml(t.note)}`)
+    .join("");
   return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video>
     <div class="media-timeline" id="media-timeline">${rows}</div>
     <p class="media-range-label"><span id="media-range-label"></span>${approx}</p></div>`;
@@ -422,7 +422,7 @@ function bindTimeline(video, s) {
       });
     });
     label.textContent =
-      `Programme ${clock(start)}–${clock(end)} (${clock(end - start)}) of ${clock(dur)} · now ${clock(video.currentTime)}`;
+      `${s.media.label ?? "Clip"} ${clock(start)}–${clock(end)} (${clock(end - start)}) of ${clock(dur)} · now ${clock(video.currentTime)}`;
   };
 
   const itemAt = (row, e) => {
@@ -495,7 +495,7 @@ async function attachMedia(m, video) {
   const start = m.start ?? 0;
   const isHls = m.type === "hls" || /\.m3u8(\?|$)/.test(m.src);
   if (isHls && !video.canPlayType("application/vnd.apple.mpegurl")) {
-    const { default: Hls } = await import("https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.mjs");
+    const { default: Hls } = await import("./vendor/hls.light.min.mjs");
     hlsPlayer = new Hls({ startPosition: start });
     hlsPlayer.loadSource(m.src);
     hlsPlayer.attachMedia(video);
@@ -923,6 +923,7 @@ function renderEditor() {
   const prefill = s.gold?.output ?? base;
   const note = s.annotation?.notes;
   const total = state.samples.length;
+  const previousMedia = document.getElementById("media");
   document.getElementById("progress").innerHTML =
     `<span class="sample-label" title="${escapeHtml(String(s.document_id ?? s.id))}"
       >Correcting ${state.index + 1} / ${total} — ${escapeHtml(
@@ -976,6 +977,8 @@ function renderEditor() {
         </div>
       </div>
     </div>`;
+
+  keepMedia(s, previousMedia);
 
   const editor = document.getElementById("editor");
   if (state.readOnly) {
