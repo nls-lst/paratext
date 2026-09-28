@@ -385,16 +385,18 @@ def video_source(
     one long tape yield several clips.
 
     ``frames(start, end) -> times`` picks the frames; the default is eight,
-    evenly spaced. ``timestamps`` prints each frame's time below it, so the
-    model can place what it sees. Needs ffmpeg on PATH.
+    evenly spaced. ``timestamps`` prints each frame's time below it, counted
+    from the start of the clip, so the model can place what it sees. Needs ffmpeg on PATH.
     """
     from .video import evenly_spaced, grab_frame, probe_duration, stamp
 
     pick = frames or evenly_spaced(8)
 
-    def _frames(src: str, times: list[float]) -> list[Image.Image]:
+    def _frames(src: str, times: list[float], start: float) -> list[Image.Image]:
         imgs = [grab_frame(src, t) for t in times]
-        return [stamp(im, t) for im, t in zip(imgs, times)] if timestamps else imgs
+        if not timestamps:
+            return imgs
+        return [stamp(im, t - start) for im, t in zip(imgs, times)]
 
     def _clips(source: Path) -> list[dict]:
         if source.is_file():
@@ -416,7 +418,7 @@ def video_source(
                 start = clip.get("start", 0.0)
                 end = clip.get("end") or probe_duration(clip["src"])
                 times = pick(start, end)
-                images = _frames(clip["src"], times)
+                images = _frames(clip["src"], times, start)
             except Exception as e:
                 logger.warning("frame sampling failed for %s: %s", clip["id"], e)
                 continue
@@ -430,11 +432,11 @@ def video_source(
 
     def _materialise(rec: dict, out: Path, max_size: int) -> list[str]:
         meta = rec.get("metadata") or {}
-        src, times = (meta.get("media") or {}).get("src"), meta.get("frame_times") or []
-        if not src:
+        media, times = meta.get("media") or {}, meta.get("frame_times") or []
+        if not media.get("src"):
             return []
         try:
-            images = _frames(src, times)
+            images = _frames(media["src"], times, media.get("start", 0.0))
         except Exception as e:
             logger.warning("frames unavailable for %s: %s", rec["id"], e)
             return []
