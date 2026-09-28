@@ -26,13 +26,14 @@ PROJECT = Project(
 )
 ```
 
-Three adapters ship with paratext:
+Four adapters ship with paratext:
 
 | | |
 |---|---|
 | `image_source()` | a local directory of images, one sample per file |
 | `pdf_source()` | PDFs rendered to page images |
 | `hf_dataset_source(repo="owner/name")` | an imagefolder-style dataset on the Hugging Face Hub |
+| `video_source()` | videos, or a manifest of clips, sampled to frames (needs ffmpeg) |
 
 `hf_dataset_source` is the round trip on `paratext export`: a published eval set
 can be pulled back and re-run. Leave `repo` unset to take the id from the run's
@@ -40,6 +41,16 @@ source instead, so `--source owner/name` works without rebuilding the project,
 and pass `token=` for a private dataset — nothing reads an ambient credential.
 It reads imagefolder layouts only; a parquet-backed dataset needs the `datasets`
 library and a column map, and would be a separate adapter.
+
+`video_source` takes a directory of video files, one sample each, or a manifest
+(`.jsonl` or `.csv`) with one clip per row: `id`, `src` (a path or a URL, HLS
+included) and optionally `start` and `end` in seconds, `poster` and `label`.
+Each clip is sampled to eight evenly spaced frames by default; pass
+`frames=evenly_spaced(n)` (from `paratext.video`) or your own
+`frames(start, end) -> [seconds]` to change that. Each frame carries its time
+on a band below the picture, counted from the start of the file, so ask for
+timecodes in the prompt on that basis. The review UI plays the clip; see
+[Choosing a review view](review-views.md#video).
 
 Register it so it's discovered at runtime:
 

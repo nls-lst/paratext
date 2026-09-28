@@ -18,6 +18,7 @@ def test_module_name_slug():
         {"kind": "images", "verso": True},
         {"kind": "images", "verso": True, "crop": True},
         {"kind": "pdf"},
+        {"kind": "video"},
     ],
 )
 def test_render_project_is_valid_python(kwargs):
@@ -44,6 +45,8 @@ def test_render_project_is_valid_python(kwargs):
     assert "title" in prompt and "author_name" in prompt
     if kwargs["kind"] == "pdf":
         assert "pdf_source(" in init
+    elif kwargs["kind"] == "video":
+        assert "video_source()" in init
     else:
         assert f"image_source(verso_filter={bool(kwargs.get('verso'))}" in init
 

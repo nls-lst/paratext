@@ -95,6 +95,8 @@ def _source_expr(kind: str, verso: bool, crop: bool) -> tuple[str, str]:
     """Return (import_name, call_expr) for the chosen source adapter."""
     if kind == "pdf":
         return "pdf_source", "pdf_source()"
+    if kind == "video":
+        return "video_source", "video_source()"
     return "image_source", f"image_source(verso_filter={verso}, crop={crop})"
 
 
@@ -109,7 +111,7 @@ def render_project(
     pkg_name: str = "",
 ):
     """Return ``{filename: content}`` for a new project. ``kind`` is
-    ``"images"`` or ``"pdf"``; ``verso``/``crop`` apply to image projects;
+    ``"images"``, ``"pdf"`` or ``"video"``; ``verso``/``crop`` apply to image projects;
     ``fields`` seeds the schema (defaults to a single ``title``).
 
     ``pkg_dir``/``pkg_name`` nest the project inside an existing package (e.g.
@@ -247,8 +249,12 @@ def init(name: str | None = None, *, install: bool = True) -> int:
     if not name:
         raise SystemExit("a project name is required")
 
-    is_pdf = _ask("Is the source PDFs (rather than images)?", default=False)
-    kind = "pdf" if is_pdf else "images"
+    if _ask("Is the source PDFs (rather than images)?", default=False):
+        kind = "pdf"
+    elif _ask("Is the source video?", default=False):
+        kind = "video"
+    else:
+        kind = "images"
     verso = crop = False
     if kind == "images":
         # Both default to off: they are card-specific and calibrated to one
@@ -396,7 +402,7 @@ def _offer_config(ep_name: str) -> None:
         print(f"  paratext.toml already has [project.{ep_name}] — leaving it as is.")
         return
 
-    source = _prompt("  Source directory (images or PDFs) []: ")
+    source = _prompt("  Source (a directory, or a video manifest) []: ")
 
     block: list[str] = []
     if not existing.strip():
