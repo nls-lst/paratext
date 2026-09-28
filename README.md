@@ -84,6 +84,8 @@ of "my change did nothing".
   the `Project` contract, source adapters, and how projects are discovered.
 - **[Review and rounds](docs/review-and-rounds.md)** — the run/review/edit loop,
   what a round is, verdicts, and building the gold set.
+- **[Choosing a review view](docs/review-views.md)** — which fields reviewers
+  see, and how to compare against an existing record.
 - **[Commands](docs/commands.md)** — every subcommand and what it is for.
 - **[Configuration](docs/configuration.md)** — `paratext.toml`, resolution order,
   every key, hosted endpoints and environment variables.

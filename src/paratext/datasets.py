@@ -12,7 +12,7 @@ import json
 import re
 from pathlib import Path
 
-from .projects import humanise
+from .projects import default_layout, humanise
 
 # Verdict set used when a dataset was packaged without a view.json — mirrors
 # projects.DEFAULT_VERDICTS in the wire shape the frontend expects.
@@ -156,8 +156,7 @@ def synthesise_view(dataset: dict, samples: list[dict]) -> dict:
         "schema": dataset["schema"],
         "title": dataset["base"],
         "id_label": "ID",
-        "layout": "stacked" if has_gt else "split",
-        "ground_truth": has_gt,
+        "layout": default_layout(panels),
         "panels": panels,
         "scoring": {
             "verdicts": VERDICTS_FALLBACK,

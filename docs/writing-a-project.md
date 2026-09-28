@@ -49,7 +49,7 @@ my-cards = "my_cards:PROJECT"
 ```
 
 That's the whole contract. The review view defaults to showing every schema
-field; override it only when you want to curate the display. Optional hooks
+field; see [Choosing a review view](review-views.md) to curate it. Optional hooks
 (`curate`, `build_record`, `ground_truth`) handle drop rules and ground truth.
 
 Your fields end up named in three places — schema, prompt, and view — with no

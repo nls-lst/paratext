@@ -233,11 +233,10 @@ class Panel:
 class View:
     """Declarative review/display spec for a project."""
 
-    layout: str  # "stacked" | "split"
     title: str
     id_label: str
     panels: list[Panel]
-    ground_truth: bool = False
+    layout: str | None = None  # "split" | "stacked"; None follows the panel count
     labels: dict[str, str] = field(default_factory=dict)
     verdicts: list[Verdict] = field(default_factory=lambda: list(DEFAULT_VERDICTS))
     notes_label: str = "Notes"
@@ -303,7 +302,6 @@ def default_view(project: Project) -> View:
     """A no-frills View: one panel listing every schema field. Used when a
     project doesn't define its own `view` (curation: order/hide/labels/GT)."""
     return View(
-        layout="split",
         title=humanise(project.name),
         id_label="ID",
         panels=[
@@ -314,6 +312,11 @@ def default_view(project: Project) -> View:
             )
         ],
     )
+
+
+def default_layout(panels: list) -> str:
+    """One panel sits beside the images; two or more stack below them."""
+    return "split" if len(panels) == 1 else "stacked"
 
 
 def build_view(project: Project) -> dict:
@@ -336,8 +339,7 @@ def build_view(project: Project) -> dict:
         "schema_version": project.schema_version,
         "title": v.title,
         "id_label": v.id_label,
-        "layout": v.layout,
-        "ground_truth": v.ground_truth,
+        "layout": v.layout or default_layout(panels),
         "panels": panels,
         "scoring": {
             "verdicts": [vars(vd) for vd in v.verdicts],

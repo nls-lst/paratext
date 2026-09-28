@@ -99,7 +99,7 @@ def test_synthesise_view_infers_types_and_layout(tmp_path):
          "model_output": {"title": "U", "flagged": False, "entries": [{"x": 1}]}},
     ]
     view = synthesise_view({"schema": "demo", "base": "demo"}, samples)
-    assert view["layout"] == "stacked" and view["ground_truth"] is True
+    assert view["layout"] == "stacked"
     model_panel = next(p for p in view["panels"] if p["source"] == "model_output")
     types = {f["key"]: f["type"] for f in model_panel["fields"]}
     # `entries` is empty in the first sample but an object-list in the second

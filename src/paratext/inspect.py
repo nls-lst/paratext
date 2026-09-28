@@ -17,7 +17,7 @@ from __future__ import annotations
 from importlib.metadata import entry_points
 
 from .extract import _prompt_hash
-from .projects import ENTRY_POINT_GROUP, Project, audit_project, build_view, default_view
+from .projects import ENTRY_POINT_GROUP, Project, audit_project, build_view
 
 
 def _entry_point_info(name: str) -> dict:
@@ -36,10 +36,9 @@ def _entry_point_info(name: str) -> dict:
 
 def describe(project: Project) -> dict:
     """Flatten one project into a JSON-serialisable description."""
-    view = project.view or default_view(project)
     # build_view derives field labels/types from the schema, so the fields shown
     # here are exactly the ones the review UI will render.
-    panels = build_view(project)["panels"]
+    view = build_view(project)
 
     source = project.source
     return {
@@ -51,7 +50,7 @@ def describe(project: Project) -> dict:
         "prompt_hash": _prompt_hash(project.prompt),
         "source": dict(getattr(source, "config", {}) or {}) if source else {"kind": "custom"},
         "images": {"max_size": project.image_max_size, "quality": project.image_quality},
-        "view": {"layout": view.layout, "ground_truth": view.ground_truth, "panels": panels},
+        "view": {"layout": view["layout"], "panels": view["panels"]},
         "audit": audit_project(project),
     }
 
