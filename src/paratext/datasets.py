@@ -103,8 +103,9 @@ def load_samples(dataset: dict) -> list[dict]:
 
     for s in records:
         s["images"] = [served(p) for p in s.get("images") or []]
-        if (s.get("media") or {}).get("src"):
-            s["media"]["src"] = served(s["media"]["src"])
+        for key in ("src", "poster"):
+            if (s.get("media") or {}).get(key):
+                s["media"][key] = served(s["media"][key])
     return records
 
 

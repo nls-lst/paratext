@@ -48,7 +48,9 @@ view=View(
 
 Put the reference first, because reviewers read it as the baseline. The panels
 don't need the same fields: when the reference has a different shape, as with
-another institution's metadata, give each panel its own list.
+another institution's metadata, give each panel its own list. A reference panel may
+also show fields the schema doesn't have, such as a catalogue's shotlist; they
+display as text, and the model is never asked for them.
 
 ### Video
 
@@ -76,6 +78,28 @@ hovering a segment shows its text, and clicking one plays from there. A track
 with a `note` is marked ≈, and the note is shown beneath. In the fields,
 timecodes such as `01:23` in a table cell seek the player, relative to the clip
 start.
+
+Streams on another site play only if that server allows it (CORS). When a
+video can't play, the player says why, and links to the file so the reviewer
+can check it directly.
+
+### Reviewing metadata you already have
+
+Records made elsewhere, such as another team's model output, can be reviewed
+without running extraction. Write a JSONL file with a provenance line, then one
+record per sample, and package it against a project whose schema matches:
+
+```json
+{"_provenance": {"project": "my-films", "model": "their pipeline"}}
+{"id": "reel-12", "extraction": {"title": "…"}, "ground_truth": {"title": "…"}, "metadata": {"media": {"src": "https://…"}}}
+```
+
+```bash
+paratext package records.jsonl -p my-films
+```
+
+`extraction` fills the model panel, and `ground_truth` a reference panel if
+the view has one, as in [Compared with an existing record](#compared-with-an-existing-record).
 
 ## Smaller options
 

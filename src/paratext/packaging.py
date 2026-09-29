@@ -70,20 +70,21 @@ def _default_build_record(rec: dict, images_rel: list[str]) -> dict:
 
 
 def _copy_local_media(r: dict, out: Path) -> None:
-    """A video on local disk goes into the dataset, so the review server can
-    serve it; hard-linked when it can be, as tapes are large."""
-    src = r["media"]["src"]
-    if src.startswith(("http://", "https://")) or not Path(src).is_file():
-        return
-    rel = f"images/{r['id']}/video{Path(src).suffix.lower()}"
-    dest = out / rel
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.unlink(missing_ok=True)
-    try:
-        dest.hardlink_to(src)
-    except OSError:
-        shutil.copy2(src, dest)
-    r["media"]["src"] = rel
+    """A video or poster on local disk goes into the dataset, so the review
+    server can serve it; hard-linked when it can be, as tapes are large."""
+    for key, name in (("src", "video"), ("poster", "poster")):
+        src = r["media"].get(key)
+        if not src or src.startswith(("http://", "https://")) or not Path(src).is_file():
+            continue
+        rel = f"images/{r['id']}/{name}{Path(src).suffix.lower()}"
+        dest = out / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.unlink(missing_ok=True)
+        try:
+            dest.hardlink_to(src)
+        except OSError:
+            shutil.copy2(src, dest)
+        r["media"][key] = rel
 
 
 def package(
@@ -136,10 +137,10 @@ def package(
             except MediaError as e:
                 raise MediaError(f"sample {r['id']}: {e}") from None
             _copy_local_media(r, out)
-        if ground_truth is not None:
-            gt = ground_truth(rec)
-            if gt:
-                r["ground_truth"] = gt
+        # Without a hook, an imported record can carry its reference directly.
+        gt = ground_truth(rec) if ground_truth is not None else rec.get("ground_truth")
+        if gt:
+            r["ground_truth"] = gt
 
         if decision.action == "quarantine":
             key = decision.reason or "quarantined"

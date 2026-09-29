@@ -324,8 +324,15 @@ def build_view(project: Project) -> dict:
     Falls back to `default_view` (all fields) when the project sets no view."""
     v = project.view or default_view(project)
     panels: list[dict] = []
+    schema_keys = set(project.schema.model_fields)
     for p in v.panels:
-        fields = [_field_spec(k, project.schema, v.labels) for k in p.fields]
+        # A reference record needn't share the schema: its extra fields show as text.
+        fields = [
+            _field_spec(k, project.schema, v.labels)
+            if k in schema_keys or p.source != "ground_truth"
+            else {"key": k, "label": v.labels.get(k) or humanise(k), "type": "string"}
+            for k in p.fields
+        ]
         for f in fields:
             if f["key"] in v.collapsed:
                 f["collapsed"] = True
@@ -374,10 +381,11 @@ def audit_project(project: Project) -> list[str]:
     fields = set(project.schema.model_fields)
     view = project.view or default_view(project)
 
+    reference_only = {k for p in view.panels if p.source == "ground_truth" for k in p.fields}
     referenced = {k for p in view.panels for k in p.fields} | set(view.labels) | set(view.collapsed)
     if view.table_label:
         referenced.add(view.table_label[1])
-    for key in sorted(referenced - fields):
+    for key in sorted(referenced - fields - reference_only):
         problems.append(f"view references field {key!r} that is not in the schema")
 
     model_shown = {k for p in view.panels if p.source == "model_output" for k in p.fields}
