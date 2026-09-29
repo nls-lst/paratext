@@ -170,7 +170,9 @@ def _do_extract(args: argparse.Namespace) -> None:
     # inside the adapter mid-run. Both adapters keep their own check for library
     # callers; this one exists to give the CLI a clean message.
     source = Path(args.source)
-    if not source.is_dir():
+    kind = (getattr(get_project(args.project).source, "config", None) or {}).get("kind")
+    ok = {"hf-dataset": True, "video": source.exists()}.get(kind, source.is_dir())
+    if not ok:
         what = "is not a directory" if source.exists() else "not found"
         raise SystemExit(
             f"source {what}: {source}\n"
@@ -515,6 +517,8 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         src = p["source"]
         opts = ", ".join(f"{k}={v}" for k, v in src.items() if k not in ("kind", "exts"))
         print(f"  source     {src.get('kind')}" + (f"  ({opts})" if opts else ""))
+        if p.get("model"):
+            print(f"  model      {p['model']}  (preferred; paratext.toml can override)")
         print(f"  images     max_size={p['images']['max_size']} quality={p['images']['quality']}")
         print(f"  prompt     {p['prompt_hash']}  ({len(p['prompt'].splitlines())} lines)")
 
@@ -579,7 +583,7 @@ def _cmd_config(args: argparse.Namespace) -> int:
         return 0
 
     if args.show:
-        resolved = coerce_paths(load_defaults(args.project))
+        resolved = coerce_paths(load_defaults(args.project, _project_model(args.project)))
         out = {
             "config": str(local_config_path()),
             "project": args.project,
@@ -938,6 +942,15 @@ def _delegate_to_project_venv() -> None:
     return
 
 
+def _project_model(name: str | None) -> str | None:
+    if name is None:
+        return None
+    try:
+        return get_project(name).model
+    except Exception:
+        return None  # an unknown project is reported later, with its proper message
+
+
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         # Only for a real CLI invocation — an in-process main([...]) call (tests,
@@ -945,8 +958,8 @@ def main(argv: list[str] | None = None) -> int:
         _delegate_to_project_venv()
     parser, config_subparsers, review_subparser = _build_parser()
 
-    project = _peek_project(argv)
-    layered = coerce_paths(load_defaults(project))
+    project = _peek_project(argv) or load_defaults(None).get("project")
+    layered = coerce_paths(load_defaults(project, _project_model(project)))
     merged = {**HARDCODED_DEFAULTS, **layered}
     if project is not None:
         merged.setdefault("project", project)

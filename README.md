@@ -17,15 +17,16 @@ ends up: written down, versioned, deterministic and testable.
 Approved and corrected records can also build a gold set: a fixed benchmark
 for measuring other models against the same material.
 
-Run a model over a directory of images or PDFs, write resumable JSONL with
+Run a model over a directory of images, PDFs or video, write resumable JSONL with
 provenance, package it for review, and export the approved results. Each
 **project** is a self-contained module, with its own prompt, schema and input
 handling, so the same code path runs a 50-item pilot and a 250,000-item sweep.
 
 ## What you'll need
 
-- **A directory of images or PDFs.** Images are read from a flat directory, one
-  item per file; PDFs recursively.
+- **Your material:** a directory of images, PDFs or video (video needs
+  [ffmpeg](https://ffmpeg.org/)). Or metadata you already have, to review
+  without running a model.
 - **An OpenAI-compatible endpoint serving a model that accepts images.** Local
   hosting (llama.cpp, vLLM, LM Studio, [Lemonade](https://lemonade-server.ai/)
   etc) or a hosted provider — anything that speaks the OpenAI chat API.
@@ -80,8 +81,8 @@ of "my change did nothing".
 
 ## Docs
 
-- **[Writing a project](docs/writing-a-project.md)** — the three scaffolded files,
-  the `Project` contract, source adapters, and how projects are discovered.
+- **[Writing a project](docs/writing-a-project.md)** — setting a project up step
+  by step: source, schema and prompt, model, review view.
 - **[Review and rounds](docs/review-and-rounds.md)** — the run/review/edit loop,
   what a round is, verdicts, and building the gold set.
 - **[Choosing a review view](docs/review-views.md)** — which fields reviewers

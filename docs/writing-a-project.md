@@ -1,6 +1,10 @@
 # Writing a project
 
-`paratext new` scaffolds three files:
+A project is the prompt, schema and input handling for one kind of material.
+`paratext new` writes a working one; this page covers what to change in it, in
+the order you'll usually change it.
+
+## 1. The files
 
 ```
 my_cards/
@@ -9,11 +13,11 @@ my_cards/
     __init__.py   # wires them together
 ```
 
-`__init__.py` stays small because input handling comes from a **source adapter**:
+`__init__.py` stays small:
 
 ```python
 from paratext.projects import Project, load_prompt
-from paratext.sources import image_source   # or pdf_source, hf_dataset_source
+from paratext.sources import image_source
 
 from .schema import Record
 
@@ -26,49 +30,72 @@ PROJECT = Project(
 )
 ```
 
-Four adapters ship with paratext:
+## 2. The source
 
-| | |
+The **source adapter** reads your material and turns each item into images for
+the model:
+
+| Adapter | Reads |
 |---|---|
-| `image_source()` | a local directory of images, one sample per file |
-| `pdf_source()` | PDFs rendered to page images |
-| `hf_dataset_source(repo="owner/name")` | an imagefolder-style dataset on the Hugging Face Hub |
+| `image_source()` | a directory of images, one item per file |
+| `pdf_source()` | PDFs, rendered to page images |
+| `hf_dataset_source(repo="owner/name")` | an imagefolder dataset on the Hugging Face Hub |
 | `video_source()` | videos, or a manifest of clips, sampled to frames (needs ffmpeg) |
 
-`hf_dataset_source` is the round trip on `paratext export`: a published eval set
-can be pulled back and re-run. Leave `repo` unset to take the id from the run's
-source instead, so `--source owner/name` works without rebuilding the project,
-and pass `token=` for a private dataset — nothing reads an ambient credential.
-It reads imagefolder layouts only; a parquet-backed dataset needs the `datasets`
-library and a column map, and would be a separate adapter.
+Their options are under [Source details](#source-details). If you already have
+the metadata and only want to review it, you don't need a source: see
+[Reviewing metadata you already have](review-views.md#reviewing-metadata-you-already-have).
 
-`video_source` takes a directory of video files, one sample each, or a manifest
-(`.jsonl` or `.csv`) with one clip per row: `id`, `src` (a path or a URL, HLS
-included) and optionally `start` and `end` in seconds, `poster` and `label`.
-Each clip is sampled to eight evenly spaced frames by default; pass
-`frames=evenly_spaced(n)` (from `paratext.video`) or your own
-`frames(start, end) -> [seconds]` to change that. Each frame carries its time
-on a band below the picture, counted from the start of the clip, so ask for
-timecodes in the prompt on that basis; in review, clicking one seeks to it. The review UI plays the clip; see
-[Choosing a review view](review-views.md#video).
+## 3. The schema and the prompt
 
-Register it so it's discovered at runtime:
+The schema says *what* comes back: one field per piece of metadata, with its
+type. The prompt says *how* to fill each field: what counts, what to leave
+empty, and what to do with the awkward cases. Behaviour belongs in `prompt.md`.
+Keep the schema's `Field(description=...)` short and structural: those
+descriptions are sent to the model too, and shouldn't restate the prompt in a
+second voice.
+
+Every field ends up named in three places (schema, prompt and view) with no
+automatic link between them. The test `paratext new` generates calls
+`audit_project(PROJECT)`, which fails when they drift apart.
+
+## 4. The model
+
+The model normally comes from `paratext.toml`. When a project has been tuned
+against one model, say so on the project:
+
+```python
+PROJECT = Project(..., model="Qwen3.6-35B-A3B")
+```
+
+It takes precedence over the top-level `model` in `paratext.toml`, so one config
+can serve projects that prefer different models. `[project.<name>] model = …`,
+`PARATEXT_MODEL` and `--model` still override it. Model ids are whatever your
+endpoint calls the model, so a project shared with others is tied to that
+naming.
+
+## 5. The review view
+
+By default, reviewers see every schema field beside the item. To choose the
+fields, compare against an existing record, or review video, see
+[Choosing a review view](review-views.md).
+
+Optional hooks handle the rest: `curate` drops or sets aside items before
+review, `ground_truth` supplies the existing record, and `build_record` shapes
+what reviewers see.
+
+## 6. Registering it
+
+`paratext new` does this for you. By hand, add an entry point so paratext can
+find the project:
 
 ```toml
 [project.entry-points."paratext.projects"]
 my-cards = "my_cards:PROJECT"
 ```
 
-That's the whole contract. The review view defaults to showing every schema
-field; see [Choosing a review view](review-views.md) to curate it. Optional hooks
-(`curate`, `build_record`, `ground_truth`) handle drop rules and ground truth.
-
-Your fields end up named in three places — schema, prompt, and view — with no
-automatic link between them. Keep them in step by calling `audit_project(PROJECT)`
-from a test; `paratext new` generates one. Put behaviour in `prompt.md`, and keep
-the schema's `Field(description=...)` short and structural — those descriptions
-are sent to the model too, and shouldn't restate the prompt in a second voice.
-
+Then run `paratext inspect -p my-cards` to see what is actually installed: the
+fields, the prompt, the source, the model and whether they agree.
 
 ## Where projects are found
 
@@ -94,3 +121,29 @@ source .venv/bin/activate                  # then a bare `paratext` works too
 uv tool install paratext-cli --with .      # inject the project into the tool
 pip install paratext-cli && pip install -e .   # or just share one environment
 ```
+
+## Source details
+
+**`image_source`** reads a flat directory. For scanned index cards it can also
+drop blank versos, crop to the card and suppress show-through; see
+[Scanned cards](scanned-cards.md).
+
+**`pdf_source`** reads PDFs recursively. `pages(num_pages) -> [indices]` picks
+the pages to render; the default is the first three and the last.
+
+**`hf_dataset_source`** is the round trip on `paratext export`: a published eval
+set can be pulled back and re-run. Leave `repo` unset to take the id from the
+run's source instead, so `--source owner/name` works without rebuilding the
+project, and pass `token=` for a private dataset; nothing reads an ambient
+credential. It reads imagefolder layouts only; a parquet-backed dataset needs
+the `datasets` library and a column map, and would be a separate adapter.
+
+**`video_source`** takes a directory of video files, one item each, or a
+manifest (`.jsonl` or `.csv`) with one clip per row: `id`, `src` (a path or a
+URL, HLS included) and optionally `start` and `end` in seconds, `poster` and
+`label`. Each clip is sampled to eight evenly spaced frames by default; pass
+`frames=evenly_spaced(n)` (from `paratext.video`) or your own
+`frames(start, end) -> [seconds]` to change that. Each frame carries its time on
+a band below the picture, counted from the start of the clip, so ask for
+timecodes in the prompt on that basis. The review UI plays the clip, and
+clicking a timecode seeks to it.
