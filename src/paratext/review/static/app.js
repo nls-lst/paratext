@@ -355,13 +355,14 @@ function imagesHtml(s, variant) {
 // timeline strip per source; paratext.media documents the shape.
 function mediaHtml(m) {
   const poster = m.poster ? ` poster="${escapeHtml(m.poster)}"` : "";
+  const error = `<div role="alert" data-variant="danger" id="media-error" hidden></div>`;
   if (m.end == null)
-    return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video></div>`;
+    return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video>${error}</div>`;
   const tracks = m.tracks?.length ? m.tracks : [{ name: "", items: [] }];
   const rows = tracks
     .map(
       (t, i) => `<div class="media-track">
-          <span class="media-track-name" title="${escapeHtml(t.note ?? "")}">${escapeHtml(t.name)}${t.note ? " ≈" : ""}</span>
+          <span class="media-track-name" title="${escapeHtml(t.note ?? "")}">${escapeHtml(t.name ?? "")}${t.note ? " ≈" : ""}</span>
           <div class="media-range" data-track="${i}">
             <div class="media-range-prog"></div><div class="media-range-head"></div>
           </div>
@@ -372,7 +373,7 @@ function mediaHtml(m) {
     .filter((t) => t.note)
     .map((t) => ` · ≈ ${escapeHtml(t.name)}: ${escapeHtml(t.note)}`)
     .join("");
-  return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video>
+  return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video>${error}
     <div class="media-timeline" id="media-timeline">${rows}</div>
     <p class="media-range-label"><span id="media-range-label"></span>${approx}</p></div>`;
 }
@@ -413,7 +414,7 @@ function bindTimeline(video, s) {
       row.querySelector(".media-range-head").style.left = pct(video.currentTime);
       if (row.dataset.built) return;
       row.dataset.built = "1";
-      tracks[i].items.forEach((it) => {
+      (tracks[i].items ?? []).forEach((it) => {
         const seg = document.createElement("div");
         seg.className = "media-seg";
         seg.style.left = pct(it.start);
@@ -428,7 +429,7 @@ function bindTimeline(video, s) {
   const itemAt = (row, e) => {
     const r = row.getBoundingClientRect();
     const t = ((e.clientX - r.left) / r.width) * video.duration;
-    const items = tracks[+row.dataset.track].items;
+    const items = tracks[+row.dataset.track].items ?? [];
     const i = items.findLastIndex((it) => it.start <= t && t < (it.end ?? end));
     return { t, i, item: items[i] };
   };
@@ -489,14 +490,42 @@ function keepMedia(s, previous) {
   bindTimeline(video, s);
 }
 
+// The player only says that it failed; one fetch of the source says why: a
+// missing file, a server that blocks playback from here (CORS), or, when the
+// fetch succeeds, a format or codec this browser can't play.
+async function mediaError(m, reason) {
+  const el = document.getElementById("media-error");
+  if (!el || !el.hidden) return;
+  el.hidden = false;
+  el.textContent = "This video couldn't be played…";
+  document.getElementById("media-timeline")?.setAttribute("hidden", "");
+  let why = reason;
+  try {
+    const res = await fetch(m.src, { method: "GET", headers: { range: "bytes=0-0" } });
+    if (!res.ok) why = `HTTP ${res.status}: the file isn't there`;
+  } catch {
+    why = "its server can't be reached, or doesn't allow playback from this site (CORS)";
+  }
+  el.innerHTML = `This video couldn't be played: ${escapeHtml(why)}.
+    <a href="${escapeHtml(m.src)}" target="_blank" rel="noopener">Open it directly</a>`;
+}
+
 async function attachMedia(m, video) {
   hlsPlayer?.destroy();
   hlsPlayer = null;
   const start = m.start ?? 0;
   const isHls = m.type === "hls" || /\.m3u8(\?|$)/.test(m.src);
+  video.addEventListener("error", () => {
+    if (!video.isConnected) return; // a player being torn down between samples
+    const codes = { 2: "a network error", 3: "it can't be decoded", 4: "this browser can't play its format" };
+    mediaError(m, codes[video.error?.code] ?? "an unknown error");
+  });
   if (isHls && !video.canPlayType("application/vnd.apple.mpegurl")) {
     const { default: Hls } = await import("./vendor/hls.light.min.mjs");
     hlsPlayer = new Hls({ startPosition: start });
+    hlsPlayer.on(Hls.Events.ERROR, (_, d) => {
+      if (d.fatal) mediaError(m, d.details);
+    });
     hlsPlayer.loadSource(m.src);
     hlsPlayer.attachMedia(video);
   } else {

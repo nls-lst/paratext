@@ -66,3 +66,53 @@ def test_packaging_carries_media_from_sample_metadata(tmp_path, monkeypatch):
 def test_packaging_names_the_sample_with_bad_media(tmp_path, monkeypatch):
     with pytest.raises(MediaError, match="sample v1: media needs a src"):
         _package(tmp_path, monkeypatch, {"poster": "p.jpg"})
+
+
+def test_reference_panel_may_show_fields_outside_the_schema():
+    from pydantic import BaseModel
+
+    from paratext.projects import Panel, View, audit_project, build_view
+
+    class Film(BaseModel):
+        title: str | None = None
+
+    view = View(
+        title="T", id_label="ID",
+        panels=[
+            Panel(source="model_output", title="M", fields=["title"]),
+            Panel(source="ground_truth", title="Catalogue", fields=["title", "shotlist"]),
+        ],
+        collapsed=["shotlist"],
+    )
+    proj = Project(name="demo", schema_version="v1", prompt="Return title.", schema=Film,
+                   iter_samples=lambda *a: iter(()), view=view)
+    gt = build_view(proj)["panels"][1]["fields"]
+    assert gt[1] == {"key": "shotlist", "label": "Shotlist", "type": "string", "collapsed": True}
+    assert audit_project(proj) == []
+
+    view.panels[0].fields.append("shotlist")  # the model can't be shown a field it never emits
+    assert any("shotlist" in p for p in audit_project(proj))
+
+
+def test_imported_records_carry_ground_truth_and_local_poster(tmp_path, monkeypatch):
+    poster = tmp_path / "still.jpg"
+    poster.write_bytes(b"jpg")
+    proj = Project(
+        name="demo", schema_version="v1", prompt="P", schema=_Out,
+        iter_samples=lambda *a: iter(()),
+        materialise_images=lambda rec, out, mx: [],
+    )
+    monkeypatch.setattr(packaging, "get_project", lambda name: proj)
+    lines = [
+        {"_provenance": {"project": "demo"}},
+        {"id": "v1", "extraction": {"title": "A"}, "ground_truth": {"title": "B"},
+         "metadata": {"media": {"src": "https://x/v.mp4", "poster": str(poster)}}},
+    ]
+    jsonl = tmp_path / "run.jsonl"
+    jsonl.write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+    package(jsonl, tmp_path / "ds", "demo", fresh=True)
+    [rec] = json.loads((tmp_path / "ds" / "samples.json").read_text())
+    assert rec["ground_truth"] == {"title": "B"}
+    assert rec["media"]["poster"] == "images/v1/poster.jpg"
+    assert rec["media"]["src"] == "https://x/v.mp4"
+    assert (tmp_path / "ds" / "images/v1/poster.jpg").read_bytes() == b"jpg"
