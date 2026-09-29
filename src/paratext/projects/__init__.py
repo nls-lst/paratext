@@ -87,6 +87,10 @@ class Project:
     # symptom is a burnt token budget. For other providers set the reasoning
     # control under `[project.<name>.extra-body]` in paratext.toml.
     disable_thinking: bool = True
+    # The model this project was tuned against. It beats a top-level `model` in
+    # paratext.toml; `[project.<name>]`, PARATEXT_MODEL and --model beat it.
+    # Model ids are the serving endpoint's, so this assumes the usual one.
+    model: str | None = None
     # Output-token ceiling per call. None means the framework default
     # (`runner.DEFAULT_MAX_TOKENS`); raise it here when a project's schema is
     # genuinely large. A user's --max-tokens / config value still wins.

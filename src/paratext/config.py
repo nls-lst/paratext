@@ -7,8 +7,9 @@ first):
     1. CLI flags
     2. ``PARATEXT_*`` environment variables (e.g. ``PARATEXT_BASE_URL``)
     3. ``./paratext.toml`` ``[project.<name>]`` section
-    4. ``./paratext.toml`` top-level keys
-    5. Hardcoded defaults in :mod:`paratext.cli`
+    4. the project's own ``Project.model``, for ``model`` only
+    5. ``./paratext.toml`` top-level keys
+    6. Hardcoded defaults in :mod:`paratext.cli`
 
 Env vars are kept alongside the file because they are the idiomatic way to
 configure the CLI inside a container.
@@ -157,14 +158,20 @@ def api_key_in_file(project: str | None, base_url: str) -> bool:
     return bool(layer.get("api_key"))
 
 
-def load_defaults(project: str | None) -> dict:
+def load_defaults(project: str | None, project_model: str | None = None) -> dict:
     """Return resolved defaults for the given project (excluding CLI flags).
 
     Reads ``./paratext.toml`` then overlays environment variables. CLI flags
     are layered on top by argparse itself (``set_defaults`` + parse).
+    ``project_model`` is the project's own preference, between the file's
+    top-level keys and its ``[project.<name>]`` section.
     """
     out: dict = {}
-    _merge_layer(out, _load_toml(local_config_path()), project)
+    layer = _load_toml(local_config_path())
+    _merge_layer(out, layer, None)
+    if project_model:
+        out["model"] = project_model
+    _merge_layer(out, {"project": layer.get("project")}, project)
 
     # Environment variables: PARATEXT_BASE_URL, PARATEXT_MODEL, etc.
     for key in RECOGNISED:

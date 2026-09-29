@@ -49,6 +49,7 @@ def describe(project: Project) -> dict:
         "prompt": project.prompt,
         "prompt_hash": _prompt_hash(project.prompt),
         "source": dict(getattr(source, "config", {}) or {}) if source else {"kind": "custom"},
+        "model": project.model,
         "images": {"max_size": project.image_max_size, "quality": project.image_quality},
         "view": {"layout": view["layout"], "panels": view["panels"]},
         "audit": audit_project(project),

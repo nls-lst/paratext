@@ -48,6 +48,19 @@ def test_load_defaults_precedence(tmp_path, monkeypatch):
     assert out["source"] == "/from/toml"  # from the [project.index-cards] section
 
 
+def test_project_model_sits_between_top_level_and_project_section(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PARATEXT_MODEL", raising=False)
+    toml = tmp_path / "paratext.toml"
+    toml.write_text('model = "everything-else"\n')
+    assert cfg.load_defaults("cards", "tuned-for-cards")["model"] == "tuned-for-cards"
+    assert cfg.load_defaults("cards", None)["model"] == "everything-else"
+    toml.write_text('model = "everything-else"\n[project.cards]\nmodel = "this-deployment"\n')
+    assert cfg.load_defaults("cards", "tuned-for-cards")["model"] == "this-deployment"
+    monkeypatch.setenv("PARATEXT_MODEL", "env-model")
+    assert cfg.load_defaults("cards", "tuned-for-cards")["model"] == "env-model"
+
+
 @pytest.mark.parametrize(
     "given,expected",
     [
