@@ -282,8 +282,9 @@ suppliers, unannounced plans or licensing negotiations belongs in the
 ## Tasks
 
 This project's tasks live in `.helical/tasks/` as markdown, managed with the
-`helical` command (`hc` for short). Read them before starting, and record what
-you find. Do not edit the files by hand: the CLI keeps ids, filenames and dates
+`helical` command (`hc` for short). Read them before starting. Record what
+you find with `--append`, which adds a paragraph to the description, and what
+came of it in `--done` when you close the task. Do not edit the files by hand: the CLI keeps ids, filenames and dates
 consistent, and `helical audit` reports it when something has drifted.
 `hc <command> --help` lists what each command takes.
 
@@ -294,7 +295,7 @@ hc board                           # todo / doing / done in columns
 hc show <ID>                       # one task in full
 hc new "Title" --horizon now --outcome R-2
 hc set <ID> --status doing
-hc set <ID> --note "what you learned"
+hc set <ID> --append "what you found"
 hc set <ID> --accept "criterion"   # add an acceptance item
 hc set <ID> --check 1              # tick it (numbered as hc show lists them)
 hc set <ID> --done "what happened"  # closes it
@@ -352,7 +353,7 @@ hc set PTX-4 --done "Defaults moved into config; the hardcoded paths are gone."
 ```
 
 It is what the project summary shows, and a fortnight later it is the only record
-of why the work mattered. Descriptions, notes and results render as markdown.
+of why the work mattered. Descriptions and results render as markdown.
 
 ### Conventions
 
