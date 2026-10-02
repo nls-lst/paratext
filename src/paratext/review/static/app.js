@@ -488,17 +488,26 @@ function keepMedia(s, previous) {
   const video = document.getElementById("media");
   bindSeek(video, s.media.start ?? 0);
   bindTimeline(video, s);
+  showMediaError(video);
 }
 
 // The player only says that it failed; one fetch of the source says why: a
 // missing file, a server that blocks playback from here (CORS), or, when the
 // fetch succeeds, a format or codec this browser can't play.
-async function mediaError(m, reason) {
+// The message lives on the video element, which survives a re-render; the
+// alert box around it doesn't.
+function showMediaError(video) {
   const el = document.getElementById("media-error");
-  if (!el || !el.hidden) return;
+  if (!el || !video.dataset.error) return;
+  el.innerHTML = video.dataset.error;
   el.hidden = false;
-  el.textContent = "This video couldn't be played…";
   document.getElementById("media-timeline")?.setAttribute("hidden", "");
+}
+
+async function mediaError(m, video, reason) {
+  if (video.dataset.error) return;
+  video.dataset.error = "This video couldn't be played…";
+  showMediaError(video);
   let why = reason;
   try {
     const res = await fetch(m.src, { method: "GET", headers: { range: "bytes=0-0" } });
@@ -506,8 +515,9 @@ async function mediaError(m, reason) {
   } catch {
     why = "its server can't be reached, or doesn't allow playback from this site (CORS)";
   }
-  el.innerHTML = `This video couldn't be played: ${escapeHtml(why)}.
+  video.dataset.error = `This video couldn't be played: ${escapeHtml(why)}.
     <a href="${escapeHtml(m.src)}" target="_blank" rel="noopener">Open it directly</a>`;
+  if (video.isConnected) showMediaError(video);
 }
 
 async function attachMedia(m, video) {
@@ -518,13 +528,13 @@ async function attachMedia(m, video) {
   video.addEventListener("error", () => {
     if (!video.isConnected) return; // a player being torn down between samples
     const codes = { 2: "a network error", 3: "it can't be decoded", 4: "this browser can't play its format" };
-    mediaError(m, codes[video.error?.code] ?? "an unknown error");
+    mediaError(m, video, codes[video.error?.code] ?? "an unknown error");
   });
   if (isHls && !video.canPlayType("application/vnd.apple.mpegurl")) {
     const { default: Hls } = await import("./vendor/hls.light.min.mjs");
     hlsPlayer = new Hls({ startPosition: start });
     hlsPlayer.on(Hls.Events.ERROR, (_, d) => {
-      if (d.fatal) mediaError(m, d.details);
+      if (d.fatal) mediaError(m, video, d.details);
     });
     hlsPlayer.loadSource(m.src);
     hlsPlayer.attachMedia(video);

@@ -35,6 +35,8 @@
       .thumbs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
       .thumbs a { display: inline-block; }
       .media-player { margin-bottom: 1rem; }
+      /* Oat styles [role=alert] as a block, which beats the hidden attribute. */
+      .media-player [hidden] { display: none; }
       .media-player video { width: 100%; max-width: 960px; max-height: 60vh; background: #000; }
       .media-timeline { position: relative; max-width: 960px; margin-top: .5rem; }
       .media-track { display: grid; grid-template-columns: 3rem 1fr; align-items: center; gap: .5rem; margin-top: .25rem; }
