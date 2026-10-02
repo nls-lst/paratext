@@ -281,7 +281,7 @@ suppliers, unannounced plans or licensing negotiations belongs in the
 <!-- HELICAL START -->
 ## Tasks
 
-This project's tasks live in `.helical/tasks/` as markdown, managed with the
+This project's tasks live in the helical workspace, not in this repository, and are managed with the
 `helical` command (`hc` for short). Read them before starting. Record what
 you find with `--append`, which adds a paragraph to the description, and what
 came of it in `--done` when you close the task. Do not edit the files by hand: the CLI keeps ids, filenames and dates
