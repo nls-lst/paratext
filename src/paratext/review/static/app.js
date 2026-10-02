@@ -355,9 +355,8 @@ function imagesHtml(s, variant) {
 // timeline strip per source; paratext.media documents the shape.
 function mediaHtml(m) {
   const poster = m.poster ? ` poster="${escapeHtml(m.poster)}"` : "";
-  const error = `<div role="alert" data-variant="danger" id="media-error" hidden></div>`;
   if (m.end == null)
-    return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video>${error}</div>`;
+    return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video></div>`;
   const tracks = m.tracks?.length ? m.tracks : [{ name: "", items: [] }];
   const rows = tracks
     .map(
@@ -373,7 +372,7 @@ function mediaHtml(m) {
     .filter((t) => t.note)
     .map((t) => ` · ≈ ${escapeHtml(t.name)}: ${escapeHtml(t.note)}`)
     .join("");
-  return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video>${error}
+  return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video>
     <div class="media-timeline" id="media-timeline">${rows}</div>
     <p class="media-range-label"><span id="media-range-label"></span>${approx}</p></div>`;
 }
@@ -494,14 +493,22 @@ function keepMedia(s, previous) {
 // The player only says that it failed; one fetch of the source says why: a
 // missing file, a server that blocks playback from here (CORS), or, when the
 // fetch succeeds, a format or codec this browser can't play.
-// The message lives on the video element, which survives a re-render; the
-// alert box around it doesn't.
+// The message lives on the video element, which survives a re-render. The
+// alert is built only when there is one: shipped hidden, Oat's role=alert
+// styling would show it anyway.
 function showMediaError(video) {
-  const el = document.getElementById("media-error");
-  if (!el || !video.dataset.error) return;
+  if (!video.dataset.error) return;
+  let el = document.getElementById("media-error");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "media-error";
+    el.setAttribute("role", "alert");
+    el.dataset.variant = "danger";
+    video.after(el);
+  }
   el.innerHTML = video.dataset.error;
-  el.hidden = false;
-  document.getElementById("media-timeline")?.setAttribute("hidden", "");
+  document.getElementById("media-timeline")?.remove();
+  document.querySelector(".media-range-label")?.remove();
 }
 
 async function mediaError(m, video, reason) {
