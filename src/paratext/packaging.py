@@ -27,6 +27,8 @@ from PIL import Image
 from .io import iter_records, read_provenance
 from .media import MediaError, normalise_media
 from .projects import KEEP, Curation, Project, build_view, get_project
+from .report import Run as CarbonRun
+from .tracking import load_sidecar, sidecar_path
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +153,10 @@ def package(
 
     # Stash the run's provenance header next to the samples so downstream tools
     # (e.g. `paratext export`) have the model/schema-version/prompt without the
-    # original JSONL.
+    # original JSONL. The run's energy totals ride along for the dataset card.
+    side = load_sidecar(sidecar_path(jsonl))
+    if side:
+        provenance["carbon"] = CarbonRun(side, side.get("segments", [])).row()
     (out / "provenance.json").write_text(json.dumps(provenance, indent=2, ensure_ascii=False))
 
     (out / "samples.json").write_text(json.dumps(records, indent=2, ensure_ascii=False))

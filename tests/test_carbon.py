@@ -1,4 +1,6 @@
-"""Carbon-aware scheduling: parsing, thresholds, window pick, gating, providers."""
+"""Grid providers, the clean-grid threshold and the [carbon] config."""
+
+import pytest
 
 import paratext.carbon as carbon
 from paratext.carbon import CarbonConfig, Reading
@@ -33,50 +35,23 @@ def test_uk_current_national(monkeypatch):
 
     monkeypatch.setattr(carbon, "_get", fake_get)
     r = carbon.uk_current(None)
-    assert r.zone == "GB" and r.carbon_gco2 == 147
+    assert r.zone == "GB" and r.carbon_gco2 == 167 and r.basis == "actual"
     assert round(r.renewable_fraction * 100, 1) == 37.7  # wind+solar+hydro, biomass excluded
 
 
 def test_uk_current_regional(monkeypatch):
     monkeypatch.setattr(carbon, "_get", lambda url, headers=None, timeout=10.0: _REGIONAL_SS)
     r = carbon.uk_current("south-scotland")
-    assert r.zone == "South Scotland" and r.carbon_gco2 == 5
+    assert r.zone == "South Scotland" and r.carbon_gco2 == 5 and r.basis == "forecast"
     assert round(r.renewable_fraction * 100, 1) == 84.9
 
 
-def test_thresholds_and_default():
+def test_threshold():
     r = Reading("uk", "GB", carbon_gco2=120, renewable_fraction=0.6, index="moderate", ts=None)
-    assert r.is_clean(min_renewable=50, max_carbon=None) is True
-    assert r.is_clean(min_renewable=80, max_carbon=None) is False
-    assert r.is_clean(min_renewable=50, max_carbon=100) is False  # AND: carbon too high
-    # default kicks in when nothing configured
-    assert CarbonConfig()._effective() == (carbon.DEFAULT_MIN_RENEWABLE, None)
-
-
-def test_duration_parse():
-    assert carbon._dur("15m", 0) == 900
-    assert carbon._dur("12h", 0) == 43200
-    assert carbon._dur("45s", 0) == 45
-    assert carbon._dur(None, 99) == 99
-
-
-def test_cleanest_window():
-    vals = [200, 180, 40, 30, 35, 220]
-    readings = [Reading("uk", "GB", v, None, None, None) for v in vals]
-    i, avg = carbon.cleanest_window(readings, block=2)
-    assert i == 3 and avg == 32.5  # (30+35)/2 is the greenest 1h (two 30-min) block
-
-
-def test_wait_for_clean_polls_until_clean(monkeypatch):
-    seq = iter([
-        Reading("uk", "GB", 300, 0.30, "high", None),   # dirty
-        Reading("uk", "GB", 90, 0.82, "low", None),      # clean
-    ])
-    monkeypatch.setattr(carbon, "current_reading", lambda cfg: next(seq))
-    slept = []
-    cfg = CarbonConfig(min_renewable=80)
-    r = carbon.wait_for_clean(cfg, log=lambda *a: None, sleep=slept.append)
-    assert r.renewable_fraction == 0.82 and len(slept) == 1  # waited once, then proceeded
+    assert r.is_clean(50) is True
+    assert r.is_clean(80) is False
+    assert CarbonConfig().min_renewable == carbon.DEFAULT_MIN_RENEWABLE
+    assert Reading("energy-charts", "DE", None, None, None, None).is_clean(10) is False
 
 
 def test_suggest_region_uk(monkeypatch):
@@ -120,19 +95,20 @@ def test_energy_charts_current(monkeypatch):
     assert r.carbon_gco2 is None and round(r.renewable_fraction * 100) == 22  # nearest to now
 
 
-def test_cleanest_window_by_renewable_when_no_carbon():
-    # carbon absent → pick the block with the highest renewable share
-    fr = [0.20, 0.25, 0.90, 0.85, 0.30]
-    readings = [Reading("energy-charts", "DE", None, f, None, None) for f in fr]
-    i, _ = carbon.cleanest_window(readings, block=2)
-    assert i == 2  # (0.90+0.85) is the greenest 2-period block
-
-
-def test_wait_for_clean_gives_up_at_max_wait(monkeypatch):
-    monkeypatch.setattr(
-        carbon, "current_reading",
-        lambda cfg: Reading("uk", "GB", 400, 0.10, "very high", None),
+@pytest.mark.real_carbon
+def test_load_config(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert carbon.load_config().declared is False  # no [carbon] table: grid unknown
+    (tmp_path / "paratext.toml").write_text(
+        '[carbon]\nregion = "south-scotland"\nwait = true\nmin-renewable = 80\n'
+        'overhead = 1.2\n'
     )
-    cfg = CarbonConfig(min_renewable=80, max_wait_s=0)  # already past deadline
-    r = carbon.wait_for_clean(cfg, log=lambda *a: None, sleep=lambda s: None)
-    assert r.carbon_gco2 == 400  # proceeded anyway
+    cfg = carbon.load_config()
+    assert cfg.declared and cfg.wait and cfg.min_renewable == 80 and cfg.overhead == 1.2
+    monkeypatch.setenv("PARATEXT_CARBON_WAIT", "false")
+    assert carbon.load_config().wait is False
+
+
+def test_suggestion_has_no_threshold():
+    toml = carbon.suggestion_toml({"provider": "uk", "region": "EH32", "region_name": None})
+    assert "min-renewable" not in toml and "# wait = true" in toml

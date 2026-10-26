@@ -94,8 +94,8 @@ of "my change did nothing".
   and what makes up the gold set.
 - **[Scanned cards](docs/scanned-cards.md)** — verso filtering, card cropping and
   show-through suppression for index-card collections.
-- **[Green scheduling](docs/green-scheduling.md)** — wait for clean electricity
-  before running a batch.
+- **[Carbon](docs/carbon.md)** — energy and emissions for every run, a report for
+  sustainability returns, and pausing while the grid is dirty.
 - **[Troubleshooting](docs/troubleshooting.md)** — what to check when the output
   is not what you expected.
 - **[HF export spec](docs/hf-export-spec.md)** — the dataset layout, card and row

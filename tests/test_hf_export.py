@@ -206,20 +206,32 @@ def test_dry_run_builds_card(tmp_path, monkeypatch):
     assert "`image_type`" in card  # schema field table
 
 
-def test_card_renders_energy(tmp_path):
+def test_card_renders_carbon(tmp_path):
     d = _mk_dataset(tmp_path)
     prov = json.loads((d / "provenance.json").read_text())
-    prov["energy"] = {"provider": "uk", "zone": "South Scotland", "carbon_gco2": 5,
-                      "renewable_fraction": 0.85, "scheduled_window": True,
-                      "ts": "2026-07-02T01:00Z"}
+    prov["carbon"] = {"records": 400, "kwh": 0.912, "wh_per_record": 2.28, "gco2e": 1.4,
+                      "meter": "amdgpu-apu", "overhead": "1", "zone": "South Scotland",
+                      "intensity_basis": "forecast", "renewable_share": 0.86,
+                      "hours_paused": 0}
     (d / "provenance.json").write_text(json.dumps(prov))
     hf_export.build(
         d, "card-template", hf_export.ExportConfig(license="cc-by-4.0"), tmp_path / "out"
     )
     card = (tmp_path / "out" / "README.md").read_text()
     assert "Environmental provenance" in card
-    assert "South Scotland" in card and "85% renewable" in card
-    assert "scheduled to a low-carbon window" in card
+    assert "0.912 kWh" in card and "South Scotland" in card and "86% renewable" in card
+
+
+def test_card_says_not_measured(tmp_path):
+    d = _mk_dataset(tmp_path)
+    prov = json.loads((d / "provenance.json").read_text())
+    prov["carbon"] = {"records": 12, "kwh": None, "meter": "not measured"}
+    (d / "provenance.json").write_text(json.dumps(prov))
+    hf_export.build(
+        d, "card-template", hf_export.ExportConfig(license="cc-by-4.0"), tmp_path / "out"
+    )
+    card = (tmp_path / "out" / "README.md").read_text()
+    assert "not measured" in card and "kWh" not in card
 
 
 def _round_dir(tmp_path):

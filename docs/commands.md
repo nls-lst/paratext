@@ -11,7 +11,7 @@
 | `paratext new [name]` | Scaffold a new project package |
 | `paratext config [--show]` | Open `paratext.toml`; `--show` prints resolved defaults |
 | `paratext sample` | Symlink a random image subset out of a nested tree |
-| `paratext carbon` | Show current grid carbon/renewables |
+| `paratext carbon` | Grid now and forecast; writes the energy and emissions report |
 | `paratext guide` | Print the agent guide |
 | `paratext skill` | Installs a paratext skill for your coding agent |
 

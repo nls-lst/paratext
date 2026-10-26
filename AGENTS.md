@@ -66,7 +66,7 @@ dataset) → `review` (web UI) → `export` (publish). `run` does extract+packag
 | `catalogue.py` / `hf_export.py` | MARC/DC and Hugging Face exports |
 | `review/server.py` | HTTP layer only; `review/static/` is the vanilla-JS frontend |
 | `cards.py` | Optional scanned-card tools (verso, crop, show-through) |
-| `carbon.py` | Grid-intensity providers for `--green` |
+| `carbon.py` / `meters.py` / `tracking.py` / `report.py` | Grid providers; power sensors; per-run energy sidecars and waiting; `paratext carbon` report |
 
 `store.py` and `datasets.py` are deliberately outside `review/` so exporters can
 read a reviewed round without starting a web server.
@@ -262,8 +262,11 @@ alongside `_api_export_catalogue`.
 - **`paratext.cards`** (verso filter, RetinaNet crop, show-through suppression) is
   **off by default** and calibrated on one library's scans. Never assume it
   transfers to another collection unchanged.
-- **`paratext carbon` / `run --green`** is opt-in carbon-aware scheduling; the grid
-  region is declared in `[carbon]`, never auto-detected. Stdlib `urllib` only.
+- **Carbon.** Every local run is measured from hardware sensors and written to
+  `output/carbon/runs/`; hosted or sensorless runs are `not measured`, never
+  estimated. The grid region is declared in `[carbon]`, never auto-detected, and
+  `wait = true` pauses between records on a dirty grid. `paratext carbon` takes no
+  options and rebuilds the CSV + HTML report. Stdlib only (`urllib`, `ctypes`).
 - **Config keys are kebab-case** (`base-url`), matching the CLI flag that sets
   them. Snake_case still parses so old configs work, but generate kebab-case.
 - **Bump `schema_version`** when a schema changes.

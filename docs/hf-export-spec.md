@@ -216,9 +216,8 @@ Body sections, all populated from data we already track:
    server's `_api_stats` computation).
 4. **Provenance** — paratext version, git commit, schema version, round number,
    extraction date range.
-5. **Environmental provenance** *(if recorded — see below)* — grid zone, average
-   carbon intensity and renewable share during extraction, and whether the run
-   was scheduled to a low-carbon window.
+5. **Environmental provenance** *(if recorded — see below)* — the run's measured
+   energy, emissions, grid zone and renewable share, or "not measured".
 6. **Rights & license** — the configured license + a rights statement the
    operator must set. Blank-by-design for public until filled.
 7. **Limitations** — collection scope, single-institution, model biases.
@@ -229,18 +228,10 @@ Body sections, all populated from data we already track:
 This ties the two features together and answers "is the card the right place?" —
 **yes, the dataset card.** Plan:
 
-- At **extract** time, if a carbon provider is configured, record a reading into
-  the JSONL `_provenance` header alongside model/prompt/commit:
-  `energy = {provider, zone, carbon_gco2, renewable_fraction, ts,
-  scheduled_window: bool}`.
-- On **export**, aggregate `energy` across the round's source run(s) → the card's
-  "Environmental provenance" section ("Produced on the GB grid at avg 78%
-  renewable / 120 gCO₂·kWh⁻¹, Carbon Intensity API; scheduled to greenest 2h
-  window"). If no reading exists, the section is omitted.
-
-**Implemented:** `run --green` (see `carbon.py`) records this `energy` block into
-provenance, and the export card renders an "Environmental provenance" section
-when present; absent otherwise.
+**Implemented** (see [Carbon](carbon.md)): every local extract is measured into a
+sidecar under `output/carbon/runs/`; `package` copies the run's totals into the
+round's `provenance.json` as `carbon`, and the card renders them — kWh, Wh per
+record, gCO₂e, zone, renewable share, pauses — or says the run was not measured.
 
 ### Grid zone: sub-national precision, declare-don't-detect
 
@@ -251,8 +242,8 @@ Scotland and South Scotland are separate) via `/regional/regionid/{id}` or
 `/regional/postcode/{outcode}` (e.g. `EH`) — so we can and should pin the region.
 
 There's no reliable way to auto-detect whether a `base-url` is local (the same
-box is `localhost:8000` and `api.ai.nls.uk`), so carbon-aware is opt-in by
-declaring the region in config:
+box is `localhost:8000` and `api.ai.nls.uk`), so emissions are only computed
+once the region is declared in config:
 
 ```toml
 [carbon]
