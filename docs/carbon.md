@@ -14,8 +14,9 @@ Grid      South Scotland: 84% renewable, 0 gCO2/kWh, very low
 Waiting   on, for ≥70% renewable — runs would go ahead
 Forecast  ▇▇▇▇████████████████████████▇▇▇█▇▇  84–90% renewable, clean for 48 of the next 48h
 
-Report    /path/to/output/carbon/carbon.html
-          output/carbon/carbon.csv  (12 run(s))
+Report    rebuilt from 12 runs
+          /path/to/output/carbon/carbon.html
+          /path/to/output/carbon/carbon.csv
 ```
 
 There are no subcommands and no options. Every call rebuilds the report in full:

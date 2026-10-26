@@ -433,7 +433,9 @@ def _cmd_carbon(args: argparse.Namespace) -> int:
         except (Exception, SystemExit) as e:
             print(f"Grid      reading failed: {e}")
     csv_path, html_path, n = report.build()
-    print(f"\nReport    {html_path.resolve()}\n          {csv_path}  ({n} run(s))")
+    runs = f"{n} run" if n == 1 else f"{n} runs"
+    print(f"\nReport    rebuilt from {runs}\n          {html_path.resolve()}\n"
+          f"          {csv_path.resolve()}")
     return 0
 
 
