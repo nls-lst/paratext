@@ -12,12 +12,24 @@ paratext carbon
 Meter     amdgpu-apu (CPU + GPU socket power)
 Grid      South Scotland: 84% renewable, 0 gCO2/kWh, very low
 Waiting   on, for ≥70% renewable — runs would go ahead
-Forecast  ▇▇▇▇████████████████████████▇▇▇█▇▇  84–90% renewable, clean for 48 of the next 48h
+Forecast  clean for all of the next 48h (84–90% renewable)
 
 Report    rebuilt from 12 runs
           /path/to/output/carbon/carbon.html
           /path/to/output/carbon/carbon.csv
 ```
+
+On a day with dirty spells, the forecast names them and adds a chart of the next
+48 hours:
+
+```
+Forecast  runs would pause 17:00–21:30 and Wed 16:30–20:00 (8h of the next 48h; 50–90% renewable)
+          █████████▅▅▅▅▆██████████████████▆▅▅▅████████████
+          now 12:00       Wed         12:00       Thu
+```
+
+If the grid is dirty right now, the `Waiting` line says when it's due to be clean
+again.
 
 There are no subcommands and no options. Every call rebuilds the report in full:
 
