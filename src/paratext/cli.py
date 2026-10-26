@@ -6,7 +6,7 @@ Subcommands:
     package     Convert JSONL into a review dataset (samples.json + images/).
     review      Launch the local web UI to review a packaged dataset.
     export      Publish a reviewed round as a Hugging Face dataset.
-    carbon      Show current grid carbon/renewables (for --green scheduling).
+    carbon      Grid now and forecast; write the energy and emissions report.
     sample      Build a random N-image subset of a source directory (helper).
     config      Open the config file (``--show`` prints the resolved defaults).
     new         Scaffold a new project package (interactive).
@@ -191,19 +191,6 @@ def _do_extract(args: argparse.Namespace) -> None:
     output = args.output or Path("output") / f"{args.project}.jsonl"
     args.output = output  # so callers (e.g. `run`) see the resolved path
 
-    # Carbon-aware gating: block until the grid is clean, and stamp the reading
-    # into provenance so `export` can report it.
-    energy = None
-    if getattr(args, "green", False):
-        from . import carbon
-
-        cfg = carbon.load_config(
-            min_renewable=getattr(args, "renewables_above", None),
-            max_carbon=getattr(args, "max_carbon", None),
-        )
-        reading = carbon.wait_for_clean(cfg)
-        energy = reading.to_provenance(scheduled_window=cfg.mode == "window")
-
     run_extract(
         get_project(args.project),
         source=Path(args.source),
@@ -214,7 +201,6 @@ def _do_extract(args: argparse.Namespace) -> None:
         limit=args.limit,
         use_structured=not args.no_structured,
         skip_preflight=args.skip_preflight,
-        energy=energy,
         max_tokens=getattr(args, "max_tokens", None),
         extra_body=config_extra_body(args.project),
         re_extract=args.re_extract,
@@ -405,27 +391,49 @@ def _cmd_export(args: argparse.Namespace) -> int:
 
 
 # ── Carbon ────────────────────────────────────────────────────────────────
-def _cmd_carbon(args: argparse.Namespace) -> int:
-    from . import carbon
+_SPARK = "▁▂▃▄▅▆▇█"
 
-    cfg = carbon.load_config(
-        min_renewable=args.renewables_above, max_carbon=args.max_carbon
-    )
-    if args.window:
-        forecast = carbon.forecast_for(cfg, cfg.window_hours)
-        if not forecast:
-            raise SystemExit(
-                f"provider {cfg.provider!r} has no free forecast (try uk / energy-charts)"
-            )
-        block = max(1, round(cfg.window_run_hours * 60 / carbon._period_minutes(cfg)))
-        i, _ = carbon.cleanest_window(forecast, block)
-        print(f"Now:  {carbon.current_reading(cfg).summary()}")
-        print(f"Greenest {cfg.window_run_hours:g}h window in next {cfg.window_hours}h: "
-              f"{forecast[i].summary()} starting {forecast[i].ts}")
-        return 0
-    r = carbon.current_reading(cfg)
-    print(r.summary())
-    print(f"Target: {cfg.target_str()} — {'MET ✓' if cfg.is_clean(r) else 'not met'}")
+
+def _forecast_line(cfg, series) -> str:
+    """One line for the forecast: a renewables sparkline and the clean hours."""
+    vals = [r.renewable_fraction for r in series if r.renewable_fraction is not None]
+    if not vals:
+        return "no renewables in the forecast"
+    step = max(1, len(vals) // 48)
+    pts = [sum(vals[i:i + step]) / len(vals[i:i + step]) for i in range(0, len(vals), step)]
+    spark = "".join(_SPARK[min(int(v * len(_SPARK)), len(_SPARK) - 1)] for v in pts)
+    hours = len(vals) * cfg.period_minutes / 60
+    clean = sum(cfg.is_clean(r) for r in series) * cfg.period_minutes / 60
+    lo, hi = min(vals) * 100, max(vals) * 100
+    return (f"{spark}  {lo:.0f}–{hi:.0f}% renewable, "
+            f"clean for {clean:.0f} of the next {hours:.0f}h")
+
+
+def _cmd_carbon(args: argparse.Namespace) -> int:
+    from . import carbon, meters, report
+
+    cfg = carbon.load_config()
+    meter, why = meters.detect()
+    print(f"Meter     {why if meter else 'none — runs here are not measured: ' + why}")
+    if not cfg.declared:
+        print("Grid      not declared — add a [carbon] region to compute emissions "
+              "(`paratext config --suggest-region` proposes one)")
+    else:
+        try:
+            r = carbon.current_reading(cfg)
+            print(f"Grid      {r.summary()}")
+            if cfg.wait:
+                now = "runs would go ahead" if cfg.is_clean(r) else "runs would pause"
+                print(f"Waiting   on, for {cfg.target_str()} — {now}")
+            else:
+                print("Waiting   off — set `wait = true` under [carbon] to pause on a dirty grid")
+            series = carbon.forecast(cfg, 48)
+            if series:
+                print(f"Forecast  {_forecast_line(cfg, series)}")
+        except (Exception, SystemExit) as e:
+            print(f"Grid      reading failed: {e}")
+    csv_path, html_path, n = report.build()
+    print(f"\nReport    {html_path.resolve()}\n          {csv_path}  ({n} run(s))")
     return 0
 
 
@@ -601,7 +609,7 @@ def _cmd_config(args: argparse.Namespace) -> int:
         import sys
 
         if sys.stdin.isatty():
-            ans = input("Detect your electricity grid region for greener scheduling? [y/N] ")
+            ans = input("Detect your electricity grid region for emissions reporting? [y/N] ")
             if ans.strip().lower() in ("y", "yes"):
                 try:
                     _suggest_carbon_region()
@@ -736,12 +744,6 @@ def _add_extract_args(p: argparse.ArgumentParser) -> None:
     )
     p.add_argument("--skip-preflight", action="store_true", default=None,
                    help="Skip the endpoint reachability/model check")
-    p.add_argument("--green", action="store_true", default=None,
-                   help="Wait for a clean grid before extracting (see [carbon] config)")
-    p.add_argument("--renewables-above", type=float, default=None, metavar="PCT",
-                   help="With --green: wait until renewables ≥ PCT%% (overrides config)")
-    p.add_argument("--max-carbon", type=float, default=None, metavar="GCO2",
-                   help="With --green: wait until intensity ≤ GCO2 gCO2/kWh (overrides config)")
 
 
 def _build_parser() -> tuple[
@@ -851,13 +853,8 @@ def _build_parser() -> tuple[
     ins.add_argument("--json", action="store_true", help="Emit JSON instead of a text summary")
     ins.set_defaults(func=_cmd_inspect)
 
-    cb = sub.add_parser("carbon", help="Show current grid carbon/renewables (see [carbon] config)")
-    cb.add_argument("--window", action="store_true",
-                    help="Show the greenest forecast window instead of the current reading")
-    cb.add_argument("--renewables-above", type=float, default=None, metavar="PCT",
-                    help="Renewables threshold to test against (overrides config)")
-    cb.add_argument("--max-carbon", type=float, default=None, metavar="GCO2",
-                    help="Carbon-intensity threshold to test against (overrides config)")
+    cb = sub.add_parser("carbon", help="Grid now and forecast; write the energy and "
+                                       "emissions report (see [carbon] config)")
     cb.set_defaults(func=_cmd_carbon)
 
     s = sub.add_parser("sample", help="Symlink a random subset of a nested image tree")

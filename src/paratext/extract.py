@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 from openai import OpenAI
@@ -22,6 +23,7 @@ from .io import (
 )
 from .projects import Project
 from .runner import DEFAULT_MAX_TOKENS, call_plain, call_structured
+from .tracking import Tracker
 
 logger = logging.getLogger(__name__)
 
@@ -116,16 +118,17 @@ def run(
     limit: int | None = None,
     use_structured: bool = True,
     skip_preflight: bool = False,
-    energy: dict | None = None,
     max_tokens: int | None = None,
     extra_body: dict | None = None,
     re_extract: bool = False,
+    track: bool = True,
 ) -> None:
     """Execute the extraction pipeline and write JSONL to `output`.
 
     Resume keys on sample id, so an existing `output` is topped up rather than
     redone. `re_extract` discards it instead — needed when the prompt or model
-    changed, since those records answer a different question.
+    changed, since those records answer a different question. `track` measures
+    the run's energy and emissions (see `tracking.py`).
     """
     if not skip_preflight:
         preflight_check(base_url)
@@ -150,8 +153,6 @@ def run(
         "base_url": base_url,
         "max_tokens": max_tokens,
     }
-    if energy is not None:
-        header["energy"] = energy  # carbon reading captured by --green gating
 
     _guard_stale_output(Path(output), header, project.name, re_extract)
     write_provenance_header(output, header)
@@ -159,6 +160,25 @@ def run(
     if seen:
         logger.info("Resuming run — skipping %d already-processed sample(s)", len(seen))
 
+    tracker = (
+        Tracker(Path(output), project=project.name, model=model, base_url=base_url)
+        if track else None
+    )
+    with tracker or nullcontext():
+        attempted, succeeded, last_error = _loop(
+            project, source, output, limit, seen, tracker, client, model, use_structured,
+            extra_body, max_tokens,
+        )
+
+    _report_failures(attempted, succeeded, last_error, Path(output))
+
+    for notice in getattr(project.source, "notices", []):
+        logger.warning("%s", notice)
+        print(f"\n!  {notice}")
+
+
+def _loop(project, source, output, limit, seen, tracker, client, model, use_structured,
+          extra_body, max_tokens) -> tuple[int, int, str]:
     attempted = succeeded = 0
     last_error = ""
     for sample in tqdm(project.iter_samples(source, limit), unit="sample"):
@@ -179,7 +199,11 @@ def run(
                 },
             )
             succeeded += 1
+            if tracker:
+                tracker.record()
             continue
+        if tracker:
+            tracker.wait_if_dirty()
         t0 = time.monotonic()
         try:
             if use_structured:
@@ -224,9 +248,6 @@ def run(
         }
         append_jsonl(output, record)
         succeeded += 1
-
-    _report_failures(attempted, succeeded, last_error, Path(output))
-
-    for notice in getattr(project.source, "notices", []):
-        logger.warning("%s", notice)
-        print(f"\n!  {notice}")
+        if tracker:
+            tracker.record()
+    return attempted, succeeded, last_error

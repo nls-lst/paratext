@@ -130,7 +130,7 @@ def _extract_args(**over):
 
     base = dict(project="card-template", source="/nonexistent", model="m",
                 base_url="http://localhost:8000/v1", api_key="EMPTY", output=None,
-                limit=None, no_structured=False, skip_preflight=True, green=False)
+                limit=None, no_structured=False, skip_preflight=True)
     base.update(over)
     return argparse.Namespace(**base)
 

@@ -262,6 +262,36 @@ def _schema_json(project: str, dataset_dir) -> dict:
         }
 
 
+def _carbon_section(c: dict | None) -> str:
+    """The card's energy paragraph, from the run totals `package` recorded."""
+    if not c:
+        return ""
+    head = "\n## Environmental provenance\n\n"
+    if c.get("kwh") is None:
+        return head + (
+            f"Extraction of {c.get('records', 0):,} record(s) was **not measured**: the "
+            f"model ran on a hosted endpoint, or the machine had no power sensor. paratext "
+            f"does not estimate energy.\n"
+        )
+    bits = [f"**{c['kwh']:.3f} kWh** for {c.get('records', 0):,} record(s)"]
+    if c.get("wh_per_record") is not None:
+        bits.append(f"{c['wh_per_record']:.2f} Wh per record")
+    text = "Extraction used " + ", ".join(bits) + f", measured by `{c.get('meter')}`"
+    if c.get("overhead") not in (None, "", "1"):
+        text += f" with an overhead factor of {c['overhead']}"
+    text += "."
+    if c.get("gco2e") is not None:
+        text += (f" Emissions were **{c['gco2e']:.1f} gCO₂e** (location-based, "
+                 f"{c.get('zone') or 'declared'} grid, {c.get('intensity_basis') or 'n/a'} "
+                 f"intensity)")
+        if c.get("renewable_share") is not None:
+            text += f", with the grid at {c['renewable_share'] * 100:.0f}% renewable"
+        text += "."
+    if c.get("hours_paused"):
+        text += f" The run paused {c['hours_paused']:.1f}h for a dirty grid."
+    return head + text + "\n"
+
+
 def _dataset_card(
     project: str, cfg: ExportConfig, provenance: dict, stats: dict, n_gold: int,
     n_verified: int = 0, n_corrected: int = 0, dataset_dir=None,
@@ -308,22 +338,7 @@ def _dataset_card(
     acc_str = f"{acc:.1f}%" if acc is not None else "n/a"
     prompt = provenance.get("prompt", "")
 
-    energy = provenance.get("energy")
-    energy_section = ""
-    if energy:
-        bits = []
-        if energy.get("renewable_fraction") is not None:
-            bits.append(f"{energy['renewable_fraction'] * 100:.0f}% renewable")
-        if energy.get("carbon_gco2") is not None:
-            bits.append(f"{energy['carbon_gco2']:.0f} gCO₂/kWh")
-        summary = ", ".join(bits) or "recorded"
-        sched = " (scheduled to a low-carbon window)" if energy.get("scheduled_window") else ""
-        energy_section = (
-            f"\n## Environmental provenance\n\n"
-            f"Extraction ran on the **{energy.get('zone', 'unknown')}** grid at "
-            f"{summary}{sched}, per the {energy.get('provider', 'carbon')} data "
-            f"({energy.get('ts', 'n/a')}).\n"
-        )
+    energy_section = _carbon_section(provenance.get("carbon"))
 
     body = f"""# {pretty}
 

@@ -125,7 +125,7 @@ Some features have their own config table:
 
 - `[project.<name>.export]` and `[project.<name>.export.marc|dc]` — field mapping, licence, and the opt-in `ai-note` provenance note; see [Export](export.md)
 - `[detector]` — see [Scanned cards](scanned-cards.md)
-- `[carbon]` — see [Green scheduling](green-scheduling.md)
+- `[carbon]` — see [Carbon](carbon.md)
 
 ## Environment variables
 
