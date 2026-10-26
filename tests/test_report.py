@@ -60,3 +60,17 @@ def test_carbon_command_writes_the_report(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "not declared" in out and "Report" in out
     assert (report.REPORT_DIR / "carbon.html").is_file()
+
+
+def test_forecast_section_shades_dirty_spells(tmp_path):
+    from paratext import carbon
+    vals = [0.9] * 10 + [0.5] * 4 + [0.9] * 10
+    series = [carbon.Reading("uk", "South Scotland", 10, v, None,
+                             f"2026-10-27T{8 + i // 2:02d}:{30 * (i % 2):02d}Z")
+              for i, v in enumerate(vals)]
+    _, html_path, _ = report.build(tmp_path / "none", tmp_path / "rep", forecast=series)
+    page = html_path.read_text()
+    assert "Grid forecast" in page and "70% threshold" in page
+    assert "for 2 of the next 12 hours" in page and page.count('class="pause"') == 1
+    _, html_path, _ = report.build(tmp_path / "none", tmp_path / "rep")
+    assert "Grid forecast" not in html_path.read_text()
