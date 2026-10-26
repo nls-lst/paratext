@@ -470,6 +470,7 @@ def _cmd_carbon(args: argparse.Namespace) -> int:
     from . import carbon, meters, report
 
     cfg = carbon.load_config()
+    series: list = []
     meter, why = meters.detect()
     print(f"Meter     {why if meter else 'none — runs here are not measured: ' + why}")
     if not cfg.declared:
@@ -498,7 +499,7 @@ def _cmd_carbon(args: argparse.Namespace) -> int:
                 print("Forecast  " + "\n          ".join(lines))
         except (Exception, SystemExit) as e:
             print(f"Grid      reading failed: {e}")
-    csv_path, html_path, n = report.build()
+    csv_path, html_path, n = report.build(forecast=series, min_renewable=cfg.min_renewable)
     runs = f"{n} run" if n == 1 else f"{n} runs"
     print(f"\nReport    rebuilt from {runs}\n          {html_path.resolve()}\n"
           f"          {csv_path.resolve()}")

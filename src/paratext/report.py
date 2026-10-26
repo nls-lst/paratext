@@ -121,13 +121,17 @@ def write_csv(runs: list[Run], path: Path) -> None:
             w.writerow({k: ("" if v is None else v) for k, v in r.row().items()})
 
 
-def build(runs_dir: Path | None = None, out_dir: Path | None = None) -> tuple[Path, Path, int]:
-    """Write carbon.csv and carbon.html. Returns (csv, html, number of runs)."""
+def build(runs_dir: Path | None = None, out_dir: Path | None = None, *,
+          forecast: list | None = None, min_renewable: float = 70
+          ) -> tuple[Path, Path, int]:
+    """Write carbon.csv and carbon.html. Returns (csv, html, number of runs).
+
+    `forecast` is the grid's Readings for the next hours, drawn when given."""
     out = out_dir or REPORT_DIR
     runs = collect(runs_dir)
     csv_path, html_path = out / "carbon.csv", out / "carbon.html"
     write_csv(runs, csv_path)
-    html_path.write_text(render_html(runs))
+    html_path.write_text(render_html(runs, forecast, min_renewable))
     return csv_path, html_path, len(runs)
 
 
@@ -281,7 +285,8 @@ def _clip(s: str, n: int) -> str:
 
 def timeline(points: list[tuple[datetime, float]], t0: datetime, t1: datetime, unit: str,
              label: str, pauses: list[tuple[datetime, datetime]], vmax: float | None = None,
-             area: bool = False, step: bool = False) -> str:
+             area: bool = False, step: bool = False, threshold: float | None = None,
+             shade_title: str = "Paused for a dirty grid") -> str:
     if len(points) < 2 or t1 <= t0:
         return '<p class="empty">Not enough data in this run yet.</p>'
     vmax = vmax or _nice_max(max(v for _, v in points))
@@ -299,8 +304,13 @@ def timeline(points: list[tuple[datetime, float]], t0: datetime, t1: datetime, u
         xa, _ = xy(max(a, t0), 0)
         xb, _ = xy(min(b, t1), 0)
         out.append(f'<rect class="pause" x="{xa:.1f}" y="{PAD_T}" width="{max(xb - xa, 1):.1f}" '
-                   f'height="{plot_h}"><title>Paused for a dirty grid</title></rect>')
+                   f'height="{plot_h}"><title>{_e(shade_title)}</title></rect>')
     out += _frame(vmax, unit)
+    if threshold is not None:
+        _, ty = xy(t0, threshold)
+        out.append(f'<line class="threshold" x1="{PAD_L}" x2="{W - PAD_R}" y1="{ty:.1f}" '
+                   f'y2="{ty:.1f}"/><text class="tick" x="{W - PAD_R - 4}" y="{ty - 5:.1f}" '
+                   f'text-anchor="end">{_e(_tick(threshold, unit))} threshold</text>')
     coords = []
     for i, (t, v) in enumerate(points):
         x, y = xy(t, v)
@@ -349,7 +359,8 @@ def _legend(colors: dict[str, int]) -> str:
     return f'<div class="legend">{items}</div>'
 
 
-def render_html(runs: list[Run]) -> str:
+def render_html(runs: list[Run], forecast: list | None = None,
+                min_renewable: float = 70) -> str:
     rows = [r.row() for r in runs]
     measured = [r for r in runs if r.measured]
     colors = _colors([r.project for r in runs])
@@ -421,10 +432,41 @@ def render_html(runs: list[Run]) -> str:
                    '<code>[carbon]</code> to compute them.</p>'),
         efficiency=hbars(eff, " Wh", "Energy per record"),
         latest=latest_html,
+        forecast=_forecast(forecast, min_renewable),
         table_rows=table_rows or '<tr><td colspan="10">No runs yet.</td></tr>',
         css=_CSS,
         data=json.dumps(rows).replace("</", "<\\/"),
     )
+
+
+def _forecast(series: list | None, min_renewable: float) -> str:
+    """The grid's next hours: renewables against the threshold, dirty spells shaded."""
+    pts = [(t, r.renewable_fraction * 100) for r in series or []
+           if r.renewable_fraction is not None and (t := parse_ts(r.ts))]
+    if len(pts) < 2:
+        return ""
+    step = pts[1][0] - pts[0][0]
+    t0, t1 = pts[0][0], pts[-1][0] + step
+    dirty: list[tuple[datetime, datetime]] = []
+    for t, v in pts:
+        if v >= min_renewable:
+            continue
+        if dirty and dirty[-1][1] == t:
+            dirty[-1] = (dirty[-1][0], t + step)
+        else:
+            dirty.append((t, t + step))
+    hours = (t1 - t0).total_seconds() / 3600
+    dirty_h = sum((b - a).total_seconds() for a, b in dirty) / 3600
+    zone = series[0].zone
+    words = (f"Clean for all of the next {hours:.0f} hours." if not dirty else
+             f"Below {min_renewable:.0f}% renewable for {dirty_h:.0f} of the next "
+             f"{hours:.0f} hours (shaded). Runs with <code>wait = true</code> would pause "
+             f"then.")
+    chart = timeline(pts, t0, t1, "%", "Grid renewables forecast", dirty, vmax=100, area=True,
+                     step=True, threshold=min_renewable,
+                     shade_title=f"Below {min_renewable:.0f}% renewable")
+    return (f'<h2>Grid forecast</h2><p class="muted">{_e(zone)}, from when this report was '
+            f'generated. Times in UTC. {words}</p><div class="card">{chart}</div>')
 
 
 def _latest(run: Run) -> str:
@@ -488,7 +530,8 @@ svg{width:100%;height:auto;display:block}
 .label{fill:var(--ink2);font-size:12px}.value{fill:var(--ink);font-size:12px;font-weight:600}
 .line{fill:none;stroke:var(--s1);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
 .wash{fill:var(--s1);opacity:.1}.dot{fill:var(--s1);stroke:var(--surface);stroke-width:2}
-.pause{fill:var(--muted);opacity:.12}.hit{fill:transparent}
+.pause{fill:var(--muted);opacity:.12}
+.threshold{stroke:var(--ink2);stroke-width:1;stroke-dasharray:4 3}.hit{fill:transparent}
 .hit:hover{fill:var(--ink);opacity:.05}
 path.s1{fill:var(--s1)}path.s2{fill:var(--s2)}path.s3{fill:var(--s3)}path.s4{fill:var(--s4)}
 path.s5{fill:var(--s5)}path.s6{fill:var(--s6)}path.s7{fill:var(--s7)}path.s8{fill:var(--s8)}
@@ -515,6 +558,7 @@ _PAGE = """<!doctype html>
 <p class="muted">Energy and emissions of paratext runs. Generated {generated}.</p>
 <div class="tiles">{tiles}</div>
 {note}
+{forecast}
 <h2>Energy by month</h2>
 <div class="card">{legend}{energy}</div>
 <h2>Emissions by month</h2>
