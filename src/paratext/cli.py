@@ -25,6 +25,7 @@ import os
 import random
 import re
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from . import __version__
@@ -394,19 +395,75 @@ def _cmd_export(args: argparse.Namespace) -> int:
 _SPARK = "▁▂▃▄▅▆▇█"
 
 
-def _forecast_line(cfg, series) -> str:
-    """One line for the forecast: a renewables sparkline and the clean hours."""
-    vals = [r.renewable_fraction for r in series if r.renewable_fraction is not None]
-    if not vals:
-        return "no renewables in the forecast"
-    step = max(1, len(vals) // 48)
-    pts = [sum(vals[i:i + step]) / len(vals[i:i + step]) for i in range(0, len(vals), step)]
-    spark = "".join(_SPARK[min(int(v * len(_SPARK)), len(_SPARK) - 1)] for v in pts)
-    hours = len(vals) * cfg.period_minutes / 60
-    clean = sum(cfg.is_clean(r) for r in series) * cfg.period_minutes / 60
-    lo, hi = min(vals) * 100, max(vals) * 100
-    return (f"{spark}  {lo:.0f}–{hi:.0f}% renewable, "
-            f"clean for {clean:.0f} of the next {hours:.0f}h")
+def _local(r) -> datetime | None:
+    from .carbon import parse_ts
+
+    t = parse_ts(r.ts)
+    return t.astimezone() if t else None
+
+
+def _when(t: datetime, now: datetime) -> str:
+    return t.strftime("%H:%M") if t.date() == now.date() else t.strftime("%a %H:%M")
+
+
+def _dirty_spans(cfg, series) -> list[tuple[datetime, datetime | None]]:
+    """Runs of below-threshold intervals as (start, end); end is None past the forecast."""
+    spans: list[list] = []
+    for r in series:
+        t = _local(r)
+        if t is None:
+            continue
+        if not cfg.is_clean(r):
+            if spans and spans[-1][1] is None:
+                continue
+            spans.append([t, None])
+        elif spans and spans[-1][1] is None:
+            spans[-1][1] = t
+    return [(a, b) for a, b in spans]
+
+
+def _forecast_lines(cfg, series, now: datetime | None = None) -> list[str]:
+    """The forecast in words first; bars and a time axis only when there's a dip."""
+    series = [r for r in series if r.renewable_fraction is not None and _local(r)]
+    if not series:
+        return ["no renewables in the forecast"]
+    now = now or datetime.now().astimezone()
+    vals = [r.renewable_fraction for r in series]
+    hours = len(series) * cfg.period_minutes / 60
+    rng = f"{min(vals) * 100:.0f}–{max(vals) * 100:.0f}% renewable"
+    spans = _dirty_spans(cfg, series)
+    if not spans:
+        return [f"clean for all of the next {hours:.0f}h ({rng})"]
+
+    def span(a, b):
+        return f"from {_when(a, now)}" if b is None else f"{_when(a, now)}–{_when(b, a)}"
+
+    dirty = sum(not cfg.is_clean(r) for r in series) * cfg.period_minutes / 60
+    shown = [span(a, b) for a, b in spans[:3]]
+    if len(spans) > 3:
+        shown.append(f"{len(spans) - 3} more")
+    lead = "runs would pause" if cfg.wait else f"below {cfg.min_renewable:.0f}% renewable"
+    text = " and ".join([", ".join(shown[:-1]), shown[-1]] if len(shown) > 1 else shown)
+    head = f"{lead} {text} ({dirty:.0f}h of the next {hours:.0f}h; {rng})"
+
+    step = max(1, len(series) // 48)
+    cols = [series[i:i + step] for i in range(0, len(series), step)]
+    bars = "".join(
+        _SPARK[min(int(sum(r.renewable_fraction for r in c) / len(c) * len(_SPARK)),
+                   len(_SPARK) - 1)] for c in cols)
+    axis = [" "] * len(cols)
+
+    def put(i, label):
+        free = axis[max(0, i - 1):i + len(label)]
+        if i + len(label) <= len(axis) and all(ch == " " for ch in free):
+            axis[i:i + len(label)] = label
+
+    put(0, "now")
+    for i, c in enumerate(cols):
+        t = _local(c[0])
+        if t.minute == 0 and t.hour in (0, 12):
+            put(i, t.strftime("%a") if t.hour == 0 else "12:00")
+    return [head, bars, "".join(axis).rstrip()]
 
 
 def _cmd_carbon(args: argparse.Namespace) -> int:
@@ -422,14 +479,23 @@ def _cmd_carbon(args: argparse.Namespace) -> int:
         try:
             r = carbon.current_reading(cfg)
             print(f"Grid      {r.summary()}")
+            series = carbon.forecast(cfg, 48) or []
             if cfg.wait:
-                now = "runs would go ahead" if cfg.is_clean(r) else "runs would pause"
+                if cfg.is_clean(r):
+                    now = "runs would go ahead"
+                else:
+                    now = "runs would pause"
+                    t_now = datetime.now().astimezone()
+                    back = next((t for x in series if (t := _local(x)) and t > t_now
+                                 and cfg.is_clean(x)), None)
+                    if back:
+                        now += f"; clean again from {_when(back, t_now)}"
                 print(f"Waiting   on, for {cfg.target_str()} — {now}")
             else:
                 print("Waiting   off — set `wait = true` under [carbon] to pause on a dirty grid")
-            series = carbon.forecast(cfg, 48)
             if series:
-                print(f"Forecast  {_forecast_line(cfg, series)}")
+                lines = _forecast_lines(cfg, series)
+                print("Forecast  " + "\n          ".join(lines))
         except (Exception, SystemExit) as e:
             print(f"Grid      reading failed: {e}")
     csv_path, html_path, n = report.build()
