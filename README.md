@@ -22,6 +22,13 @@ provenance, package it for review, and export the approved results. Each
 **project** is a self-contained module, with its own prompt, schema and input
 handling, so the same code path runs a 50-item pilot and a 250,000-item sweep.
 
+Every run on your own hardware records the electricity it used and what that
+emitted on your local grid, read from the machine's power sensors. Nothing is
+estimated: a run on a hosted model says "not measured". `paratext carbon` turns
+these figures into a report you can use in sustainability reporting. Runs can
+also pause while the grid is short of renewable power. See
+[Carbon](docs/carbon.md).
+
 ## What you'll need
 
 - **Your material:** a directory of images, PDFs or video (video needs
@@ -78,6 +85,10 @@ preprocessing applied, and whether schema, prompt and view still agree. It
 describes what is **installed** — so if it disagrees with the files you're
 editing, the package needs reinstalling. That mismatch is the most common cause
 of "my change did nothing".
+
+`paratext carbon` shows the energy your runs used, with no setup needed. To add
+emissions, name your grid region in a `[carbon]` table in `paratext.toml`;
+`paratext config --suggest-region` proposes one for you to check.
 
 ## Docs
 
