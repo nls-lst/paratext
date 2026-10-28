@@ -426,17 +426,11 @@ def run_report(run: Run) -> wordfile.Doc:
                 _source_chart([f"{_day(b['t'])} {_hm(b['t'])}" for b in blocks],
                               [b["wh"] for b in blocks], unit, scale,
                               math.ceil(len(blocks) / 8)), 17, 6))
-    paused = row["hours_paused"]
-    wait = next((s.get("wait") for s in segs if "wait" in s), None)
-    thr = next((s.get("min_renewable") for s in segs if s.get("min_renewable")), 70)
     notes = sorted({s.get("meter_note") or s.get("meter") or "" for s in run.measured} - {""})
     details = [
         ["Output", run.doc.get("output", "")],
         ["Model", run.doc.get("model", "")],
         ["Sessions", f"{len(segs)}"],
-        ["Waiting", (f"on, for ≥{thr:g}% renewable · "
-                     + (f"paused {paused:g} h" if paused else "never paused") if wait
-                     else "off")],
         ["Meter", " + ".join(notes) or "not measured"],
         ["Grid", " · ".join(x for x in (row["zone"], _provider(segs), row["intensity_basis"])
                             if x) or "not declared"],
