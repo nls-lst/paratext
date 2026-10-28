@@ -99,6 +99,9 @@ records but no energy, when:
   loopback address), because this machine's sensors can't see it; or
 - the machine has no readable sensor.
 
+These runs are listed in `carbon.csv` with their records, but get no report, since
+there would be nothing in it.
+
 **Overhead.** Sensors see the processor, not disks, fans or power-supply losses.
 If your site applies a factor for those, set `overhead`; it's recorded with every
 run and shown in the report.
