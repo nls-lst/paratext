@@ -38,9 +38,9 @@ There are no subcommands and no options. Every call rebuilds the report in full:
   paused, and how it was measured. Filter it in a spreadsheet for a financial year
   or a single project.
 - **`output/carbon/carbon.html`**: a single page with headline figures, the grid
-  forecast for the next 48 hours, energy and emissions by month, energy per record by project and model, a timeline of the
-  latest run, the runs table, and a method section. It works offline and prints
-  cleanly.
+  mix now and for the next 48 hours, the latest run's power and grid, energy and
+  emissions by month, energy per record by project and model, the runs table, and
+  a short method note. It works offline and prints cleanly.
 
 ## Configuration
 

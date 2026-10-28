@@ -62,15 +62,23 @@ def test_carbon_command_writes_the_report(tmp_path, capsys):
     assert (report.REPORT_DIR / "carbon.html").is_file()
 
 
-def test_forecast_section_shades_dirty_spells(tmp_path):
+def test_grid_section_draws_the_forecast(tmp_path):
     from paratext import carbon
     vals = [0.9] * 10 + [0.5] * 4 + [0.9] * 10
+    mix = {"wind": 60, "gas": 30, "other": 10}
     series = [carbon.Reading("uk", "South Scotland", 10, v, None,
-                             f"2026-10-27T{8 + i // 2:02d}:{30 * (i % 2):02d}Z")
+                             f"2026-10-27T{8 + i // 2:02d}:{30 * (i % 2):02d}Z", mix=mix)
               for i, v in enumerate(vals)]
     _, html_path, _ = report.build(tmp_path / "none", tmp_path / "rep", forecast=series)
     page = html_path.read_text()
-    assert "Grid forecast" in page and "70% threshold" in page
-    assert "for 2 of the next 12 hours" in page and page.count('class="pause"') == 1
+    assert "next 12 hours" in page and page.count('class="col"') == 4
+    assert 'class="thr"' in page and "Imports &amp;amp; other" in page
     _, html_path, _ = report.build(tmp_path / "none", tmp_path / "rep")
-    assert "Grid forecast" not in html_path.read_text()
+    assert "next 12 hours" not in html_path.read_text()
+
+
+def test_run_blocks_weight_renewables_by_energy():
+    seg = _seg("2026-10-27T00:00:00Z", 100)
+    seg["intervals"][0]["renewable_fraction"] = 0.5
+    blocks = report._run_blocks(report.Run({}, [seg]))
+    assert len(blocks) == 3 and blocks[0]["r"] == 50 and blocks[1]["m"]["rest"] == 20
