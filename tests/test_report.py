@@ -44,7 +44,7 @@ def test_rows_csv_and_reports(tmp_path):
                                            _seg("2026-10-28T00:00:00Z", 100, paused=3600)])
     _sidecar(runs_dir, "b", "cards", [_seg("2026-11-02T00:00:00Z", 0, meter=None, records=7)])
     built = report.build(runs_dir, tmp_path / "rep")
-    assert len(built.runs) == 2 and built.rebuilt == 2 and not built.pdf
+    assert built.rebuilt == 1 and not built.pdf
     rows = list(csv.DictReader(built.csv.open()))
     a = next(r for r in rows if r["project"] == "monographs")
     assert a["kwh"] == "0.6" and a["records"] == "200" and a["sessions"] == "2"
@@ -52,14 +52,14 @@ def test_rows_csv_and_reports(tmp_path):
     assert a["clean_share"] == "1.0" and a["hours_paused"] == "1.0"
     b = next(r for r in rows if r["project"] == "cards")
     assert b["meter"] == "not measured" and b["kwh"] == "" and b["records"] == "7"
-    assert sorted(p.name for p in built.projects) == ["cards.docx", "monographs.docx"]
+    assert [p.name for p in built.projects] == ["monographs.docx"]
+    assert [p.name for p in built.runs] == ["a.docx"] and not (runs_dir / "b.docx").exists()
     project = _parts(tmp_path / "rep" / "monographs.docx")
     assert "By month" in project["word/document.xml"].decode()
     charts = [p for p in project if p.startswith("word/charts/chart")]
     assert charts and len(charts) == len([p for p in project if p.startswith("word/embed")])
     run = _parts(runs_dir / "a.docx")["word/document.xml"].decode()
     assert "Where the energy came from" in run and "Waiting" not in run
-    assert "Not measured" in _parts(runs_dir / "b.docx")["word/document.xml"].decode()
 
 
 def test_finished_run_reports_are_not_rebuilt(tmp_path):

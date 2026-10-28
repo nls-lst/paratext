@@ -145,8 +145,8 @@ class Built(NamedTuple):
 def build(runs_dir: Path | None = None, out_dir: Path | None = None) -> Built:
     """Write carbon.csv, a report per project, and a report per run.
 
-    Project reports are rebuilt every time. A run's report is rebuilt only when its
-    sidecar is newer, so finished runs keep their report as it was."""
+    Runs with nothing measured are in the CSV only. Project reports are rebuilt every
+    time; a run's report only when its sidecar is newer."""
     out = out_dir or REPORT_DIR
     runs_dir = runs_dir or tracking.RUNS_DIR
     runs = collect(runs_dir)
@@ -158,10 +158,11 @@ def build(runs_dir: Path | None = None, out_dir: Path | None = None) -> Built:
         by_project[r.project].append(r)
     projects = []
     for name, rs in sorted(by_project.items()):
-        projects.append(project_report(name, rs).save(out / f"{_slug(name)}.docx"))
+        if any(r.measured for r in rs):
+            projects.append(project_report(name, rs).save(out / f"{_slug(name)}.docx"))
     fresh += projects
     run_docs = []
-    for r in runs:
+    for r in (r for r in runs if r.measured):
         path = runs_dir / f"{r.name}.docx"
         if not path.is_file() or path.stat().st_mtime < r.mtime:
             run_report(r).save(path)
@@ -433,26 +434,22 @@ def run_report(run: Run) -> wordfile.Doc:
     doc = W.Doc(f"Carbon report: {run.title}")
     _head(doc, run.title, f"{run.project} · {model_name(run.doc.get('model', ''))}", span)
     doc.add(_stats([row], _renewable([run])))
-    if not run.measured:
-        doc.add(W.para("Not measured: the model ran on a hosted endpoint or the machine "
-                       "has no readable power sensor.", style="Note"))
-    else:
-        doc.add(W.para("Where the energy came from", style="Heading1"),
-                _mix_block(doc, _by_source((wh, iv) for _, wh, _, iv, _ in run.intervals())))
-        blocks, size = _blocks(run)
-        if blocks:
-            every = {0.5: ", averaged every half hour", 1: ""}.get(
-                size, f", averaged every {size:g} hours")
-            unit, scale = _energy_unit(max(sum(b["wh"].values()) for b in blocks))
-            doc.add(W.para(f"Energy per hour{every}", style="Heading2"), doc.chart(
-                _source_chart(_time_labels([b["t"] for b in blocks]),
-                              [b["wh"] for b in blocks], unit, scale), 17, 6))
+    doc.add(W.para("Where the energy came from", style="Heading1"),
+            _mix_block(doc, _by_source((wh, iv) for _, wh, _, iv, _ in run.intervals())))
+    blocks, size = _blocks(run)
+    if blocks:
+        every = {0.5: ", averaged every half hour", 1: ""}.get(
+            size, f", averaged every {size:g} hours")
+        unit, scale = _energy_unit(max(sum(b["wh"].values()) for b in blocks))
+        doc.add(W.para(f"Energy per hour{every}", style="Heading2"), doc.chart(
+            _source_chart(_time_labels([b["t"] for b in blocks]),
+                          [b["wh"] for b in blocks], unit, scale), 17, 6))
     notes = sorted({s.get("meter_note") or s.get("meter") or "" for s in run.measured} - {""})
     details = [
         ["Output", run.doc.get("output", "")],
         ["Model", run.doc.get("model", "")],
         ["Sessions", f"{len(segs)}"],
-        ["Meter", " + ".join(notes) or "not measured"],
+        ["Meter", " + ".join(notes)],
         ["Grid", " · ".join(x for x in (row["zone"], _provider(segs), row["intensity_basis"])
                             if x) or "not declared"],
     ]
