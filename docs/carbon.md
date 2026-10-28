@@ -120,7 +120,7 @@ With `wait = true`, the run checks the grid between records, once per interval.
 While renewables are below `min-renewable` it finishes the current record and
 pauses, then carries on when the grid is clean again. A single pause gives up after
 12 hours and carries on regardless, so a batch can't stall for days. Pauses are
-recorded and shown shaded in the report's timeline.
+recorded, and the project report lists the hours paused for each run.
 
 Waiting only applies to local runs: holding back a hosted run doesn't change which
 grid powers it.
