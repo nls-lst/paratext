@@ -103,3 +103,11 @@ def test_carbon_command_writes_the_report(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "not declared" in out and "Reports" in out
     assert (report.REPORT_DIR / "carbon.csv").is_file()
+
+
+def test_run_chart_is_energy_per_hour(tmp_path):
+    runs_dir = tmp_path / "runs"
+    _sidecar(runs_dir, "a", "monographs", [_seg("2026-10-27T00:00:00Z", 50)])
+    run = report.collect(runs_dir)[0]
+    blocks, size = report._blocks(run)
+    assert size == 0.5 and sum(blocks[0]["wh"].values()) == pytest.approx(100)

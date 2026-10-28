@@ -36,8 +36,8 @@ There are no subcommands and no options. Every call writes:
 
 - **A run report** for each run, `output/carbon/runs/<run>.docx`: one page with
   the run's energy, emissions, records, energy per record and renewable share;
-  where its energy came from (wind, gas and so on); its energy over time, split
-  the same way; and how it was measured. A finished run's report is left as it
+  where its energy came from (wind, gas and so on); its energy per hour over
+  the run, split the same way; and how it was measured. A finished run's report is left as it
   is.
 - **A project report** for each project, `output/carbon/<project>.docx`: one page
   with the project's totals, energy and emissions by month, energy per record by
