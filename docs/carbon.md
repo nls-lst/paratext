@@ -14,9 +14,9 @@ Grid      South Scotland: 84% renewable, 0 gCO2/kWh, very low
 Waiting   on, for ≥70% renewable — runs would go ahead
 Forecast  clean for all of the next 48h (84–90% renewable)
 
-Report    rebuilt from 12 runs
-          /path/to/output/carbon/carbon.docx
-          /path/to/output/carbon/carbon.pdf
+Reports   rebuilt from 12 runs
+          /path/to/output/carbon/monographs.pdf
+          /path/to/output/carbon/runs/monographs-full-c14a23.pdf  (latest run; one per run beside it)
           /path/to/output/carbon/carbon.csv
 ```
 
@@ -32,18 +32,23 @@ Forecast  runs would pause 17:00–21:30 and Wed 16:30–20:00 (8h of the next 4
 If the grid is dirty right now, the `Waiting` line says when it's due to be clean
 again.
 
-There are no subcommands and no options. Every call rebuilds the report in full:
+There are no subcommands and no options. Every call writes:
 
+- **A run report** for each run, `output/carbon/runs/<run>.docx`: one page with
+  the run's energy, emissions, records, energy per record and renewable share;
+  where its energy came from (wind, gas and so on); its energy over time, split
+  the same way; and how it was measured. A finished run's report is left as it
+  is.
+- **A project report** for each project, `output/carbon/<project>.docx`: one page
+  with the project's totals, energy and emissions by month, energy per record by
+  model when there is more than one, and its runs.
 - **`output/carbon/carbon.csv`**: one row per run, with project, model, dates,
   records, kWh, Wh per record, gCO₂e, renewable share, clean-grid share, hours
-  paused, and how it was measured. Filter it in a spreadsheet for a financial year
-  or a single project.
-- **`output/carbon/carbon.docx`**: a Word file with headline figures, the grid
-  mix now and for the next 48 hours, the latest run's power and grid, energy and
-  emissions by month, energy per record by project and model, and the runs table.
-  The charts are Word charts, so you can edit them or paste them into a return.
-- **`output/carbon/carbon.pdf`**: the same report as a PDF. paratext makes it with
-  LibreOffice; without LibreOffice installed, it says so and skips the PDF.
+  paused, and how it was measured. Filter it in a spreadsheet for a financial year.
+
+The charts are Word charts, so you can edit them or paste them into a return.
+Each report also gets a PDF copy when LibreOffice is installed; without it,
+paratext says so and writes the Word files only.
 
 ## Configuration
 

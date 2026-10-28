@@ -369,22 +369,26 @@ _STYLES = (
 )
 
 
-def to_pdf(docx: Path, timeout: float = 180) -> Path | None:
-    """Convert with LibreOffice. None when it isn't installed or the conversion fails."""
+def to_pdf(docxs: list[Path], timeout: float = 300) -> list[Path]:
+    """Convert with LibreOffice, one call per folder. Returns the PDFs made: none
+    when LibreOffice isn't installed."""
     exe = shutil.which("soffice") or shutil.which("libreoffice")
-    if not exe:
-        return None
-    pdf = docx.with_suffix(".pdf")
-    pdf.unlink(missing_ok=True)
+    if not exe or not docxs:
+        return []
+    by_dir: dict[Path, list[Path]] = {}
+    for d in docxs:
+        d.with_suffix(".pdf").unlink(missing_ok=True)
+        by_dir.setdefault(d.parent, []).append(d)
     with tempfile.TemporaryDirectory() as profile:
-        try:
-            subprocess.run(
-                [exe, f"-env:UserInstallation={Path(profile).as_uri()}", "--headless",
-                 "--convert-to", "pdf", "--outdir", str(docx.parent), str(docx)],
-                capture_output=True, timeout=timeout, check=False)
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-    return pdf if pdf.is_file() else None
+        for folder, files in by_dir.items():
+            try:
+                subprocess.run(
+                    [exe, f"-env:UserInstallation={Path(profile).as_uri()}", "--headless",
+                     "--convert-to", "pdf", "--outdir", str(folder), *map(str, files)],
+                    capture_output=True, timeout=timeout, check=False)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+    return [d.with_suffix(".pdf") for d in docxs if d.with_suffix(".pdf").is_file()]
 
 
 def nice_max(v: float) -> float:
