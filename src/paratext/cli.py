@@ -499,9 +499,12 @@ def _cmd_carbon(args: argparse.Namespace) -> int:
                 print("Forecast  " + "\n          ".join(lines))
         except (Exception, SystemExit) as e:
             print(f"Grid      reading failed: {e}")
-    csv_path, html_path, n = report.build(forecast=series, min_renewable=cfg.min_renewable)
+    csv_path, docx_path, pdf_path, n = report.build(forecast=series,
+                                                    min_renewable=cfg.min_renewable)
     runs = f"{n} run" if n == 1 else f"{n} runs"
-    print(f"\nReport    rebuilt from {runs}\n          {html_path.resolve()}\n"
+    pdf = (f"          {pdf_path.resolve()}\n" if pdf_path else
+           "          no PDF: install LibreOffice to get one\n")
+    print(f"\nReport    rebuilt from {runs}\n          {docx_path.resolve()}\n{pdf}"
           f"          {csv_path.resolve()}")
     return 0
 
