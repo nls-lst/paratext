@@ -15,7 +15,8 @@ Waiting   on, for ≥70% renewable — runs would go ahead
 Forecast  clean for all of the next 48h (84–90% renewable)
 
 Report    rebuilt from 12 runs
-          /path/to/output/carbon/carbon.html
+          /path/to/output/carbon/carbon.docx
+          /path/to/output/carbon/carbon.pdf
           /path/to/output/carbon/carbon.csv
 ```
 
@@ -37,10 +38,12 @@ There are no subcommands and no options. Every call rebuilds the report in full:
   records, kWh, Wh per record, gCO₂e, renewable share, clean-grid share, hours
   paused, and how it was measured. Filter it in a spreadsheet for a financial year
   or a single project.
-- **`output/carbon/carbon.html`**: a single page with headline figures, the grid
+- **`output/carbon/carbon.docx`**: a Word file with headline figures, the grid
   mix now and for the next 48 hours, the latest run's power and grid, energy and
-  emissions by month, energy per record by project and model, the runs table, and
-  a short method note. It works offline and prints cleanly.
+  emissions by month, energy per record by project and model, and the runs table.
+  The charts are Word charts, so you can edit them or paste them into a return.
+- **`output/carbon/carbon.pdf`**: the same report as a PDF. paratext makes it with
+  LibreOffice; without LibreOffice installed, it says so and skips the PDF.
 
 ## Configuration
 
