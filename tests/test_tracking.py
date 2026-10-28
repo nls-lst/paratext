@@ -46,6 +46,18 @@ def _r(g, ren):
     return Reading("uk", "South Scotland", g, ren, None, None, "forecast")
 
 
+def test_the_grid_mix_is_kept_per_interval(tmp_path):
+    clock = Clock(T0)
+    r = Reading("uk", "South Scotland", 10, 0.8, None, None, "forecast", {"wind": 80, "gas": 20})
+    t = _tracker(tmp_path, clock, readings=[r, _r(0, 1.0)])
+    t.start()
+    clock.t = T0 + 1800
+    t.tick()
+    t.stop()
+    ivs = json.loads(t.path.read_text())["segments"][0]["intervals"]
+    assert ivs[0]["mix"] == {"wind": 80, "gas": 20}
+
+
 def test_is_local():
     assert tracking.is_local("http://localhost:1235/v1")
     assert tracking.is_local("http://127.0.0.1:8000/v1")

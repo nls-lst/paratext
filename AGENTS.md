@@ -266,7 +266,7 @@ alongside `_api_export_catalogue`.
   `output/carbon/runs/`; hosted or sensorless runs are `not measured`, never
   estimated. The grid region is declared in `[carbon]`, never auto-detected, and
   `wait = true` pauses between records on a dirty grid. `paratext carbon` takes no
-  options and rebuilds the CSV and Word report (PDF via LibreOffice if installed). Stdlib only (`urllib`, `ctypes`).
+  options and writes the CSV plus a Word report per project and per run (PDF via LibreOffice if installed). Stdlib only (`urllib`, `ctypes`).
 - **Config keys are kebab-case** (`base-url`), matching the CLI flag that sets
   them. Snake_case still parses so old configs work, but generate kebab-case.
 - **Bump `schema_version`** when a schema changes.

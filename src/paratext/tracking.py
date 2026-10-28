@@ -179,6 +179,8 @@ class Tracker:
             "renewable_fraction": r.renewable_fraction if r else None,
             "basis": r.basis if r else None,
         }
+        if r and r.mix:
+            iv["mix"] = r.mix
         ivs.append(iv)
         if len(ivs) > 1:
             self.flush()

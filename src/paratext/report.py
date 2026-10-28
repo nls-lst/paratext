@@ -12,8 +12,9 @@ import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 
 from . import tracking, wordfile
 from .carbon import parse_ts
@@ -38,6 +39,19 @@ SLOTS = [
 class Run:
     doc: dict
     segments: list[dict] = field(default_factory=list)
+    path: Path | None = None  # the sidecar
+
+    @property
+    def name(self) -> str:
+        return self.path.stem if self.path else self.title
+
+    @property
+    def title(self) -> str:
+        return Path(self.doc.get("output", "")).stem or self.project
+
+    @property
+    def mtime(self) -> float:
+        return self.path.stat().st_mtime if self.path else 0.0
 
     @property
     def project(self) -> str:
@@ -106,7 +120,7 @@ def collect(runs_dir: Path | None = None) -> list[Run]:
         doc = tracking.load_sidecar(p)
         if not doc or doc.get("schema") != tracking.SCHEMA:
             continue
-        runs.append(Run(doc, doc.get("segments", [])))
+        runs.append(Run(doc, doc.get("segments", []), p))
     runs.sort(key=lambda r: r.segments[0].get("start", "") if r.segments else "")
     return runs
 
@@ -120,19 +134,52 @@ def write_csv(runs: list[Run], path: Path) -> None:
             w.writerow({k: ("" if v is None else v) for k, v in r.row().items()})
 
 
-def build(runs_dir: Path | None = None, out_dir: Path | None = None, *,
-          forecast: list | None = None, min_renewable: float = 70
-          ) -> tuple[Path, Path, Path | None, int]:
-    """Write carbon.csv, carbon.docx and carbon.pdf.
+class Built(NamedTuple):
+    csv: Path
+    projects: list[Path]  # one report per project, PDF where made
+    runs: list[Path]  # one report per run, newest last
+    rebuilt: int  # run reports rebuilt this time
+    pdf: bool  # whether LibreOffice made PDFs
 
-    Returns (csv, docx, pdf or None without LibreOffice, number of runs).
-    `forecast` is the grid's Readings for the next hours, drawn when given."""
+
+def build(runs_dir: Path | None = None, out_dir: Path | None = None) -> Built:
+    """Write carbon.csv, a report per project, and a report per run.
+
+    Project reports are rebuilt every time. A run's report is rebuilt only when its
+    sidecar is newer, so finished runs keep their report as it was."""
     out = out_dir or REPORT_DIR
+    runs_dir = runs_dir or tracking.RUNS_DIR
     runs = collect(runs_dir)
-    csv_path, docx_path = out / "carbon.csv", out / "carbon.docx"
+    csv_path = out / "carbon.csv"
     write_csv(runs, csv_path)
-    render(runs, forecast, min_renewable).save(docx_path)
-    return csv_path, docx_path, wordfile.to_pdf(docx_path), len(runs)
+    fresh: list[Path] = []
+    by_project: dict[str, list[Run]] = defaultdict(list)
+    for r in runs:
+        by_project[r.project].append(r)
+    projects = []
+    for name, rs in sorted(by_project.items()):
+        projects.append(project_report(name, rs).save(out / f"{_slug(name)}.docx"))
+    fresh += projects
+    run_docs = []
+    for r in runs:
+        path = runs_dir / f"{r.name}.docx"
+        if not path.is_file() or path.stat().st_mtime < r.mtime:
+            run_report(r).save(path)
+            fresh.append(path)
+        run_docs.append(path)
+    pdfs = set(wordfile.to_pdf(fresh))
+    made = bool(pdfs) or not fresh
+
+    def best(p: Path) -> Path:
+        pdf = p.with_suffix(".pdf")
+        return pdf if pdf in pdfs or (p not in fresh and pdf.is_file()) else p
+
+    return Built(csv_path, [best(p) for p in projects], [best(p) for p in run_docs],
+                 len(fresh) - len(projects), made)
+
+
+def _slug(s: str) -> str:
+    return re.sub(r"[^\w.-]+", "-", s).strip("-") or "project"
 
 
 # ── formatting ───────────────────────────────────────────────────────────────
@@ -219,56 +266,45 @@ def model_name(mid: str) -> str:
     return " · ".join(p for p in parts if p)
 
 
-# ── grid blocks ──────────────────────────────────────────────────────────────
-# Stacked bottom up. Colours match the status widget. The last two stand in
-# when a provider gives a renewable share but no mix.
+# ── where the energy came from ───────────────────────────────────────────────
+# Stacked bottom up. Colours match the status widget. "renewable" and "rest"
+# stand in when the grid gave a renewable share but no mix.
 FUELS = [
     ("wind", "Wind", "2A78D6"), ("solar", "Solar", "EDA100"), ("hydro", "Hydro", "1BAF7A"),
     ("imports", "Imports & other", "E87BA4"), ("nuclear", "Nuclear", "6250D6"),
     ("biomass", "Biomass", "008300"), ("gas", "Gas", "EB6834"), ("coal", "Coal", "6B6A65"),
     ("renewable", "Renewable", "1BAF7A"), ("rest", "Other sources", "C3C2B7"),
+    ("unknown", "No grid data", "E1E0D9"),
 ]
 
 
-def _shares(r) -> dict[str, float]:
-    """Percent by fuel from a Reading, summing to 100."""
-    if r.mix:
-        m = dict(r.mix)
+def _split(iv: dict) -> dict[str, float]:
+    """An interval's grid as fractions by source, summing to 1."""
+    if iv.get("mix"):
+        m = dict(iv["mix"])
         m["imports"] = m.get("imports", 0) + m.pop("other", 0)
+    elif iv.get("renewable_fraction") is not None:
+        m = {"renewable": iv["renewable_fraction"], "rest": 1 - iv["renewable_fraction"]}
     else:
-        ren = (r.renewable_fraction or 0) * 100
-        m = {"renewable": ren, "rest": 100 - ren}
+        m = {"unknown": 1}
     total = sum(m.values()) or 1
-    return {k: v * 100 / total for k, v in m.items()}
+    return {k: v / total for k, v in m.items()}
 
 
-def _forecast_blocks(series: list) -> list[dict]:
-    """Three-hour blocks of the forecast: mean mix, renewables and intensity."""
-    rs = [r for r in series if parse_ts(r.ts)]
-    if not rs:
-        return []
-    step = (parse_ts(rs[1].ts) - parse_ts(rs[0].ts)) if len(rs) > 1 else timedelta(minutes=30)
-    per = max(1, round(timedelta(hours=3) / step))
-    out = []
-    for i in range(0, len(rs), per):
-        sl = rs[i:i + per]
-        ms = [_shares(r) for r in sl]
-        keys = {k for m in ms for k in m}
-        out.append({
-            "t": parse_ts(sl[0].ts), "end": parse_ts(sl[-1].ts) + step,
-            "m": {k: sum(m.get(k, 0) for m in ms) / len(ms) for k in keys},
-            "r": _avg([r.renewable_fraction * 100 for r in sl
-                       if r.renewable_fraction is not None]),
-            "g": _avg([r.carbon_gco2 for r in sl]),
-        })
+def _by_source(items) -> dict[str, float]:
+    """Wh by source, from (wh, interval) pairs."""
+    out: dict[str, float] = defaultdict(float)
+    for wh, iv in items:
+        for k, f in _split(iv).items():
+            out[k] += wh * f
     return out
 
 
-def _run_blocks(run: Run) -> list[dict]:
-    """A run's grid intervals in at most 24 blocks, weighted by the energy used."""
+def _blocks(run: Run) -> tuple[list[dict], float]:
+    """The run's energy by source in at most 24 equal blocks; also the block size in hours."""
     ivs = sorted(((t, wh, iv) for t, wh, _, iv, _ in run.intervals()), key=lambda x: x[0])
     if not ivs:
-        return []
+        return [], 0
     span_h = (ivs[-1][0] - ivs[0][0]).total_seconds() / 3600 + 0.5
     size = next((h for h in (0.5, 1, 3, 6, 12, 24) if span_h / h <= 24), 48)
     out: list[dict] = []
@@ -276,220 +312,230 @@ def _run_blocks(run: Run) -> list[dict]:
         sec = t.timestamp()
         start = datetime.fromtimestamp(sec - sec % (size * 3600), timezone.utc)
         if not out or out[-1]["t"] != start:
-            out.append({"t": start, "end": start + timedelta(hours=size), "wh": 0.0,
-                        "_r": [0.0, 0.0]})
-        b = out[-1]
-        b["wh"] += wh
-        if iv.get("renewable_fraction") is not None:
-            b["_r"][0] += wh * iv["renewable_fraction"] * 100
-            b["_r"][1] += wh
+            out.append({"t": start, "items": []})
+        out[-1]["items"].append((wh, iv))
     for b in out:
-        rw, rn = b.pop("_r")
-        b["r"] = rw / rn if rn else None
-        b["m"] = {"renewable": b["r"], "rest": 100 - b["r"]} if b["r"] is not None else {}
-    return out
+        b["wh"] = _by_source(b.pop("items"))
+    return out, size
 
 
-def _mix_chart(blocks: list[dict], threshold: float) -> dict:
-    keys = {k for b in blocks for k, v in b["m"].items() if v and v >= 0.4}
+def _source_chart(cats: list[str], parts: list[dict[str, float]], unit: str, scale: float,
+                  skip: int | None = None) -> dict:
+    total = sum(sum(p.values()) for p in parts) or 1
+    keys = {k for k in {k for p in parts for k in p}
+            if sum(p.get(k, 0) for p in parts) / total >= 0.005}
+    top = wordfile.nice_max(max((sum(p.values()) for p in parts), default=0) / scale)
     return {
-        "type": "col", "stacked": True, "gap": 30, "ymax": 100, "ystep": 50,
-        "yfmt": '0"%"', "legend": True, "skip": math.ceil(len(blocks) / 6),
-        "categories": [f"{_day(b['t'])} {_hm(b['t'])}" for b in blocks],
+        "type": "col", "stacked": True, "gap": 30 if len(cats) > 3 else 300, "legend": True,
+        "ymax": top, "ystep": top / 2, "yfmt": f'0.##" {unit}"', "skip": skip,
+        "categories": cats,
         "series": [{"name": label, "color": color,
-                    "values": [round(b["m"].get(k) or 0, 1) for b in blocks]}
+                    "values": [round(p.get(k, 0) / scale, 3) for p in parts]}
                    for k, label, color in FUELS if k in keys],
-        "threshold": {"name": f"{threshold:.0f}% renewable", "value": threshold},
     }
+
+
+def _energy_unit(wh: float) -> tuple[str, float]:
+    return ("kWh", 1000.0) if wh >= 1000 else ("Wh", 1.0)
+
+
+def _mix_block(doc: wordfile.Doc, wh: dict[str, float]) -> str:
+    """The ring and list: total energy by source, renewable share in the list head."""
+    W = wordfile
+    total = sum(wh.values())
+    if total <= 0:
+        return ""
+    parts = [(label, color, wh[k]) for k, label, color in FUELS if wh.get(k, 0) / total >= 0.005]
+    ring = doc.chart({"type": "doughnut", "categories": [p[0] for p in parts],
+                      "series": [{"name": "Energy", "colors": [p[1] for p in parts],
+                                  "values": [round(p[2], 2) for p in parts]}]}, 3.4, 3.4)
+    unit, scale = _energy_unit(max(p[2] for p in parts))
+    rows = [[W.para(W.run("■ ", color=c), label, style="TableText"),
+             W.para(W.run(f"{v / scale:.2f} {unit}", bold=True), style="TableText",
+                    align="right"),
+             W.para(W.run(_pct(v / total * 100), color=W.INK2), style="TableText",
+                    align="right")] for label, c, v in parts]
+    return W.table([[ring, W.table(rows, [2.8, 1.8, 1.2], lines=False)]], [4.2, 6.0],
+                   lines=False)
 
 
 # ── document ─────────────────────────────────────────────────────────────────
 def _stat(label: str, value: str, unit: str = "") -> str:
-    return (wordfile.para(wordfile.run(label, size=8.5, color=wordfile.INK2), after=0)
-            + wordfile.para(wordfile.run(value, bold=True, size=17),
-                            wordfile.run(f" {unit}" if unit else "", size=8.5,
-                                         color=wordfile.INK2), after=0))
-
-
-def _heading(text: str, aside: str = "") -> str:
-    h = wordfile.para(text, style="Heading1")
-    return h + (wordfile.para(aside, style="Note", keep_next=True) if aside else "")
-
-
-def render(runs: list[Run], forecast: list | None = None,
-           min_renewable: float = 70) -> wordfile.Doc:
     W = wordfile
-    doc = W.Doc("Carbon report")
-    rows = [r.row() for r in runs]
-    measured = [r for r in runs if r.measured]
+    return (W.para(W.run(label, size=8.5, color=W.INK2), after=0)
+            + W.para(W.run(value, bold=True, size=16),
+                     W.run(f" {unit}" if unit else "", size=8.5, color=W.INK2), after=0))
 
-    kwh = sum(r["kwh"] for r in rows if r["kwh"] is not None)
+
+def _stats(rows: list[dict], renewable: float | None) -> str:
+    kwh = [r["kwh"] for r in rows if r["kwh"] is not None]
     g = [r["gco2e"] for r in rows if r["gco2e"] is not None]
     records = sum(r["records"] for r in rows)
-    ren_num = ren_den = 0.0
-    energy: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    emissions: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    for r in measured:
-        for t, wh, ge, iv, _ in r.intervals():
-            m = t.strftime("%Y-%m")
-            energy[m][r.project] += wh / 1000
-            if ge is not None:
-                emissions[m][r.project] += ge
-            if iv.get("renewable_fraction") is not None and wh > 0:
-                ren_num += wh * iv["renewable_fraction"]
-                ren_den += wh
-
-    doc.add(W.para("Carbon report", style="Title"),
-            W.para(f"{datetime.now().astimezone():%d %B %Y %H:%M}", style="Note", after=240))
-    doc.add(W.table([[
-        _stat("Energy", _num(kwh), "kWh"),
+    measured_records = sum(r["records"] for r in rows if r["kwh"] is not None)
+    per = sum(kwh) * 1000 / measured_records if kwh and measured_records else None
+    return wordfile.table([[
+        _stat("Energy", _num(sum(kwh)) if kwh else "—", "kWh" if kwh else ""),
         _stat("Emissions", _num(sum(g)) if g else "—", "g CO₂e" if g else ""),
         _stat("Records", f"{records:,}"),
-        _stat("Renewable", f"{ren_num / ren_den * 100:.0f}%" if ren_den else "—"),
-    ]], [4.25] * 4, lines=False))
+        _stat("Per record", _num(per) if per is not None else "—", "Wh" if per else ""),
+        _stat("Renewable", f"{renewable * 100:.0f}%" if renewable is not None else "—"),
+    ]], [3.4] * 5, lines=False)
+
+
+def _renewable(runs: list[Run]) -> float | None:
+    rated = [(wh, iv["renewable_fraction"]) for r in runs for _, wh, _, iv, _ in r.intervals()
+             if iv.get("renewable_fraction") is not None and wh > 0]
+    total = sum(w for w, _ in rated)
+    return sum(w * f for w, f in rated) / total if total else None
+
+
+def _head(doc: wordfile.Doc, title: str, *notes: str) -> None:
+    doc.add(wordfile.para(title, style="Title"),
+            *[wordfile.para(n, style="Note", after=0) for n in notes],
+            wordfile.para(style="Gap", after=200))
+
+
+def _duration(seconds: float) -> str:
+    h, m = divmod(round(seconds / 60), 60)
+    return f"{h} h {m} min" if h else f"{m} min"
+
+
+def run_report(run: Run) -> wordfile.Doc:
+    """One page for one run: its figures, where its energy came from, and how."""
+    W = wordfile
+    row = run.row()
+    segs = run.segments
+    t0, t1 = parse_ts(row["start"]), parse_ts(row["end"])
+    span = f"{_when(row['start'], year=True)} – {_when(row['end'], year=True)}"
+    if t0 and t1:
+        span += f" · {_duration((t1 - t0).total_seconds())}"
+    doc = W.Doc(f"Carbon report: {run.title}")
+    _head(doc, run.title, f"{run.project} · {model_name(run.doc.get('model', ''))}", span)
+    doc.add(_stats([row], _renewable([run])))
+    if not run.measured:
+        doc.add(W.para("Not measured: the model ran on a hosted endpoint or the machine "
+                       "has no readable power sensor.", style="Note"))
+    else:
+        doc.add(W.para("Where the energy came from", style="Heading1"),
+                _mix_block(doc, _by_source((wh, iv) for _, wh, _, iv, _ in run.intervals())))
+        blocks, size = _blocks(run)
+        if blocks:
+            every = {0.5: "half hour", 1: "hour"}.get(size, f"{size:g} hours")
+            unit, scale = _energy_unit(max(sum(b["wh"].values()) for b in blocks))
+            doc.add(W.para(f"Energy every {every}", style="Heading2"), doc.chart(
+                _source_chart([f"{_day(b['t'])} {_hm(b['t'])}" for b in blocks],
+                              [b["wh"] for b in blocks], unit, scale,
+                              math.ceil(len(blocks) / 8)), 17, 6))
+    paused = row["hours_paused"]
+    wait = next((s.get("wait") for s in segs if "wait" in s), None)
+    thr = next((s.get("min_renewable") for s in segs if s.get("min_renewable")), 70)
+    notes = sorted({s.get("meter_note") or s.get("meter") or "" for s in run.measured} - {""})
+    details = [
+        ["Output", run.doc.get("output", "")],
+        ["Model", run.doc.get("model", "")],
+        ["Sessions", f"{len(segs)}"],
+        ["Waiting", (f"on, for ≥{thr:g}% renewable · "
+                     + (f"paused {paused:g} h" if paused else "never paused") if wait
+                     else "off")],
+        ["Meter", " + ".join(notes) or "not measured"],
+        ["Grid", " · ".join(x for x in (row["zone"], _provider(segs), row["intensity_basis"])
+                            if x) or "not declared"],
+    ]
+    if row["overhead"] not in ("", "1"):
+        details.append(["Overhead", f"× {row['overhead']}"])
+    doc.add(W.para("Details", style="Heading1"), W.table(
+        [[W.para(W.run(k, color=W.INK2), style="TableText"), v] for k, v in details],
+        [2.6, 14.4]))
+    return doc
+
+
+def _provider(segs: list[dict]) -> str:
+    names = {"uk": "Carbon Intensity API", "energy-charts": "Energy-Charts",
+             "electricitymaps": "Electricity Maps"}
+    return " / ".join(sorted({names.get(s["provider"], s["provider"])
+                              for s in segs if s.get("provider")}))
+
+
+def project_report(project: str, runs: list[Run]) -> wordfile.Doc:
+    """One project over time: totals, energy and emissions by month, and its runs."""
+    W = wordfile
+    rows = [r.row() for r in runs]
+    first, last = rows[0]["start"], rows[-1]["end"]
+    doc = W.Doc(f"Carbon report: {project}")
+    _head(doc, project, f"{len(rows)} run{'s' if len(rows) != 1 else ''} · "
+                        f"{_when(first, year=True, time=False)} – "
+                        f"{_when(last, year=True, time=False)}")
+    doc.add(_stats(rows, _renewable(runs)))
     unmeasured = sum(1 for r in rows if r["kwh"] is None)
     if unmeasured:
         doc.add(W.para(f"{unmeasured} run{'s' if unmeasured > 1 else ''} not measured "
                        f"(hosted model or no sensor): records counted, energy not.",
                        style="Note"))
 
-    _grid(doc, forecast, min_renewable)
-    if measured:
-        _latest(doc, measured[-1])
-    _months(doc, energy, emissions, _colors([r.project for r in runs]))
-    _per_record(doc, rows)
-    _runs_table(doc, rows)
+    energy: dict[str, list] = defaultdict(list)
+    emissions: dict[str, float] = defaultdict(float)
+    for r in runs:
+        for t, wh, ge, iv, _ in r.intervals():
+            m = f"{t.astimezone():%Y-%m}"
+            energy[m].append((wh, iv))
+            if ge is not None:
+                emissions[m] += ge
+    months = sorted(energy)
+    if months:
+        by_month = [_by_source(energy[m]) for m in months]
+        unit, scale = _energy_unit(max(sum(p.values()) for p in by_month))
+        cats = [_month_label(m) for m in months]
+        cells = [W.para("Energy", style="Heading2")
+                 + doc.chart(_source_chart(cats, by_month, unit, scale), 8.3, 5.4)]
+        if emissions:
+            top = W.nice_max(max(emissions.values()))
+            cells.append(W.para("Emissions", style="Heading2") + doc.chart({
+                "type": "col", "gap": 30 if len(cats) > 3 else 300, "ymax": top,
+                "ystep": top / 2, "yfmt": '0.##" g"', "categories": cats,
+                "legend": True,
+                "series": [{"name": "g CO₂e", "color": "6B6A65",
+                            "values": [round(emissions.get(m, 0), 2) for m in months]}],
+            }, 8.3, 5.4))
+        doc.add(W.para("By month", style="Heading1"),
+                W.table([cells], [8.5] * len(cells), lines=False))
+
+    per: dict[str, list[float]] = defaultdict(lambda: [0.0, 0])
+    for r in rows:
+        if r["kwh"] is not None and r["records"]:
+            per[model_name(r["model"])][0] += r["kwh"] * 1000
+            per[model_name(r["model"])][1] += r["records"]
+    if len(per) > 1:
+        items = sorted(((k, wh / n) for k, (wh, n) in per.items()), key=lambda kv: -kv[1])
+        doc.add(W.para("Energy per record, by model", style="Heading1"), doc.chart({
+            "type": "bar", "gap": 60, "labels": '0.00" Wh"',
+            "categories": [k for k, _ in items],
+            "series": [{"name": "Wh per record", "color": "2A78D6",
+                        "values": [round(v, 3) for _, v in items]}],
+        }, 17, 1.2 + 0.8 * len(items)))
+
+    paused = any(row["hours_paused"] for row in rows)
+    head = ["Run", "Model", "Start", "Records", "kWh", "Wh/record", "g CO₂e", "Renewable"]
+    widths = [2.6, 5.0, 1.5, 1.6, 1.2, 1.8, 1.3, 2.0]
+    if paused:
+        head.append("Paused h")
+        widths = [2.4, 4.3, 1.4, 1.5, 1.1, 1.8, 1.3, 1.7, 1.5]
+    body = [[
+        r.title, model_name(row["model"]), _when(row["start"], time=False),
+        f"{row['records']:,}",
+        _num(row["kwh"], digits=3) if row["kwh"] is not None else "not measured",
+        _num(row["wh_per_record"]), _num(row["gco2e"]),
+        f"{row['renewable_share'] * 100:.0f}%" if row["renewable_share"] is not None else "—",
+        *([f"{row['hours_paused']:g}"] if paused else []),
+    ] for r, row in zip(runs, rows)]
+    doc.add(W.para("Runs", style="Heading1"), W.table(
+        [head, *body], widths, header=True,
+        align=["left", "left", "left"] + ["right"] * (len(head) - 3)))
     return doc
 
 
-def _grid(doc: wordfile.Doc, series: list | None, min_renewable: float) -> None:
-    W = wordfile
-    blocks = _forecast_blocks(series or [])
-    if len(blocks) < 2:
-        return
-    hours = round((blocks[-1]["end"] - blocks[0]["t"]).total_seconds() / 3600)
-    now = series[0]
-    m = _shares(now)
-    parts = [(k, label, color, m[k]) for k, label, color in FUELS if m.get(k, 0) >= 0.5]
-    ren = (now.renewable_fraction or 0) * 100
-    ring = doc.chart({"type": "doughnut", "categories": [p[1] for p in parts],
-                      "series": [{"name": "Now", "values": [round(p[3], 1) for p in parts],
-                                  "colors": [p[2] for p in parts]}]}, 3.2, 3.2)
-    lines = [W.para(W.run(f"Now · {ren:.0f}% renewable", bold=True), style="TableText")]
-    lines += [W.para(W.run("■ ", color=c), f"{label}  ", W.run(_pct(v), bold=True),
-                     style="TableText") for _, label, c, v in parts]
-    if now.carbon_gco2 is not None:
-        lines.append(W.para(W.run(f"{now.carbon_gco2:.0f} g CO₂ per kWh", color=W.INK2),
-                            style="TableText"))
-    doc.add(_heading("Grid", f"{now.zone} · next {hours} hours"),
-            W.table([[ring, "".join(lines)]], [3.8, 13.2], lines=False),
-            doc.chart(_mix_chart(blocks, min_renewable), 17, 6.2))
-
-
-def _power_points(run: Run, n: int = 240) -> list[tuple[datetime, float]]:
-    pts = []
-    for s in run.measured:
-        k = s.get("overhead", 1.0)
-        for ts, w in s.get("timeline", []):
-            if t := parse_ts(ts):
-                pts.append((t, w * k))
-    if len(pts) <= n:
-        return pts
-    size = math.ceil(len(pts) / n)
-    return [(pts[i][0], sum(w for _, w in pts[i:i + size]) / len(pts[i:i + size]))
-            for i in range(0, len(pts), size)]
-
-
-def _latest(doc: wordfile.Doc, run: Run) -> None:
-    W = wordfile
-    row = run.row()
-    name = Path(run.doc.get("output", "")).stem or run.project
-    aside = " · ".join(p for p in (name, model_name(run.doc.get("model", "")),
-                                   f"{row['records']:,} records") if p)
-    paused = row["hours_paused"]
-    if paused:
-        aside += f" · paused {paused:g} h for a dirty grid"
-    doc.add(_heading("Latest run", aside))
-    pts = _power_points(run)
-    if len(pts) > 1:
-        vmax = W.nice_max(max(w for _, w in pts))
-        doc.add(W.para("Power", style="Heading2"), doc.chart({
-            "type": "line", "ymax": vmax, "ystep": vmax / 2, "yfmt": '0" W"',
-            "skip": math.ceil(len(pts) / 4),
-            "categories": [f"{_day(t)} {_hm(t)}" for t, _ in pts],
-            "series": [{"name": "Power (W)", "color": "2A78D6",
-                        "values": [round(w, 1) for _, w in pts]}],
-        }, 17, 4.6))
-    blocks = _run_blocks(run)
-    if blocks:
-        threshold = run.measured[0].get("min_renewable", 70)
-        doc.add(W.para("Grid while it ran", style="Heading2"),
-                doc.chart(_mix_chart(blocks, threshold), 17, 5.2))
-
-
-def _months(doc: wordfile.Doc, energy: dict, emissions: dict, colors: dict) -> None:
-    W = wordfile
-    months = sorted(energy)
-    if not months:
-        return
-    order = sorted(colors, key=colors.get)
-
-    def spec(data: dict, unit: str) -> dict:
-        top = W.nice_max(max(sum(data[m].values()) for m in months))
-        return {
-            "type": "col", "stacked": True, "gap": 300 if len(months) < 4 else 80,
-            "ymax": top, "ystep": top / 2,
-            "yfmt": f'0.##" {unit}"', "legend": len(order) > 1,
-            "categories": [_month_label(m) for m in months],
-            "series": [{"name": p, "color": SLOTS[colors[p]][0].lstrip("#").upper(),
-                        "values": [round(data[m].get(p, 0), 3) for m in months]}
-                       for p in order],
-        }
-
-    cells = [W.para("Energy", style="Heading2") + doc.chart(spec(energy, "kWh"), 8.3, 5)]
-    if emissions:
-        cells.append(W.para("Emissions", style="Heading2")
-                     + doc.chart(spec(emissions, "g"), 8.3, 5))
-    doc.add(_heading("By month"), W.table([cells], [8.5] * len(cells), lines=False))
-
-
-def _per_record(doc: wordfile.Doc, rows: list[dict]) -> None:
-    acc: dict[str, list[float]] = defaultdict(lambda: [0.0, 0])
-    for r in rows:
-        if r["kwh"] is not None and r["records"]:
-            k = f"{r['project']} · {model_name(r['model'])}"
-            acc[k][0] += r["kwh"] * 1000
-            acc[k][1] += r["records"]
-    if not acc:
-        return
-    items = sorted(((k, wh / n) for k, (wh, n) in acc.items()), key=lambda kv: -kv[1])
-    doc.add(_heading("Energy per record"), doc.chart({
-        "type": "bar", "gap": 60, "labels": '0.00" Wh"',
-        "categories": [k for k, _ in items],
-        "series": [{"name": "Wh per record", "color": "2A78D6",
-                    "values": [round(v, 3) for _, v in items]}],
-    }, 17, 1.2 + 0.8 * len(items)))
-
-
-def _runs_table(doc: wordfile.Doc, rows: list[dict]) -> None:
-    W = wordfile
-    head = ["Run", "Model", "Start", "Records", "kWh", "Wh/record", "g CO₂e", "Renewable",
-            "Paused (h)"]
-    body = [[
-        Path(r["output"]).stem or r["project"], model_name(r["model"]), _when(r["start"]),
-        f"{r['records']:,}", _num(r["kwh"], digits=3) if r["kwh"] is not None
-        else "not measured", _num(r["wh_per_record"]), _num(r["gco2e"]),
-        f"{r['renewable_share'] * 100:.0f}%" if r["renewable_share"] is not None else "—",
-        f"{r['hours_paused']:g}",
-    ] for r in rows]
-    if not body:
-        doc.add(_heading("Runs"), W.para("No runs yet.", style="Note"))
-        return
-    doc.add(_heading("Runs"), W.table(
-        [head, *body], [2.5, 3.4, 2.1, 1.6, 1.2, 1.6, 1.2, 1.8, 1.6], header=True,
-        align=["left", "left", "left"] + ["right"] * 6))
-
-
-def _when(ts: str) -> str:
+def _when(ts: str, year: bool = False, time: bool = True) -> str:
     t = parse_ts(ts)
-    return f"{t.astimezone():%d %b %H:%M}" if t else ""
+    if not t:
+        return ""
+    fmt = "%d %b" + (" %Y" if year else "") + (" %H:%M" if time else "")
+    return t.astimezone().strftime(fmt)
