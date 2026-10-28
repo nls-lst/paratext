@@ -64,6 +64,7 @@ class Reading:
     index: str | None
     ts: str | None
     basis: str | None = None  # forecast | actual | live — how carbon_gco2 was made
+    mix: dict[str, float] | None = None  # percent by fuel, where the provider gives it
 
     def is_clean(self, min_renewable: float) -> bool:
         return self.renewable_fraction is not None and (
@@ -130,7 +131,7 @@ def _uk_reading(period: dict, zone: str) -> Reading:
         gco2, basis = intensity.get("forecast"), "forecast"
     return Reading(
         "uk", zone, gco2, renew, intensity.get("index"), period.get("from"),
-        basis if gco2 is not None else None,
+        basis if gco2 is not None else None, mix or None,
     )
 
 
