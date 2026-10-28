@@ -16,7 +16,7 @@ import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-FONT = "Arial"
+FONT = "Atkinson Hyperlegible Next"
 INK, INK2, MUTED, LINE = "0B0B0B", "52514E", "898781", "E1E0D9"
 EMU_PER_CM = 360000
 TWIPS_PER_CM = 567

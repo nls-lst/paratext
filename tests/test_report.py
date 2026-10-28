@@ -58,7 +58,7 @@ def test_rows_csv_and_reports(tmp_path):
     charts = [p for p in project if p.startswith("word/charts/chart")]
     assert charts and len(charts) == len([p for p in project if p.startswith("word/embed")])
     run = _parts(runs_dir / "a.docx")["word/document.xml"].decode()
-    assert "Where the energy came from" in run and "paused 1 h" in run
+    assert "Where the energy came from" in run and "Waiting" not in run
     assert "Not measured" in _parts(runs_dir / "b.docx")["word/document.xml"].decode()
 
 
