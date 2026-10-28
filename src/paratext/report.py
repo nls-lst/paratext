@@ -12,7 +12,7 @@ import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import NamedTuple
 
@@ -301,33 +301,54 @@ def _by_source(items) -> dict[str, float]:
 
 
 def _blocks(run: Run) -> tuple[list[dict], float]:
-    """The run's energy by source in at most 24 equal blocks; also the block size in hours."""
-    ivs = sorted(((t, wh, iv) for t, wh, _, iv, _ in run.intervals()), key=lambda x: x[0])
+    """The run's energy per hour by source in at most 24 equal blocks; also the block size."""
+    ivs = sorted(((t, wh, iv, s) for t, wh, _, iv, s in run.intervals()), key=lambda x: x[0])
     if not ivs:
         return [], 0
     span_h = (ivs[-1][0] - ivs[0][0]).total_seconds() / 3600 + 0.5
     size = next((h for h in (0.5, 1, 3, 6, 12, 24) if span_h / h <= 24), 48)
     out: list[dict] = []
-    for t, wh, iv in ivs:
+    for t, wh, iv, seg in ivs:
         sec = t.timestamp()
         start = datetime.fromtimestamp(sec - sec % (size * 3600), timezone.utc)
         if not out or out[-1]["t"] != start:
-            out.append({"t": start, "items": []})
+            out.append({"t": start, "items": [], "h": 0.0})
         out[-1]["items"].append((wh, iv))
+        out[-1]["h"] += _hours_run(t, seg)
     for b in out:
-        b["wh"] = _by_source(b.pop("items"))
+        h = b.pop("h") or size
+        b["wh"] = {k: v / h for k, v in _by_source(b.pop("items")).items()}
     return out, size
 
 
-def _source_chart(cats: list[str], parts: list[dict[str, float]], unit: str, scale: float,
-                  skip: int | None = None) -> dict:
+def _time_labels(times: list[datetime], most: int = 8) -> list[str]:
+    """Every nth time, with the day when it changes; LibreOffice ignores label skipping."""
+    step, last, out = math.ceil(len(times) / most), None, []
+    for i, t in enumerate(times):
+        if i % step:
+            out.append("")
+            continue
+        out.append(_hm(t) if _day(t) == last else f"{_day(t)} {_hm(t)}")
+        last = _day(t)
+    return out
+
+
+def _hours_run(t: datetime, seg: dict) -> float:
+    """How much of the half hour from t the segment was running."""
+    lo = max(t, parse_ts(seg.get("start")) or t)
+    hi = min(t + timedelta(minutes=30), parse_ts(seg.get("end")) or t + timedelta(minutes=30))
+    return max((hi - lo).total_seconds(), 0) / 3600
+
+
+def _source_chart(cats: list[str], parts: list[dict[str, float]], unit: str,
+                  scale: float) -> dict:
     total = sum(sum(p.values()) for p in parts) or 1
     keys = {k for k in {k for p in parts for k in p}
             if sum(p.get(k, 0) for p in parts) / total >= 0.005}
     top = wordfile.nice_max(max((sum(p.values()) for p in parts), default=0) / scale)
     return {
         "type": "col", "stacked": True, "gap": 30 if len(cats) > 3 else 300, "legend": True,
-        "ymax": top, "ystep": top / 2, "yfmt": f'0.##" {unit}"', "skip": skip,
+        "ymax": top, "ystep": top / 2, "yfmt": f'0.##" {unit}"',
         "categories": cats,
         "series": [{"name": label, "color": color,
                     "values": [round(p.get(k, 0) / scale, 3) for p in parts]}
@@ -351,8 +372,8 @@ def _mix_block(doc: wordfile.Doc, wh: dict[str, float]) -> str:
                                   "values": [round(p[2], 2) for p in parts]}]}, 3.4, 3.4)
     unit, scale = _energy_unit(max(p[2] for p in parts))
     rows = [[W.para(W.run("■ ", color=c), label, style="TableText"),
-             W.para(W.run(f"{v / scale:.2f} {unit}", bold=True), style="TableText",
-                    align="right"),
+             W.para(W.run(f"{v / scale:.{2 if scale > 1 else 0}f} {unit}", bold=True),
+                    style="TableText", align="right"),
              W.para(W.run(_pct(v / total * 100), color=W.INK2), style="TableText",
                     align="right")] for label, c, v in parts]
     return W.table([[ring, W.table(rows, [2.8, 1.8, 1.2], lines=False)]], [4.2, 6.0],
@@ -420,12 +441,12 @@ def run_report(run: Run) -> wordfile.Doc:
                 _mix_block(doc, _by_source((wh, iv) for _, wh, _, iv, _ in run.intervals())))
         blocks, size = _blocks(run)
         if blocks:
-            every = {0.5: "half hour", 1: "hour"}.get(size, f"{size:g} hours")
+            every = {0.5: ", averaged every half hour", 1: ""}.get(
+                size, f", averaged every {size:g} hours")
             unit, scale = _energy_unit(max(sum(b["wh"].values()) for b in blocks))
-            doc.add(W.para(f"Energy every {every}", style="Heading2"), doc.chart(
-                _source_chart([f"{_day(b['t'])} {_hm(b['t'])}" for b in blocks],
-                              [b["wh"] for b in blocks], unit, scale,
-                              math.ceil(len(blocks) / 8)), 17, 6))
+            doc.add(W.para(f"Energy per hour{every}", style="Heading2"), doc.chart(
+                _source_chart(_time_labels([b["t"] for b in blocks]),
+                              [b["wh"] for b in blocks], unit, scale), 17, 6))
     notes = sorted({s.get("meter_note") or s.get("meter") or "" for s in run.measured} - {""})
     details = [
         ["Output", run.doc.get("output", "")],
