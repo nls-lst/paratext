@@ -1,3 +1,3 @@
 """paratext — metadata extraction from digitised collections with a multimodal model."""
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
