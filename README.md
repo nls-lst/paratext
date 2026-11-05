@@ -31,27 +31,6 @@ _perfect_ metadata.
   Core.
 - **Measures the energy and carbon of every run.** See below.
 
-## Energy and carbon
-
-Every run on your own hardware records the electricity it used and what that
-emitted on your local grid. The figures come from the machine's own power
-sensors. Nothing is estimated: a run on a hosted model is recorded as "not
-measured".
-
-For example, one run over 18,221 born-digital books took 36 hours on a desktop
-machine. It used 3.8 kWh, about 0.2 Wh a record, and emitted 4.2 g CO2e on a
-grid that was 84% renewable.
-
-```bash
-paratext carbon
-```
-
-This shows the grid now and for the next 48 hours, and writes a one-page report
-for each run and each project as a Word file (and a PDF if LibreOffice is
-installed), plus a CSV. You can use these in a
-sustainability return. Runs can also wait while the grid is short of renewable
-power. See [Carbon](docs/carbon.md).
-
 ## What you'll need
 
 - **Your material:** a directory of images, PDFs or video (video needs
@@ -109,9 +88,29 @@ describes what is **installed** — so if it disagrees with the files you're
 editing, the package needs reinstalling. That mismatch is the most common cause
 of "my change did nothing".
 
-`paratext carbon` shows the energy your runs used, with no setup needed. To add
-emissions, name your grid region in a `[carbon]` table in `paratext.toml`;
-`paratext config --suggest-region` proposes one for you to check.
+## Energy and carbon
+
+Every run on your own hardware records the electricity it used and what that
+emitted on your local grid. The figures come from the machine's own power
+sensors. Nothing is estimated: a run on a hosted model is recorded as "not
+measured".
+
+For example, one run over 18,221 born-digital books took 36 hours on a desktop
+machine. It used 3.8 kWh, about 0.2 Wh a record, and emitted 4.2 g CO2e on a
+grid that was 84% renewable.
+
+```bash
+paratext carbon
+```
+
+This shows the grid now and for the next 48 hours, and writes a one-page report
+for each run and each project as a Word file (and a PDF if LibreOffice is
+installed), plus a CSV. You can use these in a sustainability return. Runs can
+also wait while the grid is short of renewable power.
+
+Energy is measured with no setup. To add emissions, name your grid region in a
+`[carbon]` table in `paratext.toml`; `paratext config --suggest-region` proposes
+one for you to check. See [Carbon](docs/carbon.md).
 
 ## Documentation
 
