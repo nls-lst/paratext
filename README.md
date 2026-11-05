@@ -7,8 +7,7 @@ collections with a multimodal model.
 
 A subject expert reviews a small sample of what the model produces. You revise
 the prompt and schema until the results are good enough, then run it over the
-whole collection. The aim is _good enough_ metadata for large collections, not
-_perfect_ metadata.
+whole collection.
 
 ## What it does
 
@@ -41,17 +40,6 @@ _perfect_ metadata.
   etc) or a hosted provider — anything that speaks the OpenAI chat API.
 - [uv](https://docs.astral.sh/uv/)
 
-If you have no endpoint in mind, a hosted one takes two lines of config and no
-card — every Hugging Face account has a small monthly allowance:
-
-```toml
-base-url = "https://router.huggingface.co/v1"
-model    = "Qwen/Qwen3-VL-30B-A3B-Instruct"
-```
-
-with your token in `PARATEXT_API_KEY`. A local server is the same shape:
-`base-url = "http://localhost:8000/v1"` and whichever model it serves.
-
 ## Install
 
 ```bash
@@ -83,17 +71,13 @@ paratext review
 re-read per request, so a fresh `run` appears on reload without a restart.
 
 `inspect` prints the fields the model is asked for, the prompt, the
-preprocessing applied, and whether schema, prompt and view still agree. It
-describes what is **installed** — so if it disagrees with the files you're
-editing, the package needs reinstalling. That mismatch is the most common cause
-of "my change did nothing".
+preprocessing applied, and whether schema, prompt and view still agree.
 
 ## Energy and carbon
 
 Every run on your own hardware records the electricity it used and what that
 emitted on your local grid. The figures come from the machine's own power
-sensors. Nothing is estimated: a run on a hosted model is recorded as "not
-measured".
+sensors.
 
 ```bash
 paratext carbon
@@ -101,13 +85,13 @@ paratext carbon
 
 This shows the grid now and for the next 48 hours, and writes a one-page report
 for each run and each project as a Word file (and a PDF if LibreOffice is
-installed), plus a CSV. You can use these in a sustainability return. Runs can
-also wait while the grid is short of renewable power.
+installed), plus a CSV. Runs can also wait while the grid is short of renewable
+power.
 
 Energy is measured with no setup. To add emissions, name your grid region in a
 `[carbon]` table in `paratext.toml`; `paratext config --suggest-region` proposes
 one for you to check. See [Carbon](docs/carbon.md), and for how this worked out
-on one library's collection, [Storm-powered\* local AI](https://lentil.party/posts/storm-powered-local-ai).
+on the National Library of Scotlands's collection, [Storm-powered\* local AI](https://lentil.party/posts/storm-powered-local-ai).
 
 ## Documentation
 
@@ -131,9 +115,6 @@ start with **Writing a project**, then **Review and rounds**.
   show-through suppression for index-card collections.
 - **[Troubleshooting](docs/troubleshooting.md)** — what to check when the output
   is not what you expected.
-- **[HF export spec](docs/hf-export-spec.md)** — the dataset layout, card and row
-  fields a published round produces.
-- **[Publishing](docs/publishing.md)** — cutting a paratext release to PyPI.
 - **[AGENTS.md](AGENTS.md)** — the guide for AI coding agents. `paratext skill`
   installs it where Claude Code, Codex and the rest look, so an agent finds it
   without being told.
