@@ -66,7 +66,7 @@ Auth uses your Hugging Face token (`huggingface-cli login` or `HF_TOKEN`). The
 review UI can also push via **Sign in with Hugging Face**, in which case each
 reviewer pushes as themselves and the server stores no token.
 
-Implementation detail lives in [hf-export-spec.md](hf-export-spec.md).
+Implementation detail lives in [the design spec](design/hf-export-spec.md).
 
 ## MARC & Dublin Core (`--format marc` / `--format dc`)
 

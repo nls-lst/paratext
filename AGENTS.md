@@ -272,6 +272,21 @@ alongside `_api_export_catalogue`.
 - **Bump `schema_version`** when a schema changes.
 - **Commits:** short messages, no Co-Authored-By trailer.
 
+## Releases
+
+Published to PyPI as `paratext-cli` by `.github/workflows/publish.yml` (Trusted
+Publishing, no token).
+
+1. Bump `version` in `pyproject.toml` **and** `__version__` in
+   `src/paratext/__init__.py` (a test checks they agree).
+2. Commit, push, wait for CI.
+3. Create a GitHub Release tagged `v<version>`. The workflow checks the tag
+   matches, runs ruff and pytest, builds, and uploads.
+
+Run the workflow by hand (`workflow_dispatch`, dry run by default) to rehearse.
+A version number is permanent: a bad release is fixed with the next one, never
+a re-upload.
+
 ## Tasks in this repo are public
 
 This repository is public, and `.helical/` is committed with it. Task titles,
