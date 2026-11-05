@@ -95,10 +95,6 @@ emitted on your local grid. The figures come from the machine's own power
 sensors. Nothing is estimated: a run on a hosted model is recorded as "not
 measured".
 
-For example, one run over 18,221 born-digital books took 36 hours on a desktop
-machine. It used 3.8 kWh, about 0.2 Wh a record, and emitted 4.2 g CO2e on a
-grid that was 84% renewable.
-
 ```bash
 paratext carbon
 ```
