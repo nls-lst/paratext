@@ -509,3 +509,39 @@ def test_additional_authors_are_unaffected():
     names = [sf.text for df in root.iter(f"{MARC_NS}datafield")
              if df.get("tag") in ("100", "700", "710") for sf in df]
     assert names == ["Smith, John", "Brown, A.", "Education Scotland"]
+
+
+def test_marc_spec_fixes_indicators_and_constant_subfields():
+    mapping = {"title": "245$a", "doi": "024:7_$a$2=doi"}
+    root = _build({"title": "T", "doi": "10.7488/era/6103"}, mapping)
+    assert _indicators(root, "024") == ("7", " ")
+    df = next(d for d in root.iter(f"{MARC_NS}datafield") if d.get("tag") == "024")
+    assert [(sf.get("code"), sf.text) for sf in df] == [("a", "10.7488/era/6103"), ("2", "doi")]
+
+
+def test_doi_maps_to_024_by_default():
+    assert catalogue.infer_target("doi", "marc") == "024:7_$a$2=doi"
+
+
+def test_series_and_issn_share_one_490():
+    mapping = {"title": "245$a", "series": "490:0_$a", "issn": "490:0_$x"}
+    root = _build({"title": "T", "series": "Social research series", "issn": "2045-6964"},
+                  mapping)
+    fields = [d for d in root.iter(f"{MARC_NS}datafield") if d.get("tag") == "490"]
+    assert len(fields) == 1
+    assert (fields[0].get("ind1"), fields[0].get("ind2")) == ("0", " ")
+    assert [(sf.get("code"), sf.text) for sf in fields[0]] == [
+        ("a", "Social research series, "), ("x", "2045-6964")]
+
+
+def test_issn_alone_in_490_has_no_separator():
+    root = _build({"title": "T", "issn": "2045-6964"}, {"title": "245$a", "issn": "490:0_$x"})
+    df = next(d for d in root.iter(f"{MARC_NS}datafield") if d.get("tag") == "490")
+    assert [(sf.get("code"), sf.text) for sf in df] == [("x", "2045-6964")]
+
+
+def test_bad_indicator_spec_is_refused():
+    import pytest
+
+    with pytest.raises(ValueError):
+        catalogue._parse_marc("024:7$a")
