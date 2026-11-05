@@ -2,7 +2,7 @@
   <img src="assets/logo.png" alt="paratext logo" height="100" align="middle">&nbsp; paratext
 </h1>
 
-A workbench for producing metadata from digitised library and archive
+A framework for producing metadata from digitised library and archive
 collections with a multimodal model.
 
 A subject expert reviews a small sample of what the model produces. You revise
