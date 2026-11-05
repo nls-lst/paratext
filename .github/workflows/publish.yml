@@ -2,7 +2,7 @@ name: Publish
 
 # Publishes paratext-cli to PyPI via Trusted Publishing (OIDC) — no API token is
 # stored anywhere. PyPI must have a publisher registered for this repo and this
-# workflow filename; see docs/publishing.md.
+# workflow filename; see AGENTS.md (Releases).
 #
 # Triggered by publishing a GitHub Release, so a publish is always a deliberate
 # act with a changelog attached. A PyPI version can never be reused, so the job

@@ -2,7 +2,7 @@
 
 Turns a `review/<project>-r<N>/` round plus its `annotations.db` into an
 imagefolder + `metadata.jsonl` dataset with an auto-generated dataset card, then
-(optionally) pushes it to the Hub. Design points (see docs/hf-export-spec.md):
+(optionally) pushes it to the Hub. Design points (see docs/design/hf-export-spec.md):
 
 - **Private by default**; `--public` is opt-in. A licence is strongly steered —
   `export` prompts for one when none is set — but never blocks publishing.
