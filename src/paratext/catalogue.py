@@ -29,7 +29,9 @@ EXPORT_ROOT = Path("export")
 
 # Canonical field-name synonyms → targets. `marc` is a "tag$sub" spec; a "|"-joined
 # pair (e.g. "100$a|700$a") means: first value → first tag, remaining list values →
-# second tag (author main-vs-added entries). `dc` is a Dublin Core element name.
+# second tag (author main-vs-added entries). A spec may also fix the indicators
+# after a colon, with "_" for blank, and add constant subfields as "$code=value":
+# "024:7_$a$2=doi" is a DOI. `dc` is a Dublin Core element name.
 # `None` = no sensible target for that format (skipped unless the wizard sets one).
 CANONICAL: dict[str, dict] = {
     "title": {"marc": "245$a", "dc": "title"},
@@ -50,6 +52,7 @@ CANONICAL: dict[str, dict] = {
     "year": {"marc": "264$c", "dc": "date"},
     "isbn": {"marc": "020$a", "dc": "identifier"},
     "issn": {"marc": "022$a", "dc": "identifier"},
+    "doi": {"marc": "024:7_$a$2=doi", "dc": "identifier"},
     "edition": {"marc": "250$a", "dc": None},
     "extent": {"marc": "300$a", "dc": "format"},
     "material_type": {"marc": "655$a", "dc": "type"},
@@ -69,7 +72,7 @@ MARC_HINTS = (
     "245$a title · 245$b subtitle · 100$a person · 110$a org · 264$a place · "
     "264$b publisher · 264$c date · 020$a ISBN · 250$a edition · 300$a extent · "
     "490$a series · 500$a note · 520$a summary · 650$a subject · 655$a genre · "
-    "041$a language"
+    "041$a language · 024:7_$a$2=doi DOI (indicators after ':', '_' = blank)"
 )
 DC_ELEMENTS = (
     "title creator subject description publisher contributor date type format "
@@ -193,13 +196,43 @@ def _as_list(value) -> list[str]:
     return [str(value)]
 
 
-def _split_marc(spec: str) -> list[tuple[str, str]]:
-    """"245$a" → [("245","a")]; "100$a|700$a" → [("100","a"),("700","a")]."""
+@dataclass(frozen=True)
+class MarcTarget:
+    """One part of a MARC spec: where a value goes, plus anything fixed beside it."""
+
+    tag: str
+    sub: str = "a"
+    indicators: tuple[str, str] | None = None  # None → the per-tag defaults
+    fixed: tuple[tuple[str, str], ...] = ()  # constant subfields, e.g. (("2", "doi"),)
+
+
+def _parse_marc(spec: str) -> list[MarcTarget]:
+    """"245$a" → one target; "100$a|700$a" → main and added entry;
+    "024:7_$a$2=doi" → tag 024, indicators "7 ", value in $a, constant $2 doi."""
     out = []
     for part in spec.split("|"):
-        tag, _, sub = part.partition("$")
-        out.append((tag.strip(), (sub or "a").strip()))
+        head, *subs = part.split("$")
+        tag, colon, ind = head.partition(":")
+        indicators = None
+        if colon:
+            ind = ind.strip().replace("_", " ")
+            if len(ind) != 2:
+                raise ValueError(f"MARC spec {part!r}: indicators must be two characters")
+            indicators = (ind[0], ind[1])
+        sub, fixed = None, []
+        for s in (x.strip() for x in subs):
+            if "=" in s:
+                code, _, value = s.partition("=")
+                fixed.append((code.strip(), value.strip()))
+            elif s and sub is None:
+                sub = s
+        out.append(MarcTarget(tag.strip(), sub or "a", indicators, tuple(fixed)))
     return out
+
+
+def _split_marc(spec: str) -> list[tuple[str, str]]:
+    """"245$a" → [("245","a")]; "100$a|700$a" → [("100","a"),("700","a")]."""
+    return [(t.tag, t.sub) for t in _parse_marc(spec)]
 
 
 # 245 second indicator = how many leading characters a sort should skip, so a
@@ -231,11 +264,24 @@ def _marc_indicators(tag: str, has_author: bool, title: str = "") -> tuple[str, 
     return (" ", " ")
 
 
-def _datafield(tag: str, sub: str, value: str, has_author: bool, title: str = "") -> ET.Element:
-    i1, i2 = _marc_indicators(tag, has_author, title)
-    df = ET.Element("datafield", tag=tag, ind1=i1, ind2=i2)
-    ET.SubElement(df, "subfield", code=sub).text = value
+def _new_datafield(target: MarcTarget, has_author: bool, title: str = "") -> ET.Element:
+    i1, i2 = target.indicators or _marc_indicators(target.tag, has_author, title)
+    df = ET.Element("datafield", tag=target.tag, ind1=i1, ind2=i2)
+    for code, value in target.fixed:
+        ET.SubElement(df, "subfield", code=code).text = value
     return df
+
+
+def _datafield(target: MarcTarget, value: str, has_author: bool, title: str = "") -> ET.Element:
+    df = _new_datafield(target, has_author, title)
+    ET.SubElement(df, "subfield", code=target.sub).text = value
+    return df
+
+
+def _subfield_order(sf: ET.Element) -> tuple[bool, str]:
+    """Letters in code order, then numeric control subfields ($2 source last)."""
+    code = sf.get("code", "")
+    return (code.isdigit(), code)
 
 
 def _first_value(label: dict, mapping: dict[str, str], tag: str, sub: str) -> str:
@@ -320,6 +366,10 @@ def _punctuate_isbd(merged: dict[str, ET.Element]) -> None:
         if len(title):
             _append_text(title[-1], ".")
 
+    series = merged.get("490")
+    if series is not None and {"a", "x"} <= {sf.get("code") for sf in series}:
+        _append_isbd(series, "a", ", ")  # "Social research series, $x 2045-6964"
+
     imprint = merged.get("264")
     if imprint is None:
         return
@@ -379,19 +429,20 @@ def _record_to_marc(
         values = _as_list(label.get(f))
         if not values:
             continue
-        targets = _split_marc(spec)
-        main_tag, main_sub = targets[0]
-        added_tag, added_sub = targets[1] if len(targets) > 1 else targets[0]
-        if main_tag not in merged:
-            i1, i2 = _marc_indicators(main_tag, has_author, title)
-            merged[main_tag] = ET.Element("datafield", tag=main_tag, ind1=i1, ind2=i2)
-        ET.SubElement(merged[main_tag], "subfield", code=main_sub).text = values[0]
+        targets = _parse_marc(spec)
+        main = targets[0]
+        added = targets[1] if len(targets) > 1 else main
+        if main.tag not in merged:
+            merged[main.tag] = _new_datafield(main, has_author, title)
+        else:
+            for code, value in main.fixed:  # e.g. a second field sharing the 490
+                if merged[main.tag].find(f"subfield[@code='{code}']") is None:
+                    ET.SubElement(merged[main.tag], "subfield", code=code).text = value
+        ET.SubElement(merged[main.tag], "subfield", code=main.sub).text = values[0]
         for extra in values[1:]:
-            extras.append(
-                (added_tag, _datafield(added_tag, added_sub, extra, has_author, title))
-            )
+            extras.append((added.tag, _datafield(added, extra, has_author, title)))
     for df in merged.values():  # tidy subfield order within a datafield (264 → $a$b$c)
-        df[:] = sorted(df, key=lambda sf: sf.get("code", ""))
+        df[:] = sorted(df, key=_subfield_order)
     _punctuate_isbd(merged)
     ordered = _demote_extra_main_entries(list(merged.items()) + extras)
     if ai_note:
