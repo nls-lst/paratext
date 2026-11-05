@@ -106,7 +106,8 @@ also wait while the grid is short of renewable power.
 
 Energy is measured with no setup. To add emissions, name your grid region in a
 `[carbon]` table in `paratext.toml`; `paratext config --suggest-region` proposes
-one for you to check. See [Carbon](docs/carbon.md).
+one for you to check. See [Carbon](docs/carbon.md), and for how this worked out
+on one library's collection, [Storm-powered\* local AI](https://lentil.party/posts/storm-powered-local-ai).
 
 ## Documentation
 
@@ -136,6 +137,15 @@ start with **Writing a project**, then **Review and rounds**.
 - **[AGENTS.md](AGENTS.md)** — the guide for AI coding agents. `paratext skill`
   installs it where Claude Code, Codex and the rest look, so an agent finds it
   without being told.
+
+## Background
+
+Longer write-ups of why paratext works the way it does:
+
+- [Introducing Paratext](https://lentil.party/posts/paratext) — what it is for
+  and the choices behind it.
+- [Reaching good enough](https://lentil.party/posts/good-enough) — deciding when
+  model-generated metadata is good enough to use.
 
 ## Development
 
