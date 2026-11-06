@@ -31,7 +31,8 @@
       #progress button { flex-shrink: 0; }
       #theme-toggle { flex-shrink: 0; }
       #dataset-picker-host { min-width: 0; }
-      .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      .panes { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }
+      .panes .field-row { grid-template-columns: 8rem 1fr; }
       .thumbs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
       .thumbs a { display: inline-block; }
       .media-player { margin-bottom: 1rem; }
