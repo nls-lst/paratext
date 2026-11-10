@@ -110,6 +110,7 @@ def _fake_hub(monkeypatch, tmp_path, names):
 
 def test_hf_dataset_source_uses_the_default_cache_when_none_is_set(monkeypatch, tmp_path):
     import huggingface_hub
+
     from paratext.sources import HF_CACHE_ENV, hf_dataset_source
 
     _fake_hub(monkeypatch, tmp_path, ["images/a.jpg"])
