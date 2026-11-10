@@ -263,7 +263,8 @@ def hf_dataset_source(
     here reads an ambient credential or writes one down.
     """
     notices: list[str] = []
-    root = cache_dir or Path(os.environ.get(HF_CACHE_ENV, "")) or None
+    env_cache = os.environ.get(HF_CACHE_ENV)
+    root = cache_dir or (Path(env_cache) if env_cache else None)
 
     def _iter(source: Path, limit: int | None) -> Iterator[Sample]:
         from huggingface_hub import HfApi, hf_hub_download

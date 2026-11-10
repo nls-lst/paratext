@@ -26,3 +26,8 @@ WORKING-NOTES.md
 
 # Deployed service venv (built from a wheel; not source)
 /deploy/
+
+# Hugging Face cache, if one is ever pointed at the repo root
+/datasets--*/
+/.locks/
+/CACHEDIR.TAG
