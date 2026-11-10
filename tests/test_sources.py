@@ -108,6 +108,24 @@ def _fake_hub(monkeypatch, tmp_path, names):
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", fake_download)
 
 
+def test_hf_dataset_source_uses_the_default_cache_when_none_is_set(monkeypatch, tmp_path):
+    import huggingface_hub
+    from paratext.sources import HF_CACHE_ENV, hf_dataset_source
+
+    _fake_hub(monkeypatch, tmp_path, ["images/a.jpg"])
+    monkeypatch.delenv(HF_CACHE_ENV, raising=False)
+    seen = {}
+    real = huggingface_hub.hf_hub_download
+
+    def spy(repo_id, name, **kw):
+        seen["cache_dir"] = kw.get("cache_dir")
+        return real(repo_id, name, **kw)
+
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", spy)
+    list(hf_dataset_source(repo="o/n").iter_samples(Path("x"), None))
+    assert seen["cache_dir"] is None
+
+
 def test_hf_dataset_source_strips_the_shared_directory_from_ids(monkeypatch, tmp_path):
     from paratext.sources import hf_dataset_source
 
