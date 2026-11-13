@@ -6,6 +6,8 @@
 // Keyboard: [f] flag (when a flag control exists), verdict hotkeys (1/2/3 by
 //   default), [→] next, [←] previous, [Ctrl+s] save.
 
+import { datasetFromSearch, searchForDataset } from "./address.js";
+
 // ── Theme toggle ──────────────────────────────────────────────────────
 // Oat sets `color-scheme: light dark`, so forcing colorScheme on the root
 // switches every light-dark() token. Unset = follow the OS. The pre-paint
@@ -42,7 +44,18 @@ const state = {
   current: null,
   evalDirty: false, // an unsaved edit exists in the correction editor
   workshop: undefined, // undefined = not asked yet; false = not workshop mode
+  addressRead: false, // the ?project= in the address has been acted on (once, on load)
+  addressNotice: null, // shown on the picker when the address named an unknown project
 };
+
+// Keep ?project= in step with the chosen dataset, so the address is always a
+// link back to it. replaceState: choosing a project isn't a step to go back over.
+function writeAddress() {
+  const search = searchForDataset(state.datasets, state.dataset, location.search);
+  if (search !== location.search) {
+    history.replaceState(history.state, "", location.pathname + search + location.hash);
+  }
+}
 
 // Fetch (and cache) the display/review contract for the current dataset.
 async function ensureView() {
@@ -99,6 +112,7 @@ function setDataset(name) {
   state.samplesMode = null;
   state.index = 0;
   state.current = null;
+  writeAddress();
 }
 
 async function loadList(targetId = null) {
@@ -131,6 +145,12 @@ async function loadSample() {
   const id = state.samples[state.index].id;
   const res = await fetch(api(`api/samples/${id}`));
   state.current = await res.json();
+  // Name the record in the address too, so what's on screen is what a copied
+  // link opens. replaceState fires no hashchange, so this doesn't re-route.
+  const hash = `#/${isEval() ? "eval" : "review"}/${encodeURIComponent(id)}`;
+  if (location.hash !== hash) {
+    history.replaceState(history.state, "", location.pathname + location.search + hash);
+  }
   clearTimeout(state.evalTimer);
   state.evalDirty = false;
   if (isEval()) renderEditor();
@@ -328,8 +348,14 @@ function renderPicker() {
     })
     .join("");
 
+  const notice = state.addressNotice
+    ? `<p role="status" class="text-light">The link was for “${escapeHtml(state.addressNotice)}”,
+         which isn't being served here any more. Choose a dataset below.</p>`
+    : "";
+  state.addressNotice = null;
   document.getElementById("view").innerHTML = `
     <h2>Choose a dataset to review</h2>
+    ${notice}
     <div style="max-width:32rem;">${cards}</div>
   `;
   document.querySelectorAll("[data-dataset]").forEach((btn) => {
@@ -2061,6 +2087,7 @@ function renderWorkshop() {
     state.workshop = undefined;
     state.datasets = [];
     state.dataset = null;
+    writeAddress();
     await loadWorkshop();
     await loadDatasets();
     // Out to the front page, not back to the editor: starting over means
@@ -2198,12 +2225,25 @@ async function route() {
     }
   }
 
+  // A link names a project (?project=…): open it, whatever the count. Only on
+  // load; after that the address follows the choice rather than driving it.
+  if (!state.addressRead) {
+    state.addressRead = true;
+    const want = datasetFromSearch(state.datasets, location.search);
+    if (want.name) setDataset(want.name);
+    else if (want.unknown) {
+      state.addressNotice = want.unknown;
+      writeAddress();
+    }
+  }
+
   // Resolve the current dataset:
   // - 0 datasets → handled by renderPicker (shows guidance).
   // - 1 dataset  → auto-select.
   // - 2+ datasets → always show the picker first (no persisted choice).
   if (!state.dataset && state.datasets.length === 1) {
     setDataset(state.datasets[0].name);
+    state.addressNotice = null; // nothing to choose between, so nothing to explain
   }
 
   if (currentRoute() === "select" || !state.dataset) {
@@ -2222,7 +2262,7 @@ async function route() {
 
   if (currentRoute() === "eval") {
     const m = location.hash.match(/^#\/eval\/(.+)$/);
-    const targetId = m ? m[1] : null;
+    const targetId = m ? decodeURIComponent(m[1]) : null;
     if (state.samplesMode !== "eval") {
       await loadEvalList(targetId);
     } else if (targetId) {
@@ -2240,7 +2280,7 @@ async function route() {
   }
 
   const match = location.hash.match(/^#\/review\/(.+)$/);
-  const targetId = match ? match[1] : null;
+  const targetId = match ? decodeURIComponent(match[1]) : null;
   if (state.samplesMode !== "review" || !state.samples.length) {
     await loadList(targetId);
   } else if (targetId) {
