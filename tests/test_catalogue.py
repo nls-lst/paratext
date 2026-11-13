@@ -545,3 +545,27 @@ def test_bad_indicator_spec_is_refused():
 
     with pytest.raises(ValueError):
         catalogue._parse_marc("024:7$a")
+
+
+def _subfields(root, tag):
+    return [[(sf.get("code"), sf.text) for sf in df]
+            for df in root.iter(f"{MARC_NS}datafield") if df.get("tag") == tag]
+
+
+def test_every_added_entry_keeps_subfields_in_code_order():
+    mapping = {"title": "245$a", "editors": "700:1_$a$e=editor."}
+    root = _build({"title": "T", "editors": ["Pennycook, Lucy", "Howard, Alex"]}, mapping)
+    assert [[c for c, _ in f] for f in _subfields(root, "700")] == [["a", "e"], ["a", "e"]]
+
+
+def test_a_relator_term_follows_the_name_after_a_comma():
+    mapping = {"title": "245$a", "editors": "700:1_$a$e=editor."}
+    root = _build({"title": "T", "editors": ["Pennycook, Lucy", "Howard, Alex,"]}, mapping)
+    assert _subfields(root, "700") == [[("a", "Pennycook, Lucy,"), ("e", "editor.")],
+                                       [("a", "Howard, Alex,"), ("e", "editor.")]]
+
+
+def test_names_without_a_relator_are_left_alone():
+    mapping = {"title": "245$a", "personal_authors": "100$a|700$a"}
+    root = _build({"title": "T", "personal_authors": ["Smith, John", "Brown, A."]}, mapping)
+    assert _subfields(root, "700") == [[("a", "Brown, A.")]]

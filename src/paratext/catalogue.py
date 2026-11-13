@@ -384,6 +384,20 @@ def _punctuate_isbd(merged: dict[str, ET.Element]) -> None:
         _append_isbd(imprint, "c", ".")
 
 
+# Name fields that can carry a relator term ($e, e.g. "editor."). RDA punctuation
+# puts a comma between the name and the term: "Pennycook, Lucy, $e editor."
+NAME_TAGS = ("100", "110", "111", "700", "710", "711")
+
+
+def _punctuate_relator(df: ET.Element) -> None:
+    """Close the subfield before $e with a comma, if the field has a relator."""
+    subs = list(df)
+    for before, sf in zip(subs, subs[1:]):
+        if sf.get("code") == "e":
+            _append_text(before, ",")
+            return
+
+
 def _demote_extra_main_entries(
     ordered: list[tuple[str, ET.Element]],
 ) -> list[tuple[str, ET.Element]]:
@@ -441,10 +455,14 @@ def _record_to_marc(
         ET.SubElement(merged[main.tag], "subfield", code=main.sub).text = values[0]
         for extra in values[1:]:
             extras.append((added.tag, _datafield(added, extra, has_author, title)))
-    for df in merged.values():  # tidy subfield order within a datafield (264 → $a$b$c)
+    # tidy subfield order within every datafield (264 → $a$b$c, 700 → $a$e)
+    for df in list(merged.values()) + [df for _, df in extras]:
         df[:] = sorted(df, key=_subfield_order)
     _punctuate_isbd(merged)
     ordered = _demote_extra_main_entries(list(merged.items()) + extras)
+    for tag, df in ordered:
+        if tag in NAME_TAGS:
+            _punctuate_relator(df)
     if ai_note:
         # ind1=0 is "source of description note"; joins the sort so it lands in
         # tag order with everything else rather than being appended at the end.
