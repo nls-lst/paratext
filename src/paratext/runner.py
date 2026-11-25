@@ -70,9 +70,10 @@ def build_user_message(
     max_size: int = 1024,
     quality: int = 85,
     audio: "list[Audio] | None" = None,
+    texts: "list[str] | None" = None,
 ) -> dict:
     """The prompt, then each image, then each stretch of audio as OpenAI's
-    ``input_audio`` part (base64, with its format)."""
+    ``input_audio`` part (base64, with its format), then any further text."""
     parts: list[dict] = [{"type": "text", "text": prompt}]
     for img in images:
         parts.append(
@@ -81,6 +82,7 @@ def build_user_message(
     for a in audio or []:
         parts.append({"type": "input_audio", "input_audio": {
             "data": base64.b64encode(a.data).decode(), "format": a.format}})
+    parts += [{"type": "text", "text": t} for t in texts or []]
     return {"role": "user", "content": parts}
 
 
@@ -97,11 +99,14 @@ def call_structured(
     image_max_size: int = 1024,
     image_quality: int = 85,
     audio: "list[Audio] | None" = None,
+    texts: "list[str] | None" = None,
 ) -> BaseModel:
     """Use the Pydantic response_format API to get a typed result."""
     kwargs: dict = {
         "model": model,
-        "messages": [build_user_message(prompt, images, image_max_size, image_quality, audio)],
+        "messages": [build_user_message(
+            prompt, images, image_max_size, image_quality, audio, texts
+        )],
         "response_format": schema,
         "temperature": temperature,
         "max_tokens": max_tokens,
@@ -130,11 +135,14 @@ def call_plain(
     image_max_size: int = 1024,
     image_quality: int = 85,
     audio: "list[Audio] | None" = None,
+    texts: "list[str] | None" = None,
 ) -> str:
     """Plain chat completion; caller handles JSON parsing."""
     kwargs: dict = {
         "model": model,
-        "messages": [build_user_message(prompt, images, image_max_size, image_quality, audio)],
+        "messages": [build_user_message(
+            prompt, images, image_max_size, image_quality, audio, texts
+        )],
         "temperature": temperature,
         "max_tokens": max_tokens,
     }

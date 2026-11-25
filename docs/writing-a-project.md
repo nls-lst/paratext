@@ -158,3 +158,29 @@ mono WAV (16 kHz by default, `sample_rate=` to change) and sent as an
 long recording is one large request; split it into clips with a manifest if the
 server limits request size. A clip ffmpeg can't decode is skipped, and the run
 summary says which. The review UI plays the clip in place of images.
+
+**Transcripts.** Both time-based sources take `transcribe=`, a function you
+supply that turns a clip's sound into timed text. Paratext doesn't ship a speech
+model; the function can call one locally or on a server, or read a transcript
+made elsewhere:
+
+```python
+from paratext.sources import audio_source
+from paratext.transcripts import Segment
+
+def transcribe(wav: bytes, clip: dict) -> list[Segment]:
+    # wav: the clip as 16 kHz mono WAV; clip: its manifest row, with any extra
+    # columns (a catalogue id, terms to listen for) under clip["extra"]
+    return [Segment(start=0.0, end=4.2, text="Good morning.", speaker="A")]
+
+source = audio_source(transcribe=transcribe)
+```
+
+Times count from the start of the clip. The model reads the transcript after the
+prompt, one `[mm:ss]` line per segment, so a model without audio input can
+describe a recording; `audio_source` then stops sending the sound itself unless
+you pass `send_audio=True`. The record keeps the segments under
+`metadata.transcript`, and review shows them as a *Transcript* track on the
+timeline. A clip the transcriber fails on is skipped and named in the run summary.
+Changing the transcriber doesn't change the prompt hash, so pass `--re-extract`
+to redo records made with the old one.

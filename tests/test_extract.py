@@ -206,3 +206,12 @@ def test_report_failures_ignores_a_run_with_nothing_to_do(tmp_path, capsys):
     # A full resume attempts nothing; that is not a failure.
     _report_failures(0, 0, "", tmp_path / "out.jsonl")
     assert capsys.readouterr().out == ""
+
+
+def test_a_samples_audio_and_text_reach_the_model(tmp_path, captured):
+    from paratext.projects import Audio
+
+    sample = Sample("a", [], {}, audio=[Audio(b"RIFF")], text=["Transcript: hello"])
+    _run(_project(iter_samples=lambda source, limit: iter([sample])), tmp_path)
+    assert captured[0]["audio"] == [Audio(b"RIFF")]
+    assert captured[0]["texts"] == ["Transcript: hello"]

@@ -218,6 +218,7 @@ def _loop(project, source, output, limit, seen, tracker, client, model, use_stru
                     image_max_size=project.image_max_size,
                     image_quality=project.image_quality,
                     audio=sample.audio,
+                    texts=sample.text,
                 )
                 extraction = parsed.model_dump()
             else:
@@ -231,6 +232,7 @@ def _loop(project, source, output, limit, seen, tracker, client, model, use_stru
                     image_max_size=project.image_max_size,
                     image_quality=project.image_quality,
                     audio=sample.audio,
+                    texts=sample.text,
                 )
                 parsed_dict = _parse_loose_json(raw)
                 if parsed_dict is None:

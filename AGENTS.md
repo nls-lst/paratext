@@ -58,6 +58,7 @@ dataset) → `review` (web UI) → `export` (publish). `run` does extract+packag
 | `sources/` | Input adapters, one module each (`image_source`, `pdf_source`, `hf_dataset_source`, `video_source`, `audio_source`); `base.py` holds `Source`, `manifest.py` the clip manifest the time-based sources share |
 | `ffmpeg.py` | ffmpeg/ffprobe calls shared by the time-based sources: durations, decoded audio |
 | `video.py` | frame sampling and timestamps for `video_source` |
+| `transcripts.py` | `Segment` and the `transcribe=` hook on the time-based sources: text for the model, a track for review |
 | `media.py` | The `media` a sample carries for the review player |
 | `extract.py` / `runner.py` | Sample loop; model call, retries, image and audio encoding |
 | `packaging.py` | JSONL → `samples.json` + `images/` + `view.json` |

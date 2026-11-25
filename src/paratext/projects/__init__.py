@@ -45,13 +45,14 @@ class Audio:
 
 @dataclass
 class Sample:
-    """One unit of work fed to the model: its images and any audio, in order,
-    after the prompt."""
+    """One unit of work fed to the model: after the prompt, its images, then any
+    audio, then any text (a transcript, say), in that order."""
 
     id: str
     images: list[Image.Image]
     metadata: dict
     audio: list[Audio] = field(default_factory=list)
+    text: list[str] = field(default_factory=list)
 
 
 @dataclass
