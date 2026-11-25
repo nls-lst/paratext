@@ -1,60 +1,33 @@
-"""Frame sampling for video sources, via the ffmpeg and ffprobe executables."""
+"""Frame sampling for video sources, via ffmpeg (see ``ffmpeg.py``)."""
 
 from __future__ import annotations
 
 import io
-import shutil
-import subprocess
 from typing import Callable
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .ffmpeg import FfmpegError, probe_duration, run, tool
+
 FrameTimes = Callable[[float, float], list[float]]
 
+# Kept for callers that catch it by its old name; ffmpeg failures of any kind
+# now raise FfmpegError.
+VideoError = FfmpegError
 
-class VideoError(RuntimeError):
-    pass
-
-
-def _tool(name: str) -> str:
-    path = shutil.which(name)
-    if path is None:
-        raise VideoError(f"{name} not found on PATH; video sources need ffmpeg installed")
-    return path
-
-
-def _run(args: list[str], timeout: int) -> bytes:
-    try:
-        done = subprocess.run(args, capture_output=True, timeout=timeout)
-    except subprocess.TimeoutExpired as e:
-        raise VideoError(f"{args[0]} timed out after {timeout}s") from e
-    if done.returncode != 0:
-        msg = done.stderr.decode(errors="replace").strip().splitlines()
-        raise VideoError(msg[-1] if msg else f"{args[0]} exited {done.returncode}")
-    return done.stdout
-
-
-def probe_duration(src: str) -> float:
-    out = _run(
-        [_tool("ffprobe"), "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=nw=1:nk=1", src],
-        timeout=120,
-    )
-    try:
-        return float(out.decode().strip())
-    except ValueError:
-        raise VideoError(f"no duration for {src}") from None
+__all__ = ["FrameTimes", "VideoError", "clock", "evenly_spaced", "grab_frame",
+           "probe_duration", "stamp"]
 
 
 def grab_frame(src: str, t: float) -> Image.Image:
     # -ss before -i seeks by keyframe then decodes forward: fast and exact.
-    out = _run(
-        [_tool("ffmpeg"), "-v", "error", "-ss", f"{t:.3f}", "-i", src,
+    out = run(
+        [tool("ffmpeg"), "-v", "error", "-ss", f"{t:.3f}", "-i", src,
          "-frames:v", "1", "-f", "image2pipe", "-c:v", "png", "-"],
         timeout=300,
     )
     if not out:
-        raise VideoError(f"no frame at {t:.1f}s in {src}")
+        raise FfmpegError(f"no frame at {t:.1f}s in {src}")
     return Image.open(io.BytesIO(out)).convert("RGB")
 
 

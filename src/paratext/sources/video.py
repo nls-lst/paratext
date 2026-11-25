@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Iterator
 
 from PIL import Image
 
-from ..projects import Sample
+from ..projects import Audio, Sample
 from .base import Source
 from .manifest import read_manifest
 
@@ -25,6 +25,8 @@ def video_source(
     frames: "FrameTimes | None" = None,
     timestamps: bool = True,
     exts: tuple[str, ...] = VIDEO_EXTS,
+    soundtrack: bool = False,
+    sample_rate: int = 16000,
 ) -> Source:
     """Videos, one Sample per clip, each sampled to a handful of frames.
 
@@ -36,8 +38,13 @@ def video_source(
 
     ``frames(start, end) -> times`` picks the frames; the default is eight,
     evenly spaced. ``timestamps`` prints each frame's time below it, counted
-    from the start of the clip, so the model can place what it sees. Needs ffmpeg on PATH.
+    from the start of the clip, so the model can place what it sees.
+    ``soundtrack`` also sends the clip's sound, as mono WAV at ``sample_rate`` Hz
+    after the frames, so the model hears what it sees; it needs a model that takes
+    audio. A clip without sound then fails, logged, rather than going without it.
+    Needs ffmpeg on PATH.
     """
+    from ..ffmpeg import decode_audio
     from ..video import evenly_spaced, grab_frame, probe_duration, stamp
 
     pick = frames or evenly_spaced(8)
@@ -69,14 +76,17 @@ def video_source(
                 end = clip.get("end") or probe_duration(clip["src"])
                 times = pick(start, end)
                 images = _frames(clip["src"], times, start)
+                audio = [Audio(decode_audio(clip["src"], start, end, sample_rate))] \
+                    if soundtrack else []
             except Exception as e:
-                logger.warning("frame sampling failed for %s: %s", clip["id"], e)
+                logger.warning("sampling failed for %s: %s", clip["id"], e)
                 continue
             media = {"src": clip["src"], "start": start, "end": end}
             media.update({k: clip[k] for k in ("poster", "label") if k in clip})
             yield Sample(
                 id=clip["id"],
                 images=images,
+                audio=audio,
                 metadata={"media": media, "frame_times": times},
             )
 
@@ -108,5 +118,7 @@ def video_source(
             "frames": getattr(pick, "__name__", str(pick)),
             "timestamps": timestamps,
             "exts": list(exts),
+            "soundtrack": soundtrack,
+            **({"sample_rate": sample_rate} if soundtrack else {}),
         },
     )

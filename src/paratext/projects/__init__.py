@@ -35,12 +35,23 @@ def load_prompt(module_file: str) -> str:
 
 
 @dataclass
+class Audio:
+    """A stretch of sound sent to the model as an ``input_audio`` part: encoded
+    bytes (``sources.audio_source`` makes 16 kHz mono WAV) and their format."""
+
+    data: bytes
+    format: str = "wav"
+
+
+@dataclass
 class Sample:
-    """One unit of work fed to the model."""
+    """One unit of work fed to the model: its images and any audio, in order,
+    after the prompt."""
 
     id: str
     images: list[Image.Image]
     metadata: dict
+    audio: list[Audio] = field(default_factory=list)
 
 
 @dataclass

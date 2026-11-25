@@ -97,6 +97,8 @@ def _source_expr(kind: str, verso: bool, crop: bool) -> tuple[str, str]:
         return "pdf_source", "pdf_source()"
     if kind == "video":
         return "video_source", "video_source()"
+    if kind == "audio":
+        return "audio_source", "audio_source()"
     return "image_source", f"image_source(verso_filter={verso}, crop={crop})"
 
 
@@ -111,7 +113,7 @@ def render_project(
     pkg_name: str = "",
 ):
     """Return ``{filename: content}`` for a new project. ``kind`` is
-    ``"images"``, ``"pdf"`` or ``"video"``; ``verso``/``crop`` apply to image projects;
+    ``"images"``, ``"pdf"``, ``"video"`` or ``"audio"``; ``verso``/``crop`` apply to image projects;
     ``fields`` seeds the schema (defaults to a single ``title``).
 
     ``pkg_dir``/``pkg_name`` nest the project inside an existing package (e.g.
@@ -253,6 +255,8 @@ def init(name: str | None = None, *, install: bool = True) -> int:
         kind = "pdf"
     elif _ask("Is the source video?", default=False):
         kind = "video"
+    elif _ask("Is the source sound recordings?", default=False):
+        kind = "audio"
     else:
         kind = "images"
     verso = crop = False
@@ -402,7 +406,7 @@ def _offer_config(ep_name: str) -> None:
         print(f"  paratext.toml already has [project.{ep_name}] — leaving it as is.")
         return
 
-    source = _prompt("  Source (a directory, or a video manifest) []: ")
+    source = _prompt("  Source (a directory, or a video or audio manifest) []: ")
 
     block: list[str] = []
     if not existing.strip():

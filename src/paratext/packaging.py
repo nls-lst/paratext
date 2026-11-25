@@ -72,9 +72,9 @@ def _default_build_record(rec: dict, images_rel: list[str]) -> dict:
 
 
 def _copy_local_media(r: dict, out: Path) -> None:
-    """A video or poster on local disk goes into the dataset, so the review
-    server can serve it; hard-linked when it can be, as tapes are large."""
-    for key, name in (("src", "video"), ("poster", "poster")):
+    """A video, recording or poster on local disk goes into the dataset, so the
+    review server can serve it; hard-linked when it can be, as tapes are large."""
+    for key, name in (("src", r["media"].get("kind", "video")), ("poster", "poster")):
         src = r["media"].get(key)
         if not src or src.startswith(("http://", "https://")) or not Path(src).is_file():
             continue

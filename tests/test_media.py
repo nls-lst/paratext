@@ -13,7 +13,8 @@ from paratext.projects import Project
 
 def test_defaults_and_type_inference():
     assert normalise_media({"src": "https://x/clip.m3u8?t=1"}) == {
-        "src": "https://x/clip.m3u8?t=1", "type": "hls", "start": 0, "tracks": []}
+        "src": "https://x/clip.m3u8?t=1", "type": "hls", "kind": "video",
+        "start": 0, "tracks": []}
     assert normalise_media({"src": "clip.mp4"})["type"] == "file"
 
 
@@ -60,7 +61,8 @@ def _package(tmp_path, monkeypatch, media):
 
 def test_packaging_carries_media_from_sample_metadata(tmp_path, monkeypatch):
     rec = _package(tmp_path, monkeypatch, {"src": "v.m3u8", "end": 30})
-    assert rec["media"] == {"src": "v.m3u8", "type": "hls", "start": 0, "end": 30, "tracks": []}
+    assert rec["media"] == {"src": "v.m3u8", "type": "hls", "kind": "video", "start": 0, "end": 30,
+                            "tracks": []}
 
 
 def test_packaging_names_the_sample_with_bad_media(tmp_path, monkeypatch):

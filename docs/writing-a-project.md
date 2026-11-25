@@ -40,7 +40,8 @@ the model:
 | `image_source()` | a directory of images, one item per file |
 | `pdf_source()` | PDFs, rendered to page images |
 | `hf_dataset_source(repo="owner/name")` | an imagefolder dataset on the Hugging Face Hub |
-| `video_source()` | videos, or a manifest of clips, sampled to frames (needs ffmpeg) |
+| `video_source()` | videos, or a manifest of clips, sampled to frames, optionally with their sound (needs ffmpeg) |
+| `audio_source()` | sound recordings, or a manifest of clips, sent to the model as audio (needs ffmpeg) |
 
 Their options are under [Source details](#source-details). If you already have
 the metadata and only want to review it, you don't need a source: see
@@ -146,4 +147,14 @@ URL, HLS included) and optionally `start` and `end` in seconds, `poster` and
 `frames(start, end) -> [seconds]` to change that. Each frame carries its time on
 a band below the picture, counted from the start of the clip, so ask for
 timecodes in the prompt on that basis. The review UI plays the clip, and
-clicking a timecode seeks to it.
+clicking a timecode seeks to it. `soundtrack=True` also sends the clip's sound
+after the frames (mono WAV, 16 kHz unless `sample_rate=` says otherwise), for a
+model that takes audio as well as images.
+
+**`audio_source`** reads sound recordings the same way: a directory of audio
+files, or a manifest of clips with the same columns. Each clip is decoded to
+mono WAV (16 kHz by default, `sample_rate=` to change) and sent as an
+`input_audio` part, so it needs a model, and a server, that accept audio. A
+long recording is one large request; split it into clips with a manifest if the
+server limits request size. A clip ffmpeg can't decode is skipped, and the run
+summary says which. The review UI plays the clip in place of images.
