@@ -55,7 +55,7 @@ dataset) → `review` (web UI) → `export` (publish). `run` does extract+packag
 | `cli.py` | Argparse wiring, round resolution, command bodies |
 | `config.py` | `paratext.toml` + `PARATEXT_*` resolution |
 | `projects/` | The `Project` plug-in contract, `View`, `audit_project` |
-| `sources.py` | Input adapters (`image_source`, `pdf_source`, `hf_dataset_source`, `video_source`) |
+| `sources/` | Input adapters, one module each (`image_source`, `pdf_source`, `hf_dataset_source`, `video_source`); `base.py` holds `Source`, `manifest.py` the clip manifest the time-based sources share |
 | `video.py` | ffmpeg frame sampling for `video_source` |
 | `media.py` | The `media` a sample carries for the review player |
 | `extract.py` / `runner.py` | Sample loop; model call, retries, image encoding |
