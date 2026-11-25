@@ -11,7 +11,7 @@ whole collection.
 
 ## What it does
 
-- **Reads your material:** images, PDFs or video from a folder, or a dataset on
+- **Reads your material:** images, PDFs, video, or audio from a folder, or a dataset on
   the Hugging Face Hub. It can also load metadata you already have, so you can
   review it without running a model.
 - **Runs one project at a time.** A project holds its own prompt, schema and
