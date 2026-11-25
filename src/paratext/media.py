@@ -1,9 +1,13 @@
-"""A sample's `media`: a video the review UI plays in place of its images.
-The shape is documented in docs/review-views.md; only `src` is required."""
+"""A sample's `media`: a video or sound recording the review UI plays in place
+of its images. The shape is documented in docs/review-views.md; only `src` is
+required."""
 
 from __future__ import annotations
 
-_KEYS = {"src", "type", "start", "end", "poster", "label", "tracks"}
+_KEYS = {"src", "type", "kind", "start", "end", "poster", "label", "tracks"}
+# Extensions that mean a sound recording when `kind` isn't given; anything else
+# plays in a video element, which also plays sound.
+_AUDIO_EXTS = (".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".oga", ".opus")
 
 
 class MediaError(ValueError):
@@ -31,6 +35,10 @@ def normalise_media(m: dict) -> dict:
     out["type"] = m.get("type") or ("hls" if src.split("?")[0].endswith(".m3u8") else "file")
     if out["type"] not in ("hls", "file"):
         raise MediaError(f"media type must be 'hls' or 'file', got {out['type']!r}")
+    path = src.split("?")[0].lower()
+    out["kind"] = m.get("kind") or ("audio" if path.endswith(_AUDIO_EXTS) else "video")
+    if out["kind"] not in ("audio", "video"):
+        raise MediaError(f"media kind must be 'audio' or 'video', got {out['kind']!r}")
     out["start"] = _seconds(m.get("start", 0), "media start")
     if m.get("end") is not None:
         out["end"] = _seconds(m["end"], "media end")

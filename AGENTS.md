@@ -55,10 +55,11 @@ dataset) → `review` (web UI) → `export` (publish). `run` does extract+packag
 | `cli.py` | Argparse wiring, round resolution, command bodies |
 | `config.py` | `paratext.toml` + `PARATEXT_*` resolution |
 | `projects/` | The `Project` plug-in contract, `View`, `audit_project` |
-| `sources/` | Input adapters, one module each (`image_source`, `pdf_source`, `hf_dataset_source`, `video_source`); `base.py` holds `Source`, `manifest.py` the clip manifest the time-based sources share |
-| `video.py` | ffmpeg frame sampling for `video_source` |
+| `sources/` | Input adapters, one module each (`image_source`, `pdf_source`, `hf_dataset_source`, `video_source`, `audio_source`); `base.py` holds `Source`, `manifest.py` the clip manifest the time-based sources share |
+| `ffmpeg.py` | ffmpeg/ffprobe calls shared by the time-based sources: durations, decoded audio |
+| `video.py` | frame sampling and timestamps for `video_source` |
 | `media.py` | The `media` a sample carries for the review player |
-| `extract.py` / `runner.py` | Sample loop; model call, retries, image encoding |
+| `extract.py` / `runner.py` | Sample loop; model call, retries, image and audio encoding |
 | `packaging.py` | JSONL → `samples.json` + `images/` + `view.json` |
 | `store.py` | SQLite annotations + gold labels — **not** web code |
 | `datasets.py` | Discovering packaged rounds, resolving `view.json` |

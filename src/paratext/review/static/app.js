@@ -376,13 +376,17 @@ function imagesHtml(s, variant) {
     .join("")}</div>`;
 }
 
-// A sample with `media` (a video, optionally an HLS stream clipped to
-// start/end seconds) shows a player instead of images. `media.tracks` adds one
-// timeline strip per source; paratext.media documents the shape.
+// A sample with `media` (a video or sound recording, optionally an HLS stream
+// clipped to start/end seconds) shows a player instead of images. `media.tracks`
+// adds one timeline strip per source; paratext.media documents the shape. Audio
+// and video elements share the API everything below uses.
 function mediaHtml(m) {
-  const poster = m.poster ? ` poster="${escapeHtml(m.poster)}"` : "";
-  if (m.end == null)
-    return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video></div>`;
+  const audio = m.kind === "audio";
+  const poster = m.poster && !audio ? ` poster="${escapeHtml(m.poster)}"` : "";
+  const player = audio
+    ? `<audio id="media" controls preload="metadata"></audio>`
+    : `<video id="media" controls preload="metadata"${poster}></video>`;
+  if (m.end == null) return `<div class="media-player">${player}</div>`;
   const tracks = m.tracks?.length ? m.tracks : [{ name: "", items: [] }];
   const rows = tracks
     .map(
@@ -398,7 +402,7 @@ function mediaHtml(m) {
     .filter((t) => t.note)
     .map((t) => ` · ≈ ${escapeHtml(t.name)}: ${escapeHtml(t.note)}`)
     .join("");
-  return `<div class="media-player"><video id="media" controls preload="metadata"${poster}></video>
+  return `<div class="media-player">${player}
     <div class="media-timeline" id="media-timeline">${rows}</div>
     <p class="media-range-label"><span id="media-range-label"></span>${approx}</p></div>`;
 }
@@ -539,7 +543,8 @@ function showMediaError(video) {
 
 async function mediaError(m, video, reason) {
   if (video.dataset.error) return;
-  video.dataset.error = "This video couldn't be played…";
+  const what = m.kind === "audio" ? "recording" : "video";
+  video.dataset.error = `This ${what} couldn't be played…`;
   showMediaError(video);
   let why = reason;
   try {
@@ -548,7 +553,7 @@ async function mediaError(m, video, reason) {
   } catch {
     why = "its server can't be reached, or doesn't allow playback from this site (CORS)";
   }
-  video.dataset.error = `This video couldn't be played: ${escapeHtml(why)}.
+  video.dataset.error = `This ${what} couldn't be played: ${escapeHtml(why)}.
     <a href="${escapeHtml(m.src)}" target="_blank" rel="noopener">Open it directly</a>`;
   if (video.isConnected) showMediaError(video);
 }

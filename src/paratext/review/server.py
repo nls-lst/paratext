@@ -74,6 +74,14 @@ _MIME = {
     ".m4v": "video/mp4",
     ".webm": "video/webm",
     ".mov": "video/quicktime",
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+    ".oga": "audio/ogg",
+    ".opus": "audio/ogg",
 }
 
 

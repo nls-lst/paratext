@@ -52,16 +52,17 @@ another institution's metadata, give each panel its own list. A reference panel 
 also show fields the schema doesn't have, such as a catalogue's shotlist; they
 display as text, and the model is never asked for them.
 
-### Video
+### Video and audio
 
 A sample with `media` shows a player in place of its images, in either layout.
-`video_source` sets it for you. Any other source can put it in the sample's
+`video_source` and `audio_source` set it for you. Any other source can put it in the sample's
 metadata; packaging checks its shape, and copies a local video into the
 dataset so the review server can play it:
 
 ```python
 metadata={"media": {
-    "src": "https://example.org/reel-12.m3u8",  # HLS or a plain video file
+    "src": "https://example.org/reel-12.m3u8",  # HLS or a plain video or audio file
+    "kind": "video",                             # or "audio"; optional, see below
     "start": 120, "end": 279,                    # the clip, in seconds; optional
     "poster": "https://example.org/reel-12.jpg",
     "label": "Programme",                        # names the clip on the timeline
@@ -72,7 +73,9 @@ metadata={"media": {
 }}
 ```
 
-Only `src` is required. Times count from the start of the file, so one long
+Only `src` is required. `kind` picks the player: a sound recording gets an
+audio player, with the same timeline. Left out, it follows the file: `.wav`,
+`.mp3`, `.m4a`, `.flac`, `.ogg` and the like are audio, anything else video. Times count from the start of the file, so one long
 tape can yield several clips. Each track draws as a strip under the player:
 hovering a segment shows its text, and clicking one plays from there. A track
 with a `note` is marked ≈, and the note is shown beneath. In the fields,

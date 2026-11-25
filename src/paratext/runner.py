@@ -1,5 +1,5 @@
 """model call wrapper: structured output (Pydantic) with plain-JSON fallback,
-retry on transient errors, image encoding."""
+retry on transient errors, image and audio encoding."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ from openai import (
 )
 from PIL import Image
 from pydantic import BaseModel
+
+from .projects import Audio
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +65,22 @@ def encode_image(img: Image.Image, max_size: int = 1024, quality: int = 85) -> s
 
 
 def build_user_message(
-    prompt: str, images: list[Image.Image], max_size: int = 1024, quality: int = 85
+    prompt: str,
+    images: list[Image.Image],
+    max_size: int = 1024,
+    quality: int = 85,
+    audio: "list[Audio] | None" = None,
 ) -> dict:
+    """The prompt, then each image, then each stretch of audio as OpenAI's
+    ``input_audio`` part (base64, with its format)."""
     parts: list[dict] = [{"type": "text", "text": prompt}]
     for img in images:
         parts.append(
             {"type": "image_url", "image_url": {"url": encode_image(img, max_size, quality)}}
         )
+    for a in audio or []:
+        parts.append({"type": "input_audio", "input_audio": {
+            "data": base64.b64encode(a.data).decode(), "format": a.format}})
     return {"role": "user", "content": parts}
 
 
@@ -85,11 +96,12 @@ def call_structured(
     temperature: float = 0.0,
     image_max_size: int = 1024,
     image_quality: int = 85,
+    audio: "list[Audio] | None" = None,
 ) -> BaseModel:
     """Use the Pydantic response_format API to get a typed result."""
     kwargs: dict = {
         "model": model,
-        "messages": [build_user_message(prompt, images, image_max_size, image_quality)],
+        "messages": [build_user_message(prompt, images, image_max_size, image_quality, audio)],
         "response_format": schema,
         "temperature": temperature,
         "max_tokens": max_tokens,
@@ -117,11 +129,12 @@ def call_plain(
     temperature: float = 0.0,
     image_max_size: int = 1024,
     image_quality: int = 85,
+    audio: "list[Audio] | None" = None,
 ) -> str:
     """Plain chat completion; caller handles JSON parsing."""
     kwargs: dict = {
         "model": model,
-        "messages": [build_user_message(prompt, images, image_max_size, image_quality)],
+        "messages": [build_user_message(prompt, images, image_max_size, image_quality, audio)],
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
