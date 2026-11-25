@@ -10,9 +10,10 @@ from PIL import Image
 
 from ..projects import Audio, Sample
 from .base import Source
-from .manifest import read_manifest
+from .manifest import list_clips
 
 if TYPE_CHECKING:
+    from ..transcripts import Transcriber
     from ..video import FrameTimes
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ def video_source(
     exts: tuple[str, ...] = VIDEO_EXTS,
     soundtrack: bool = False,
     sample_rate: int = 16000,
+    transcribe: "Transcriber | None" = None,
 ) -> Source:
     """Videos, one Sample per clip, each sampled to a handful of frames.
 
@@ -41,10 +43,15 @@ def video_source(
     from the start of the clip, so the model can place what it sees.
     ``soundtrack`` also sends the clip's sound, as mono WAV at ``sample_rate`` Hz
     after the frames, so the model hears what it sees; it needs a model that takes
-    audio. A clip without sound then fails, logged, rather than going without it.
+    audio. ``transcribe`` (see ``paratext.transcripts``) turns the sound into timed
+    text, which the model reads after the frames and the reviewer sees as a track
+    on the timeline; it works with or without ``soundtrack``. With either, a clip
+    without sound fails rather than going without it, and the run summary says
+    which. Other manifest columns reach the transcriber under ``clip["extra"]``.
     Needs ffmpeg on PATH.
     """
     from ..ffmpeg import decode_audio
+    from ..transcripts import transcribe_clip
     from ..video import evenly_spaced, grab_frame, probe_duration, stamp
 
     pick = frames or evenly_spaced(8)
@@ -55,39 +62,44 @@ def video_source(
             return imgs
         return [stamp(im, t - start) for im, t in zip(imgs, times)]
 
-    def _clips(source: Path) -> list[dict]:
-        if source.is_file():
-            return read_manifest(source)
-        if not source.is_dir():
-            raise FileNotFoundError(f"video source not found: {source}")
-        seen: dict[str, Path] = {}
-        for p in sorted(source.rglob("*")):
-            if p.suffix.lower() in exts:
-                seen.setdefault(p.stem, p)
-        return [{"id": k, "src": str(p.resolve())} for k, p in sorted(seen.items())]
+    notices: list[str] = []
 
     def _iter(source: Path, limit: int | None) -> Iterator[Sample]:
-        clips = _clips(source)
+        clips = list_clips(source, exts, "video")
         if limit is not None:
             clips = clips[:limit]
+        failed = []
         for clip in clips:
             try:
                 start = clip.get("start", 0.0)
                 end = clip.get("end") or probe_duration(clip["src"])
                 times = pick(start, end)
                 images = _frames(clip["src"], times, start)
-                audio = [Audio(decode_audio(clip["src"], start, end, sample_rate))] \
-                    if soundtrack else []
+                wav = decode_audio(clip["src"], start, end, sample_rate) \
+                    if soundtrack or transcribe else None
+                tx = transcribe_clip(transcribe, wav, clip, start) if transcribe else None
             except Exception as e:
                 logger.warning("sampling failed for %s: %s", clip["id"], e)
+                failed.append(clip["id"])
                 continue
             media = {"src": clip["src"], "start": start, "end": end}
             media.update({k: clip[k] for k in ("poster", "label") if k in clip})
+            meta: dict = {"media": media, "frame_times": times}
+            if tx:
+                media["tracks"] = [tx["track"]]
+                meta["transcript"] = tx["segments"]
             yield Sample(
                 id=clip["id"],
                 images=images,
-                audio=audio,
-                metadata={"media": media, "frame_times": times},
+                audio=[Audio(wav)] if soundtrack else [],
+                text=[tx["text"]] if tx else [],
+                metadata=meta,
+            )
+        if failed:
+            notices.append(
+                f"video: {len(failed)} clip(s) could not be sampled and were skipped "
+                f"({', '.join(failed[:5])}{', …' if len(failed) > 5 else ''}); the log has "
+                f"the reason for each. Fix them, then re-run to fill them in."
             )
 
     def _materialise(rec: dict, out: Path, max_size: int) -> list[str]:
@@ -113,12 +125,14 @@ def video_source(
     return Source(
         iter_samples=_iter,
         materialise=_materialise,
+        notices=notices,
         config={
             "kind": "video",
             "frames": getattr(pick, "__name__", str(pick)),
             "timestamps": timestamps,
             "exts": list(exts),
             "soundtrack": soundtrack,
+            "transcribe": getattr(transcribe, "__name__", repr(transcribe)) if transcribe else None,
             **({"sample_rate": sample_rate} if soundtrack else {}),
         },
     )

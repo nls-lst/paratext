@@ -76,7 +76,7 @@ metadata={"media": {
 Only `src` is required. `kind` picks the player: a sound recording gets an
 audio player, with the same timeline. Left out, it follows the file: `.wav`,
 `.mp3`, `.m4a`, `.flac`, `.ogg` and the like are audio, anything else video. Times count from the start of the file, so one long
-tape can yield several clips. Each track draws as a strip under the player:
+tape can yield several clips. A source with a transcriber adds a *Transcript* track itself. Each track draws as a strip under the player:
 hovering a segment shows its text, and clicking one plays from there. A track
 with a `note` is marked ≈, and the note is shown beneath. In the fields,
 timecodes such as `01:23` in a table cell seek the player, relative to the clip

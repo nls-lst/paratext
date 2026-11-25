@@ -7,6 +7,8 @@ import csv
 import json
 from pathlib import Path
 
+_KNOWN = {"id", "src", "start", "end", "poster", "label"}
+
 
 def is_url(src: str) -> bool:
     return src.startswith(("http://", "https://"))
@@ -15,7 +17,8 @@ def is_url(src: str) -> bool:
 def read_manifest(path: Path) -> list[dict]:
     """Rows of a ``.jsonl`` or ``.csv`` manifest as clips: ``id`` and ``src`` (a
     path relative to the manifest, or a URL), optionally ``start`` and ``end`` in
-    seconds, ``poster`` and ``label``."""
+    seconds, ``poster`` and ``label``. Any other columns are kept under ``extra``,
+    for a transcriber or project hook that needs them (a catalogue id, say)."""
     if path.suffix.lower() == ".csv":
         with path.open(newline="") as f:
             rows = [{k: v for k, v in r.items() if v not in (None, "")} for r in csv.DictReader(f)]
@@ -35,5 +38,22 @@ def read_manifest(path: Path) -> list[dict]:
         for k in ("poster", "label"):
             if k in r:
                 clip[k] = r[k]
+        extra = {k: v for k, v in r.items() if k not in _KNOWN}
+        if extra:
+            clip["extra"] = extra
         clips.append(clip)
     return clips
+
+
+def list_clips(source: Path, exts: tuple[str, ...], what: str) -> list[dict]:
+    """Clips from a manifest file, or one per matching file under a directory
+    (recursive; id = filename stem, the first of any duplicates)."""
+    if source.is_file():
+        return read_manifest(source)
+    if not source.is_dir():
+        raise FileNotFoundError(f"{what} source not found: {source}")
+    seen: dict[str, Path] = {}
+    for p in sorted(source.rglob("*")):
+        if p.suffix.lower() in exts:
+            seen.setdefault(p.stem, p)
+    return [{"id": k, "src": str(p.resolve())} for k, p in sorted(seen.items())]
